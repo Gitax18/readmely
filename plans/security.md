@@ -20,7 +20,7 @@ Every feature plan has a "Security" section that lists which threats below apply
 | T2 | **Prompt injection** from code, comments, or READMEs | Repository text is passed as data, clearly delimited. LLM tools reach only the current project. No tool can send data out. Outputs are schema-validated and sanitised. Diagram nodes need evidence | 5–8 |
 | T3 | **Secret leakage** to LLMs, embeddings, logs, or context packs | Secret scan and redaction in `ingest` before content leaves it. `.env` files excluded. Environment variable names only. Logs never contain code or prompts in production | 4–6 |
 | T4 | **XSS and content injection** through SVG, Markdown, or generated text | SVG built from our own components and sanitised; shown as `<img>`. Markdown sanitised on render. User content served from a separate origin. Strict Content-Security-Policy | 6–8 |
-| T5 | **Cross-user data access** (IDOR) | Ownership check in one shared layer in `core`. Qdrant queries always filter on `project_id`. Object storage reached only through short-lived signed URLs. Tests try every endpoint as another user | 2 onwards |
+| T5 | **Cross-user data access** (IDOR) | Ownership check in one shared layer in `core`. Vector searches always filter on `project_id`. Object storage reached only through short-lived signed URLs. Tests try every endpoint as another user | 2 onwards |
 | T6 | **Authentication attacks:** credential stuffing, session theft, OAuth CSRF, account-linking takeover, 2FA bypass | Argon2id if passwords are used. OAuth `state` and PKCE. Accounts link only on a provider-verified email. HttpOnly, Secure, SameSite cookies; session rotation on login and 2FA. TOTP secrets encrypted; recovery codes hashed; rate limits and lockout on login and code entry; step-up for sensitive actions | 2 |
 | T7 | **CSRF** | SameSite cookies plus a CSRF token on state-changing requests. Strict CORS allow-list | 2 |
 | T8 | **GitHub App abuse:** stolen tokens, forged or replayed webhooks | Minimum read permissions. Installation tokens fetched on demand and never stored. Webhook HMAC check, delivery-ID replay guard. App private key in a secret store | 3 |
@@ -39,9 +39,8 @@ Every feature plan has a "Security" section that lists which threats below apply
 |---|---|---|
 | T17 | **LaTeX compilation:** shell escape, file reads, infinite loops | Shell escape off, restricted file access, no network, timeout, throwaway container |
 | T18 | **Payment webhooks:** forgery, replay, plan tampering | Signature verification, idempotent handlers, plan state changed only by verified events |
-| T19 | **BYOK key storage** | Envelope encryption, decrypted only in `ai`, never returned to the browser, redacted from logs |
-| T20 | **MCP endpoint tokens** | Per-project scoped tokens, revocable, rate-limited, read-only |
-| T21 | **Public portfolio pages** | Sanitised content, separate origin, abuse reporting |
+| T19 | **MCP endpoint tokens** | Per-project scoped tokens, revocable, rate-limited, read-only |
+| T20 | **Public portfolio pages** | Sanitised content, separate origin, abuse reporting |
 
 ## Per-feature security checklist
 

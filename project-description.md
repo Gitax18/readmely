@@ -101,14 +101,14 @@ A chat panel answers questions such as "how does auth work?" or "where is the pa
 
 ### 2.10 Account, providers & security
 - Sign up with **GitHub** (recommended, needed for private repositories) or with email. An email account can connect GitHub or GitLab later.
-- **API keys are optional** (see §5). Readmely provides AI generation out of the box. Champ users can also add their own Claude, OpenAI, xAI, or Gemini key.
-- **Privacy:** customer code is never used to train models. Raw source is kept only as long as needed for analysis; the derived index is stored, and code is only stored if the user keeps a project synced. Users can delete a project and all derived data with one click. BYOK keys are encrypted at rest and never logged.
+- **No API keys needed.** Readmely provides all AI generation. Users never supply their own provider keys (see §4.3).
+- **Privacy:** customer code is never used to train models. Raw source is kept only as long as needed for analysis; the derived index is stored, and code is only stored if the user keeps a project synced. Users can delete a project and all derived data with one click.
 
 ---
 
 ## 3. Plans: what users get
 
-AI usage is measured in **credits**, so cost follows actual AI spend rather than a count of documents. Lite users get small monthly credits, so they keep coming back. (The original draft used lifetime caps, which cost retention.) Champ users get a larger monthly allowance, can buy top-ups, and can bring their own key.
+AI usage is measured in **credits**, so cost follows actual AI spend rather than a count of documents. Lite users get small monthly credits, so they keep coming back. (The original draft used lifetime caps, which cost retention.) Champ users get a larger monthly allowance and can buy top-ups.
 
 **Credit cost per action (proposed):**
 
@@ -146,7 +146,6 @@ AI usage is measured in **credits**, so cost follows actual AI spend rather than
 | **Version history** | Last 3 versions | Unlimited |
 | **Resume** | 1 free resume preview (default template, PDF only) | ✅ full builder, LaTeX editor, 5 templates + custom `.tex`, JD tailoring, cover letter, multiple versions |
 | **Portfolio** | Basic public profile (project list) | ✅ full portfolio with AI About-me, case studies, career timeline, analytics |
-| **Bring your own API key** | — | ✅ BYOK generations don't use credits (fair-use limits apply) |
 | **Support** | Community | Email, priority generation queue |
 
 **Top-up packs (Champ):** 250 credits for $4 / ₹249. Credits never expire while the subscription is active.
@@ -177,17 +176,15 @@ List prices as of November 2026 (per 1M tokens, input / output): Claude Haiku 5.
 - **Keep $10 / ₹499 as a founding-member price.** This keeps the original idea's attractive headline price while the real costs are measured.
 
 ### 4.3 Should we ask users for API keys?
-**Recommendation: no mandatory keys. Use managed AI by default, with BYOK as an optional Champ feature.**
+**Decision: no. Readmely provides all AI generation, and there is no option for users to bring their own key.**
 
-Why mandatory keys hurt:
+Why asking for keys hurts:
 - **Conversion drops.** Most students and early-career developers (the core audience, especially in India) don't have a paid Claude, OpenAI, or xAI account. A required key blocks them before they see any value.
 - **The subscription becomes hard to justify.** If users pay for tokens themselves, they will ask what they are paying Readmely for, which was exactly the concern in the original idea.
 - **Quality varies.** Different providers and models give different results, so the product experience can't be guaranteed.
 - **Liability.** Storing thousands of third-party API keys makes Readmely a security target.
 
-With managed AI, the subscription pays for **the AI and the platform**: indexing, storage, caching, sync, diagram rendering, LaTeX compilation, hosting, resume, and portfolio.
-
-BYOK still has a place, as a Champ option for power users, privacy-focused users, and people who want unlimited generations. BYOK generations don't use credits, while projects, storage, and premium features stay tied to the plan. This keeps the subscription valuable even for BYOK users.
+With managed AI, the subscription pays for **the AI and the platform**: indexing, storage, caching, sync, diagram rendering, LaTeX compilation, hosting, resume, and portfolio. Heavy users buy credit top-ups instead of supplying a key.
 
 ### 4.4 Competitive landscape (checked November 2026)
 
@@ -262,7 +259,7 @@ BYOK still has a place, as a Champ option for power users, privacy-focused users
 
 | Original | Revised | Reason |
 |---|---|---|
-| API key mandatory before creating projects | Managed AI by default, BYOK optional on Champ | Removes sign-up friction and gives the subscription a clear purpose |
+| API key mandatory before creating projects | Managed AI only; users never supply a key | Removes sign-up friction and gives the subscription a clear purpose |
 | Lifetime caps on Lite (3 diagrams ever, 3 READMEs per project) | Small monthly credits | Users come back every month, and costs stay capped |
 | Champ: 3 READMEs + 3 diagrams **per day** | 400 monthly credits + top-ups | A daily limit can exceed the subscription price |
 | $10 / ₹499 | $12 / ₹599 (founding price $10 / ₹499), annual plans, student discount | ₹499 margin is too thin after GST |
@@ -275,8 +272,7 @@ BYOK still has a place, as a Champ option for power users, privacy-focused users
 ## 7. Open questions
 1. Trademark clearance for "Readmely" (given ReadMe.io's registered "README" mark, see §4.5) and securing the domains (.com / .app / .in).
 2. Which languages are supported at launch? Suggested: JS/TS, Python, Java, Go; then C#, PHP, Ruby, and Rust.
-3. Should Lite users get a free BYOK mode? It is not recommended at launch because it undercuts Champ.
-4. Should the free tier offer instant docs for any public repository? It is not recommended, because that competes head-on with the free DeepWiki and Code Wiki.
+3. Should the free tier offer instant docs for any public repository? It is not recommended, because that competes head-on with the free DeepWiki and Code Wiki.
 
 ## 8. Later roadmap
 - **Teams plan:** shared workspaces, organisation repos, roles, and SSO, priced per seat.
