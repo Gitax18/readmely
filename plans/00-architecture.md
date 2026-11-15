@@ -17,6 +17,7 @@ This is the top-level plan. It records the agreed decisions, the service boundar
 | D7 | Hosting on **DigitalOcean or AWS** (undecided). Everything ships as Docker images; Kubernetes is added only if needed | Agreed |
 | D8 | LLM access through one **OpenAI-compatible client**; providers at launch are **OpenAI and xAI** | Agreed |
 | D9 | Git: feature branches and typed commits (see [README.md](README.md)) | Agreed |
+| D10 | **Code graph in Postgres** (`graph_nodes`, `graph_edges`), behind a Go `GraphStore` interface so it can move to a graph database later. No dedicated graph database in the MVP; revisit after release | Agreed |
 
 ## 2. Services
 
