@@ -21,7 +21,7 @@ An empty but fully wired project. One command starts everything locally, every s
 | Python | 3.13, managed by `uv` (the system Python is 3.9 and is not used) · FastAPI · Pydantic · `ruff` · `mypy` · `pytest` |
 | Frontend | Node 24 · `pnpm` · Next.js App Router · TypeScript (strict) · Tailwind · shadcn/ui · ESLint · Prettier · Vitest · Playwright |
 | Contracts | OpenAPI 3.1 + JSON Schema · `oapi-codegen` (Go) · `datamodel-code-generator` (Python) · `openapi-typescript` (TS) |
-| Local stack | Docker Compose: Postgres 17 with pgvector, Redis, MinIO |
+| Local stack | Docker Compose: Postgres 17 with pgvector, Redis, RustFS (S3-compatible object storage) |
 | Task runner | Root `Makefile` |
 | Hooks | `lefthook` (pre-commit lint and format, commit-message check) |
 | CI | GitHub Actions |
@@ -47,7 +47,7 @@ Each step is one branch, reviewed before the next begins.
 
 ### Step 1 · Skeleton and local data stores
 - Folder layout, root `Makefile`, `.env.example`, `.editorconfig`.
-- `infra/docker-compose.yml` with Postgres (pgvector image), Redis, and MinIO, each with a health check and a named volume.
+- `infra/docker-compose.yml` with Postgres (pgvector image), Redis, and RustFS, each with a health check and a named volume.
 - Data stores bind to `127.0.0.1` only, with credentials read from `.env`.
 - **Verify:** `make up` starts all three and reports healthy; `make down` stops them; `CREATE EXTENSION vector` succeeds.
 
