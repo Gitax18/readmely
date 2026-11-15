@@ -19,6 +19,7 @@ This is the top-level plan. It records the agreed decisions, the service boundar
 | D9 | Git: feature branches and typed commits (see [README.md](README.md)) | Agreed |
 | D10 | **Code graph in Postgres** (`graph_nodes`, `graph_edges`), behind a Go `GraphStore` interface so it can move to a graph database later. No dedicated graph database in the MVP; revisit after release | Agreed |
 | D12 | **Diagrams follow `ai-based-image-generation.md`:** structured graph, layout engine, own SVG renderer. D2 and Mermaid are export formats only | Agreed |
+| D13 | **RustFS** (Apache 2.0) for local object storage, replacing MinIO, whose community edition was discontinued. Production uses managed S3-compatible storage. Code uses only the standard S3 API with path-style addressing, and snapshot expiry is handled in our own code | Agreed |
 | D11 | **No bring-your-own-key.** Readmely provides all AI generation; users never supply provider keys | Agreed |
 
 ## 2. Services
@@ -51,7 +52,7 @@ This is the top-level plan. It records the agreed decisions, the service boundar
 |---|---|
 | **Postgres** | Users, auth, projects, jobs, credit ledger, file and symbol index, code graph (as node/edge tables), generated document metadata, and embeddings of summaries and code chunks (pgvector). Every embedding row carries `project_id`, and every search filters on it |
 | **Redis** | Rate limits, short-lived caches, locks, OAuth state |
-| **Object storage** (S3 API: MinIO locally, DO Spaces or S3 in production) | Repo snapshots (short-lived), SVG/PNG, context pack ZIPs |
+| **Object storage** (S3 API: RustFS locally, DO Spaces or S3 in production), behind a Go `ObjectStore` interface | Repo snapshots (short-lived), SVG/PNG, context pack ZIPs |
 
 Postgres is the single source of truth, so the index, graph, and vectors update and delete together in one transaction.
 
@@ -81,7 +82,7 @@ testdata/repos/        fixture repositories, including malicious ones
 
 ## 7. Deployment
 
-- **Local:** one `docker compose up` starts Postgres, Redis, MinIO, and all services.
+- **Local:** one `docker compose up` starts Postgres, Redis, RustFS, and all services.
 - **Production (first):** the same images on a single DigitalOcean droplet or AWS instance, behind a reverse proxy with TLS. Managed Postgres if the budget allows.
 - **Later:** Kubernetes manifests when one host is no longer enough.
 - **Sandboxing:** the ingest worker handles untrusted repositories, so it runs in a locked-down container (no outbound network except git fetch, read-only root, resource limits). The exact mechanism is decided in the ingestion plan once hosting is fixed.
@@ -109,7 +110,7 @@ The credit ledger is in Phase 5, before payments, because usage has to be capped
 ## 9. Testing strategy
 
 - **Unit tests** for every package (Go `testing`, pytest, Vitest).
-- **Integration tests** against real Postgres, Redis, and MinIO containers.
+- **Integration tests** against real Postgres, Redis, and RustFS containers.
 - **Contract tests** so Go and Python agree on every schema.
 - **Security fixtures** in `testdata/repos/`: zip-slip, symlink escape, oversized files, planted secrets, prompt-injection READMEs.
 - **AI evals** with recorded provider responses for CI, plus a scored eval set run on every prompt change.

@@ -36,6 +36,12 @@ verify: env-check ## Check that the data stores work and are bound to localhost 
 	@$(COMPOSE) exec -T redis redis-cli ping 2>&1 | grep -q NOAUTH \
 		&& echo "ok   redis rejects unauthenticated clients" \
 		|| { echo "FAIL redis accepted a client without a password"; exit 1; }
+	@$(COMPOSE) exec -T rustfs curl -fsS http://localhost:9000/health > /dev/null \
+		&& echo "ok   rustfs is up" \
+		|| { echo "FAIL rustfs"; exit 1; }
+	@$(COMPOSE) exec -T rustfs curl -s -o /dev/null -w '%{http_code}' http://localhost:9000/ | grep -q 403 \
+		&& echo "ok   rustfs rejects unauthenticated requests" \
+		|| { echo "FAIL rustfs answered a request without credentials"; exit 1; }
 	@if $(COMPOSE) ps --format '{{.Ports}}' | grep -q '0\.0\.0\.0\|\[::\]'; then \
 		echo "FAIL a port is published on all interfaces"; exit 1; \
 	else echo "ok   all ports are bound to 127.0.0.1"; fi
