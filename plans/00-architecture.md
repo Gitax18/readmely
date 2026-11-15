@@ -18,6 +18,7 @@ This is the top-level plan. It records the agreed decisions, the service boundar
 | D8 | LLM access through one **OpenAI-compatible client**; providers at launch are **OpenAI and xAI** | Agreed |
 | D9 | Git: feature branches and typed commits (see [README.md](README.md)) | Agreed |
 | D10 | **Code graph in Postgres** (`graph_nodes`, `graph_edges`), behind a Go `GraphStore` interface so it can move to a graph database later. No dedicated graph database in the MVP; revisit after release | Agreed |
+| D12 | **Diagrams follow `ai-based-image-generation.md`:** structured graph, layout engine, own SVG renderer. D2 and Mermaid are export formats only | Agreed |
 | D11 | **No bring-your-own-key.** Readmely provides all AI generation; users never supply provider keys | Agreed |
 
 ## 2. Services
@@ -118,5 +119,4 @@ The credit ledger is in Phase 5, before payments, because usage has to be capped
 ## 10. Open questions
 
 1. **Auth method:** email and password with TOTP 2FA, or passwordless email codes with TOTP? Settled in the Phase 2 auth discussion.
-2. **Diagram output:** `project-description.md` §2.4 says diagrams are generated as Mermaid/PlantUML/D2. The pipeline guide generates a structured graph and renders our own SVG, with D2/Mermaid as exports only. Confirm the guide wins, and the description is updated.
-3. **Hosting:** DigitalOcean or AWS. Needed before the ingestion sandbox is designed (Phase 4).
+2. **Hosting:** DigitalOcean or AWS. Needed before the ingestion sandbox is designed (Phase 4).

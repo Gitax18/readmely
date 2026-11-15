@@ -66,7 +66,7 @@ This is the core of the product and what sets it apart. The user never sees it, 
 
 ### 2.4 Architecture diagrams
 - **Diagram types:** high-level architecture, C4 (context/container/component), DFD level 0/1/2, UML class, sequence (for a chosen flow or endpoint), ER, module dependency graph, and deployment/infrastructure (from Dockerfile, docker-compose, Kubernetes, or Terraform).
-- Diagrams are produced as **diagram code** (Mermaid / PlantUML / D2), checked, and rendered to **SVG and PNG**. The user always gets the editable source, so diagrams are not locked into Readmely.
+- Diagrams are built from a structured graph of the system, placed by a layout engine, and drawn as clean **SVG** (with PNG export) in Readmely's own visual style. Every component shown is backed by evidence in the code. Users can also export editable **D2 or Mermaid** source, so diagrams are not locked into Readmely.
 - An in-browser editor lets users adjust layout and labels and re-render.
 - Diagrams can be embedded into the README or exported as a ZIP.
 
