@@ -15,9 +15,9 @@ Every feature is built human-in-the-loop. Nothing is implemented without an appr
 
 | Plan | Status |
 |---|---|
-| [00-architecture.md](00-architecture.md) | Draft, awaiting review |
-| [security.md](security.md) | Draft, awaiting review |
-| [phase-0-foundations.md](phase-0-foundations.md) | Draft, awaiting review |
+| [00-architecture.md](00-architecture.md) | Approved |
+| [security.md](security.md) | Approved |
+| [phase-0-foundations.md](phase-0-foundations.md) | Approved, in progress (Step 1) |
 
 ## Git conventions
 

@@ -1,6 +1,6 @@
 # Security baseline
 
-**Status:** Draft, awaiting review · **Last updated:** 2026-11-15
+**Status:** Approved (2026-11-15) · **Last updated:** 2026-11-15
 
 Every feature plan has a "Security" section that lists which threats below apply and how they are tested. A feature cannot be marked Done with an untested applicable threat.
 

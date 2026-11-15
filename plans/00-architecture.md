@@ -1,6 +1,6 @@
 # 00 · Architecture
 
-**Status:** Draft, awaiting review · **Last updated:** 2026-11-15
+**Status:** Approved (2026-11-15) · **Last updated:** 2026-11-15
 
 This is the top-level plan. It records the agreed decisions, the service boundaries, and the phase order. Feature flows are **not** designed here; each gets its own plan after discussion.
 

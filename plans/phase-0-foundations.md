@@ -1,6 +1,6 @@
 # Phase 0 · Foundations
 
-**Status:** Draft, awaiting review · **Last updated:** 2026-11-15
+**Status:** Approved (2026-11-15) · **Last updated:** 2026-11-15
 
 ## Goal
 
