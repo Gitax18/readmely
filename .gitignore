@@ -13,3 +13,6 @@ coverage/
 .idea/
 .vscode/
 .claude/
+
+# Personal progress log for resume use
+ACHIEVEMENTS.md
