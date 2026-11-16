@@ -2,15 +2,16 @@
 
 COMPOSE := docker compose --env-file .env -f infra/docker-compose.yml
 GO_DIR  := services/core
+AI_DIR  := services/ai
 
 # Shell prelude for commands that run on the host against the compose stack:
-# loads .env and builds the connection URLs the Go services expect.
+# loads .env and builds the connection URLs the services expect.
 LOCAL_ENV = set -a; . ./.env; set +a; \
 	export DATABASE_URL="postgres://$$POSTGRES_USER:$$POSTGRES_PASSWORD@127.0.0.1:$$POSTGRES_PORT/$$POSTGRES_DB?sslmode=disable"; \
 	export REDIS_URL="redis://:$$REDIS_PASSWORD@127.0.0.1:$$REDIS_PORT/0";
 
 .DEFAULT_GOAL := help
-.PHONY: help env-check up up-app down reset ps logs verify fmt lint test test-integration run-api docker-build
+.PHONY: help env-check up up-app down reset ps logs verify fmt lint test test-integration audit run-api run-ai docker-build
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  %-18s %s\n", $$1, $$2}'
@@ -56,22 +57,35 @@ verify: env-check ## Check that the data stores work and are bound to localhost 
 		echo "FAIL a port is published on all interfaces"; exit 1; \
 	else echo "ok   all ports are bound to 127.0.0.1"; fi
 
-fmt: ## Format the Go code
+fmt: ## Format the Go and Python code
 	@cd $(GO_DIR) && gofmt -w .
+	@cd $(AI_DIR) && uv run --frozen ruff format . && uv run --frozen ruff check --fix .
 
-lint: ## Lint the Go code
+lint: ## Lint the Go and Python code (Python includes strict type checking)
 	@cd $(GO_DIR) && golangci-lint run ./... && golangci-lint run --build-tags=integration ./...
+	@cd $(AI_DIR) && uv run --frozen ruff check . && uv run --frozen ruff format --check . && uv run --frozen mypy
 
-test: ## Run the unit tests (no containers needed)
+test: ## Run the Go and Python unit tests (no containers needed)
 	@cd $(GO_DIR) && go test -race -count=1 ./...
+	@cd $(AI_DIR) && uv run --frozen pytest -q --cov
 
 test-integration: env-check ## Run the integration tests against the running local stack
 	@$(LOCAL_ENV) cd $(GO_DIR) && go test -race -count=1 -tags=integration ./internal/health/...
+	@$(LOCAL_ENV) cd $(AI_DIR) && uv run --frozen pytest -q -m integration -o addopts=''
+
+audit: ## Check Go and Python dependencies for known vulnerabilities (needs network)
+	@cd $(GO_DIR) && go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+	@cd $(AI_DIR) && uv export --frozen --no-dev --no-hashes --format requirements-txt -q \
+		| uv run --frozen pip-audit --strict -r /dev/stdin
 
 run-api: env-check ## Run the API on the host against the local stack (stop the API container first)
 	@$(LOCAL_ENV) export HTTP_ADDR="127.0.0.1:$${API_PORT:-8080}"; cd $(GO_DIR) && go run ./cmd/api
 
-docker-build: ## Build the api, ingest and render images
+run-ai: env-check ## Run the AI service on the host against the local stack (bound to 127.0.0.1)
+	@$(LOCAL_ENV) export HTTP_HOST=127.0.0.1 HTTP_PORT="$${AI_PORT:-8000}"; cd $(AI_DIR) && uv run --frozen python -m app.server
+
+docker-build: ## Build the api, ingest, render and ai images
 	@for c in api ingest render; do \
 		docker build -q -f infra/docker/core.Dockerfile --build-arg CMD=$$c -t readmely/$$c:dev . || exit 1; \
 	done
+	@docker build -q -f infra/docker/ai.Dockerfile -t readmely/ai:dev .
