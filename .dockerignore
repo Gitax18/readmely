@@ -1,0 +1,10 @@
+# Keep secrets and bulk out of every image build context.
+.git
+.claude
+.env
+.env.*
+!.env.example
+**/node_modules
+**/.next
+plans
+testdata

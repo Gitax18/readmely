@@ -56,6 +56,8 @@ Each step is one branch, reviewed before the next begins.
 - `api`: config from environment with validation, structured JSON logs with a request ID, panic recovery, timeouts, graceful shutdown.
 - `GET /healthz` (process is up) and `GET /readyz` (Postgres and Redis reachable).
 - **Tests:** config validation (missing and malformed values), health handlers, readiness when a dependency is down, shutdown.
+- **Added at review:** the API is containerised in this step (`infra/docker/core.Dockerfile`, distroless, non-root, read-only filesystem, all capabilities dropped; `api healthcheck` subcommand for the container probe). `make up-app` runs it in a container, `make run-api` runs it on the host bound to `127.0.0.1`. Also `make fmt`, `lint`, `test`, `test-integration`, `docker-build`.
+- **Found by testing:** `http.Server.Shutdown` waits up to 5 s for connections that never sent a request, so shutdown now counts in-flight requests and only reports an error if real requests were cut off. A readiness probe that hangs can no longer mark a healthy dependency as down.
 
 ### Step 3 · Python AI service
 - FastAPI app with `GET /healthz` and `GET /readyz`, settings via Pydantic, structured logs.
@@ -78,7 +80,7 @@ Each step is one branch, reviewed before the next begins.
 - `make lint`, `make test`, `make fmt` cover all three languages.
 - `lefthook`: format and lint staged files; reject commit messages that break the convention in [README.md](README.md).
 - GitHub Actions: lint, test, and build per service, with path filters; `govulncheck`, `pip-audit`, `pnpm audit`; secret scanning with `gitleaks`; Docker image builds.
-- Dockerfiles: multi-stage, minimal base, non-root user, pinned base image versions.
+- Dockerfiles for the Python and Next.js services: multi-stage, minimal base, non-root user, pinned base image versions (the Go one exists since Step 2).
 - **Verify:** a deliberately broken lint, a failing test, a bad commit message, and a planted fake secret are each rejected.
 
 ## Security (from [security.md](security.md))
