@@ -235,7 +235,7 @@ services/ai/
 - **Next:** Step 6 wires `make gen-check` and `make contracts-check` into CI.
 
 ### Step 6 · Quality gates and CI
-**Status:** Approved 2026-11-18 (agreed: plain hooks in the repo, run everything on every PR, protect `main` after CI is green, pin actions to commit SHAs with Dependabot).
+**Status:** Implemented 2026-11-18, awaiting sign-off (agreed: plain hooks in the repo, run everything on every PR, protect `main` after CI is green, pin actions to commit SHAs with Dependabot).
 
 **Goal:** a change that breaks lint, tests, the contracts, the commit convention, or leaks a secret is stopped twice: on the developer's machine before it is committed, and on GitHub before it can be merged.
 
@@ -281,6 +281,19 @@ services/ai/
 - Whole repo: `make check`, `make lint test test-e2e test-integration audit gen-check` green locally; all images rebuild.
 
 **Out of scope:** publishing images to a registry and any deployment (deploy phase), code signing, and required human review counts (single-developer repository for now).
+
+**Outcome (2026-11-18):** implemented on `feat/ci` as planned (9 commits: the 6 planned minus this record, plus three fixes found by the first CI runs). Local: `make hooks`, a commit-message checker (24 tests), a staged-file pre-commit hook, `make secrets`, `make check`. Remote: one CI workflow with 11 jobs plus the `ci-ok` aggregate (about 4.5 minutes end to end), Dependabot, every action pinned to a commit SHA, every base image pinned to a digest, read-only token, no secrets.
+- **Verified locally through real commits:** four bad messages, lint faults in Go, Python, web and the scripts, a stale spec and a planted fake token were each blocked; a clean commit passes.
+- **Verified on GitHub with five throwaway pull requests** (closed and deleted afterwards): a lint error, a failing test, a hand-edited generated file, a bad commit message and a fake token each turned exactly the matching job and `ci-ok` red. The clean branch is green. The first run also proved the full-stack job (`make up`, `verify`, integration tests, `up-app`, status page) from a clean checkout.
+- **Found by testing:**
+  - Trivy flagged real issues in the AI image that `pip-audit` could not see: libraries bundled inside pip (certifi, urllib3, msgpack) and Debian security fixes for `apt` and `zlib1g` missing from the newest Python base image. pip is removed and only those two packages are upgraded (comment says when to drop it).
+  - The secret scan covered every ref in the clone, so a token on one branch failed an unrelated pull request. It now scans only the commits a pull request adds (and the full history on `main`).
+  - `actionlint` with `shellcheck` caught four unquoted variables my local run missed (shellcheck was not installed there).
+  - My first "failing test" was caught by lint, so the test gate was not exercised; redone with a lint-clean failing test and confirmed.
+  - A local `gitleaks dir` scan would have read the untracked `.env`; the scan is limited to git history, which never contains it.
+- **Limits recorded:** (1) Dependabot is configured for `infra/docker` but its file-name matching for `*.Dockerfile` is unconfirmed; check the first Dependabot run on `main`. (2) Branches pushed without a pull request are not secret-scanned remotely; the local hook is the only gate there. (3) The hooks check the working-tree copy of a partly staged file. (4) `gitleaks` is installed by checksum pinned in the workflow; locally it is optional (the hook skips it with a message).
+- **Branch protection on `main`:** not applied yet; waiting for your confirmation of the exact settings.
+- **Next:** Phase 1.
 
 ## Security (from [security.md](security.md))
 
