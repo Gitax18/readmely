@@ -10,7 +10,8 @@ AI_DIR  := services/ai
 # loads .env and builds the connection URLs the services expect.
 LOCAL_ENV = set -a; . $(ENV_FILE); set +a; \
 	export DATABASE_URL="postgres://$$POSTGRES_USER:$$POSTGRES_PASSWORD@127.0.0.1:$$POSTGRES_PORT/$$POSTGRES_DB?sslmode=disable"; \
-	export REDIS_URL="redis://:$$REDIS_PASSWORD@127.0.0.1:$$REDIS_PORT/0";
+	export REDIS_URL="redis://:$$REDIS_PASSWORD@127.0.0.1:$$REDIS_PORT/0"; \
+	export AI_SERVICE_URL="http://127.0.0.1:$${AI_PORT:-8000}";
 
 .DEFAULT_GOAL := help
 .PHONY: help env-check up up-app down reset ps logs verify verify-env fmt lint test test-integration audit run-api run-ai docker-build

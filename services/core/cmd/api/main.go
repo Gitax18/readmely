@@ -19,6 +19,7 @@ import (
 	"github.com/Gitax18/readmely/services/core/internal/health"
 	"github.com/Gitax18/readmely/services/core/internal/logging"
 	"github.com/Gitax18/readmely/services/core/internal/server"
+	"github.com/Gitax18/readmely/services/core/internal/status"
 )
 
 const readinessTimeout = 2 * time.Second
@@ -67,6 +68,8 @@ func run(ctx context.Context, args []string, getenv func(string) string, stdout,
 		health.Check{Name: "postgres", Pinger: pool},
 		health.Check{Name: "redis", Pinger: redisPinger{rdb}},
 	)
+	statusHandler := status.NewHandler(checks, status.NewAIClient(logger, cfg.AIServiceURL, cfg.AIServiceToken))
+
 	var lc net.ListenConfig
 	publicLn, err := lc.Listen(ctx, "tcp", cfg.HTTPAddr)
 	if err != nil {
@@ -90,7 +93,7 @@ func run(ctx context.Context, args []string, getenv func(string) string, stdout,
 		errs <- server.Run(runCtx, server.New(server.NewPublicRouter(logger, checks)), publicLn, cfg.ShutdownTimeout)
 	}()
 	go func() {
-		errs <- server.Run(runCtx, server.New(server.NewInternalRouter(logger, checks)), internalLn, cfg.ShutdownTimeout)
+		errs <- server.Run(runCtx, server.New(server.NewInternalRouter(logger, checks, statusHandler.Get)), internalLn, cfg.ShutdownTimeout)
 	}()
 	var runErr error
 	for range 2 {

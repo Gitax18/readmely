@@ -81,6 +81,10 @@ services:
       HTTP_ADDR: ":8080"
       # /readyz lives here. Reachable on the internal network only: never add it to `ports`.
       INTERNAL_ADDR: "0.0.0.0:8081"
+      # The status report asks the AI service for its readiness with this token.
+      # Without a token the report says "unconfigured" and no request is made.
+      AI_SERVICE_URL: http://ai:8000
+      AI_SERVICE_TOKEN: ${AI_SERVICE_TOKEN:-}
       DATABASE_URL: postgres://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@postgres:5432/${POSTGRES_DB:?}?sslmode=disable
       REDIS_URL: redis://:${REDIS_PASSWORD:?}@redis:6379/0
     depends_on:

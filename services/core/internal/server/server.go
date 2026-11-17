@@ -28,11 +28,13 @@ func NewPublicRouter(logger *slog.Logger, h *health.Handler) http.Handler {
 	return r
 }
 
-// NewInternalRouter is served on the internal address only (probes, other services).
-func NewInternalRouter(logger *slog.Logger, h *health.Handler) http.Handler {
+// NewInternalRouter is served on the internal address only (probes, the web
+// app's server). It carries everything that reveals dependency state.
+func NewInternalRouter(logger *slog.Logger, h *health.Handler, status http.HandlerFunc) http.Handler {
 	r := newBaseRouter(logger)
 	r.Get("/healthz", h.Healthz)
 	r.Get("/readyz", h.Readyz)
+	r.Get("/api/v1/status", status)
 	return r
 }
 
