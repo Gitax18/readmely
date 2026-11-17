@@ -28,6 +28,8 @@ make run-api             # or run the Go API on the host
 make run-web             # and the web app on the host (dev mode)
 ```
 
+Run `make hooks` once after cloning: it enables the git hooks in `.githooks/`, which reject commit messages that break the convention below and check the staged files (format, lint, contracts, secrets) before each commit.
+
 API shapes live in [`contracts/`](contracts/README.md) as OpenAPI specs. `make gen` regenerates the Go, Python and TypeScript types from them (output is committed), `make gen-check` fails if generated code is out of date, and `make contracts-check` validates the specs.
 
 `make help` lists every target, including `lint`, `test`, `test-e2e` (browser tests), `test-integration` and `audit`.

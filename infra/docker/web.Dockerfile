@@ -1,7 +1,7 @@
 # Next.js web image. Build from the repository root:
 #   docker build -f infra/docker/web.Dockerfile -t readmely/web:dev .
 
-FROM node:24.21.0-alpine AS build
+FROM node:24.21.0-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS build
 # pnpm is pinned to the version in package.json; the release-age and
 # install-script policies in pnpm-workspace.yaml apply here too.
 RUN npm install --global --ignore-scripts pnpm@12.10.1

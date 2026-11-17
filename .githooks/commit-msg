@@ -1,0 +1,3 @@
+#!/bin/sh
+# Rejects commit messages that break the convention in README.md.
+exec python3 "$(git rev-parse --show-toplevel)/scripts/check-commit-msg.py" "$1"
