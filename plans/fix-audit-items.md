@@ -1,6 +1,6 @@
 # Fix plan: audit items (branch `fix/audit-items`)
 
-**Status:** Draft, awaiting review · **Source:** [audit-2026-11-17.md](audit-2026-11-17.md)
+**Status:** Approved 2026-11-18 · **Source:** [audit-2026-11-17.md](audit-2026-11-17.md)
 One commit per item. Run `make lint test test-integration audit` after each.
 
 ## 1 · A9 Go standard-library vulnerabilities (High, do first)
