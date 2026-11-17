@@ -2,7 +2,7 @@
 # Build from the repository root:
 #   docker build -f infra/docker/core.Dockerfile --build-arg CMD=api -t readmely/api:dev .
 
-FROM golang:1.27.2-alpine AS build
+FROM golang:1.27.4-alpine AS build
 WORKDIR /src
 COPY services/core/go.mod services/core/go.sum ./
 RUN go mod download
