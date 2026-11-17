@@ -23,7 +23,7 @@ func TestLoadDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if c.Env != EnvDevelopment || c.HTTPAddr != ":8080" || c.LogLevel != slog.LevelInfo || c.ShutdownTimeout != 10*time.Second {
+	if c.Env != EnvDevelopment || c.HTTPAddr != ":8080" || c.InternalAddr != "127.0.0.1:8081" || c.LogLevel != slog.LevelInfo || c.ShutdownTimeout != 10*time.Second {
 		t.Fatalf("unexpected defaults: %+v", c)
 	}
 }
@@ -67,6 +67,8 @@ func TestLoadRejectsBadValues(t *testing.T) {
 		{"addr port out of range", map[string]string{"HTTP_ADDR": ":70000"}, "HTTP_ADDR: port must be"},
 		{"addr port not a number", map[string]string{"HTTP_ADDR": ":http"}, "HTTP_ADDR: port must be"},
 		{"bad env", map[string]string{"APP_ENV": "staging"}, "APP_ENV: must be"},
+		{"bad internal addr", map[string]string{"INTERNAL_ADDR": "8081"}, "INTERNAL_ADDR: must be host:port"},
+		{"internal same as public", map[string]string{"HTTP_ADDR": ":9000", "INTERNAL_ADDR": ":9000"}, "INTERNAL_ADDR: must differ"},
 		{"bad log level", map[string]string{"LOG_LEVEL": "loud"}, "LOG_LEVEL: must be"},
 		{"timeout not a duration", map[string]string{"SHUTDOWN_TIMEOUT": "soon"}, "SHUTDOWN_TIMEOUT: must be"},
 		{"timeout zero", map[string]string{"SHUTDOWN_TIMEOUT": "0s"}, "SHUTDOWN_TIMEOUT: must be"},

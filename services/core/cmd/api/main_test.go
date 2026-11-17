@@ -96,6 +96,7 @@ func TestPortInUseFailsClearly(t *testing.T) {
 
 	m := deadDeps()
 	m["HTTP_ADDR"] = busy.Addr().String()
+	m["INTERNAL_ADDR"] = freeAddr(t)
 	var stdout, stderr bytes.Buffer
 	code := run(context.Background(), nil, env(m), &stdout, &stderr)
 
@@ -113,6 +114,8 @@ func TestAPIStaysUpWhenDependenciesAreDown(t *testing.T) {
 	addr := freeAddr(t)
 	m := deadDeps()
 	m["HTTP_ADDR"] = addr
+	internal := freeAddr(t)
+	m["INTERNAL_ADDR"] = internal
 
 	var stdout, stderr syncBuffer
 	ctx, cancel := context.WithCancel(context.Background())
@@ -136,7 +139,11 @@ func TestAPIStaysUpWhenDependenciesAreDown(t *testing.T) {
 	if code, _ := getJSON(t, base+"/healthz"); code != http.StatusOK {
 		t.Errorf("/healthz = %d, want 200", code)
 	}
-	code, body := getJSON(t, base+"/readyz")
+	// Readiness is internal only (audit A1): absent on the public port.
+	if code, _ := getJSON(t, base+"/readyz"); code != http.StatusNotFound {
+		t.Errorf("public /readyz = %d, want 404", code)
+	}
+	code, body := getJSON(t, "http://"+internal+"/readyz")
 	if code != http.StatusServiceUnavailable {
 		t.Errorf("/readyz = %d, want 503", code)
 	}
@@ -186,4 +193,30 @@ func TestHealthcheckSubcommand(t *testing.T) {
 	if code := run(context.Background(), []string{"healthcheck"}, env(map[string]string{"HTTP_ADDR": "nonsense"}), io.Discard, io.Discard); code != 1 {
 		t.Fatalf("bad HTTP_ADDR: exit %d, want 1", code)
 	}
+}
+
+func TestInternalPortInUseFailsClearlyAndReleasesThePublicPort(t *testing.T) {
+	busy, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = busy.Close() }()
+
+	public := freeAddr(t)
+	m := deadDeps()
+	m["HTTP_ADDR"] = public
+	m["INTERNAL_ADDR"] = busy.Addr().String()
+	var stdout, stderr bytes.Buffer
+	if code := run(context.Background(), nil, env(m), &stdout, &stderr); code != 1 {
+		t.Fatalf("exit code %d, want 1", code)
+	}
+	if !strings.Contains(stdout.String(), busy.Addr().String()) {
+		t.Fatalf("log should name the internal address: %s", stdout.String())
+	}
+	// The public listener opened first must have been closed again.
+	ln, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", public)
+	if err != nil {
+		t.Fatalf("public port still held: %v", err)
+	}
+	_ = ln.Close()
 }

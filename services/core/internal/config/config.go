@@ -28,6 +28,7 @@ const maxShutdownTimeout = 60 * time.Second
 type Config struct {
 	Env             string
 	HTTPAddr        string
+	InternalAddr    string // serves /readyz; never published to the internet
 	DatabaseURL     string
 	RedisURL        string
 	LogLevel        slog.Level
@@ -44,6 +45,13 @@ func Load(getenv func(string) string) (Config, error) {
 	c.HTTPAddr = value(getenv, "HTTP_ADDR", ":8080")
 	if err := validateAddr(c.HTTPAddr); err != nil {
 		errs = append(errs, fieldError("HTTP_ADDR", err))
+	}
+
+	c.InternalAddr = value(getenv, "INTERNAL_ADDR", "127.0.0.1:8081")
+	if err := validateAddr(c.InternalAddr); err != nil {
+		errs = append(errs, fieldError("INTERNAL_ADDR", err))
+	} else if c.InternalAddr == c.HTTPAddr {
+		errs = append(errs, fieldError("INTERNAL_ADDR", errors.New("must differ from HTTP_ADDR")))
 	}
 
 	c.DatabaseURL = value(getenv, "DATABASE_URL", "")

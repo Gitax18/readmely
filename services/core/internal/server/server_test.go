@@ -18,7 +18,7 @@ import (
 func discardLogger() *slog.Logger { return slog.New(slog.NewJSONHandler(io.Discard, nil)) }
 
 func newRouter() http.Handler {
-	return NewRouter(discardLogger(), health.New(discardLogger(), time.Second))
+	return NewInternalRouter(discardLogger(), health.New(discardLogger(), time.Second))
 }
 
 func do(t *testing.T, method, path string) *httptest.ResponseRecorder {
@@ -244,5 +244,16 @@ func TestRunReturnsServeErrors(t *testing.T) {
 	err := Run(context.Background(), New(newRouter()), ln, time.Second)
 	if err == nil || !strings.Contains(err.Error(), "serve") {
 		t.Fatalf("expected a serve error, got %v", err)
+	}
+}
+
+func TestPublicRouterHasNoReadiness(t *testing.T) {
+	r := NewPublicRouter(discardLogger(), health.New(discardLogger(), time.Second))
+	for path, want := range map[string]int{"/healthz": http.StatusOK, "/readyz": http.StatusNotFound} {
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, http.NoBody))
+		if rec.Code != want {
+			t.Errorf("public %s = %d, want %d", path, rec.Code, want)
+		}
 	}
 }
