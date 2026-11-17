@@ -135,7 +135,7 @@ test-integration: env-check ## Run the integration tests against the running loc
 audit: ## Check Go, Python and web dependencies for known vulnerabilities (needs network)
 	@cd $(GO_DIR) && go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 	@cd $(WEB_DIR) && pnpm install --frozen-lockfile --silent && pnpm audit --prod
-	@cd $(AI_DIR) && uv export --frozen --no-dev --no-hashes --format requirements-txt -q \
+	@cd $(AI_DIR) && uv export --frozen --all-groups --no-emit-project --no-hashes --format requirements-txt -q \
 		| uv run --frozen pip-audit --strict -r /dev/stdin
 
 run-api: env-check ## Run the API on the host against the local stack (stop the API container first)
