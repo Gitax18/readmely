@@ -117,7 +117,7 @@ services/ai/
 - **Added at review:** `make audit` (govulncheck and pip-audit). Its first run found two Go standard-library vulnerabilities; recorded as audit item A9, fixed first on `fix/audit-items`.
 
 ### Step 4 · Next.js shell
-**Status:** Implemented 2026-11-18, awaiting sign-off (agreed 2026-11-18: server-side fetch, detailed status, pnpm + Vitest + Playwright, containerised).
+**Status:** Done 2026-11-18 (agreed 2026-11-18: server-side fetch, detailed status, pnpm + Vitest + Playwright, containerised).
 
 **Goal:** a secure Next.js app that renders one status page for the API and the AI service, with the whole path (browser → Next.js server → Go → Python) working and tested.
 
