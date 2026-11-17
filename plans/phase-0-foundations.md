@@ -235,7 +235,7 @@ services/ai/
 - **Next:** Step 6 wires `make gen-check` and `make contracts-check` into CI.
 
 ### Step 6 · Quality gates and CI
-**Status:** Implemented 2026-11-18, awaiting sign-off (agreed: plain hooks in the repo, run everything on every PR, protect `main` after CI is green, pin actions to commit SHAs with Dependabot).
+**Status:** Done 2026-11-18 (agreed: plain hooks in the repo, run everything on every PR, protect `main` after CI is green, pin actions to commit SHAs with Dependabot).
 
 **Goal:** a change that breaks lint, tests, the contracts, the commit convention, or leaks a secret is stopped twice: on the developer's machine before it is committed, and on GitHub before it can be merged.
 
@@ -292,7 +292,7 @@ services/ai/
   - My first "failing test" was caught by lint, so the test gate was not exercised; redone with a lint-clean failing test and confirmed.
   - A local `gitleaks dir` scan would have read the untracked `.env`; the scan is limited to git history, which never contains it.
 - **Limits recorded:** (1) Dependabot is configured for `infra/docker` but its file-name matching for `*.Dockerfile` is unconfirmed; check the first Dependabot run on `main`. (2) Branches pushed without a pull request are not secret-scanned remotely; the local hook is the only gate there. (3) The hooks check the working-tree copy of a partly staged file. (4) `gitleaks` is installed by checksum pinned in the workflow; locally it is optional (the hook skips it with a message).
-- **Branch protection on `main`:** not applied yet; waiting for your confirmation of the exact settings.
+- **Branch protection on `main`:** not applied; waiting for the owner to confirm the settings.
 - **Next:** Phase 1.
 
 ## Security (from [security.md](security.md))
