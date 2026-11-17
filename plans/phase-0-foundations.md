@@ -235,11 +235,52 @@ services/ai/
 - **Next:** Step 6 wires `make gen-check` and `make contracts-check` into CI.
 
 ### Step 6 · Quality gates and CI
-- `make lint`, `make test`, `make fmt` cover all three languages.
-- `lefthook`: format and lint staged files; reject commit messages that break the convention in [README.md](README.md).
-- GitHub Actions: lint, test, and build per service, with path filters; `govulncheck`, `pip-audit`, `pnpm audit`; secret scanning with `gitleaks`; Docker image builds.
-- Dockerfiles for the Python and Next.js services: multi-stage, minimal base, non-root user, pinned base image versions (the Go one exists since Step 2).
-- **Verify:** a deliberately broken lint, a failing test, a bad commit message, and a planted fake secret are each rejected.
+**Status:** Draft, awaiting review (agreed 2026-11-18: plain hooks in the repo, run everything on every PR, protect `main` after CI is green, pin actions to commit SHAs with Dependabot).
+
+**Goal:** a change that breaks lint, tests, the contracts, the commit convention, or leaks a secret is stopped twice: on the developer's machine before it is committed, and on GitHub before it can be merged.
+
+**Already done in earlier steps:** `make lint`, `make test`, `make fmt` cover all three languages (Steps 2 to 4); multi-stage, non-root Dockerfiles exist for all services.
+
+**1. Commit convention check** (`scripts/check-commit-msg.py`, Python standard library only, with tests)
+- Format `<type>(<scope>): <summary>`; types `feat fix docs test refactor perf security build ci chore`; the scope is optional but, when present, must be one of `web core ai layout db contracts infra plans`; summary non-empty, no trailing period, first line at most 72 characters. Merge commits and `Co-Authored-By` lines are allowed.
+- One script, two callers: the `commit-msg` hook and the CI job that checks every commit in a pull request.
+
+**2. Local git hooks** (`.githooks/`, enabled by `make hooks`, which sets `core.hooksPath`)
+- `commit-msg`: runs the check above.
+- `pre-commit`: looks only at staged files. `gofmt` and `golangci-lint` for Go, `ruff` for Python, `eslint` and `prettier` for the web app, `make contracts-check gen-check` when a spec or generated file is staged, and `gitleaks` on the staged diff.
+- If a tool is missing (for example `gitleaks`), the hook says so clearly and continues; CI is what enforces. Hooks never send anything anywhere.
+
+**3. Secret scanning:** `.gitleaks.toml` extends the default rules and allows only the placeholder passwords in `.env.example`. `make secrets` scans the working tree and history. CI scans the full history on every run.
+
+**4. GitHub Actions** (`.github/workflows/ci.yml`; triggers `pull_request`, `push` to `main`, `workflow_dispatch`; never `pull_request_target`)
+- Safe defaults: `permissions: contents: read` for the whole workflow, no secrets used, concurrency cancels superseded runs, every job has a timeout, and `actionlint` checks the workflow files.
+- Parallel jobs: `commits` (convention), `secrets` (gitleaks), `go` (lint, `go test -race`, `govulncheck`), `python` (ruff, mypy, pytest with the 90% coverage gate, `pip-audit` including dev), `web` (lint, unit tests with coverage, `pnpm audit --prod`, production build), `contracts` (`make contracts-check gen-check`), `e2e` (Playwright), `integration` (copies `.env.example` with a generated token, `make up`, `make verify`, `make test-integration`, `make up-app`, then checks the status page through the real stack), `images` (build all four images and scan them with Trivy for fixed high and critical vulnerabilities).
+- Every third-party action is pinned to a full commit SHA, resolved through the GitHub API at the time and noted with its version in a comment. Tool versions (Go, Node, pnpm, uv, golangci-lint, gitleaks, Trivy) are pinned; installers are checked against checksums.
+- One aggregate job, `ci-ok`, depends on all the others. It is the single required check for branch protection, so adding or renaming a job never breaks the rule.
+
+**5. Image base pinning:** every `FROM` in the three Dockerfiles gets its tag plus a digest (the web runtime already has one). Dependabot keeps both current.
+
+**6. Dependabot** (`.github/dependabot.yml`): weekly update PRs for GitHub Actions, Go modules, Python (`uv`), pnpm (`npm` ecosystem) and Docker base images, grouped per ecosystem, with a 7-day cooldown that matches the package-age rule we already use for pnpm.
+
+**7. `make check`:** one local command that runs what CI runs without containers (lint, unit tests, contracts, generation check, audit, secret scan).
+
+**8. Branch protection on `main`:** applied only after the first CI run is green, with `gh api`, and only after I show you the exact settings: pull request required, the `ci-ok` check required, branch up to date before merging, force pushes and deletion blocked. This changes your repository settings, which is why it is a separate, confirmed step. After that, merges to `main` go through a pull request.
+
+**Commits (branch `feat/ci`)**
+1. `feat(infra): add the commit message check and git hooks`
+2. `ci: add secret scanning and make check`
+3. `build(infra): pin base images by digest`
+4. `ci: add the CI workflow`
+5. `ci: add Dependabot`
+6. `docs(plans): record Step 6 outcome`
+
+**Verify (each planted, seen rejected, then removed)**
+- Locally, through the hooks: a deliberately broken lint (Go, Python, web), a bad commit message (wrong type, unknown scope, over-long, trailing period), and a planted fake secret in a staged file are each rejected; a clean commit passes; the check script has its own tests.
+- On GitHub, through CI: on throwaway branches `ci-check/*` I open draft pull requests that plant, one per branch, a lint error, a failing test, a stale generated file, a bad commit message, and a fake secret. Each must turn the matching job red and `ci-ok` red. A clean branch must turn everything green. Afterwards I close the pull requests and delete the branches. These branches contain only obviously fake data, nothing from your `.env`.
+- The `integration` job's first run proves the stack builds and the status page works from a clean checkout, which has never been tested before.
+- Whole repo: `make check`, `make lint test test-e2e test-integration audit gen-check` green locally; all images rebuild.
+
+**Out of scope:** publishing images to a registry and any deployment (deploy phase), code signing, and required human review counts (single-developer repository for now).
 
 ## Security (from [security.md](security.md))
 
