@@ -57,3 +57,5 @@ class Readiness(BaseModel):
     )
     status: Literal['ready', 'unavailable']
     checks: CheckMap
+
+# hand edit
