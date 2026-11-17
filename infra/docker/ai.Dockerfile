@@ -18,7 +18,18 @@ RUN python -m compileall -q app
 
 # Runtime: same base, no uv, no build tools, non-root.
 FROM python:3.13.16-slim-trixie@sha256:cf50a4f6ac4f026458b08d5222023d700ac806410dff5e9ca8728fa44f2b850f
-RUN groupadd --system --gid 10001 app \
+# The service never installs anything at run time, so the package manager goes: it
+# bundles its own copies of libraries (certifi, urllib3, msgpack) that scanners flag
+# and that nothing here uses.
+#
+# Debian published security fixes (apt, zlib1g) that the newest base image does not have
+# yet, so those packages alone are upgraded. Remove this once a base image includes them;
+# CI's Trivy scan will keep passing either way.
+RUN apt-get update \
+ && apt-get install --yes --no-install-recommends --only-upgrade apt libapt-pkg7.0 zlib1g \
+ && rm -rf /var/lib/apt/lists/* \
+ && python -m pip uninstall --yes pip \
+ && groupadd --system --gid 10001 app \
  && useradd --system --uid 10001 --gid app --no-create-home --shell /usr/sbin/nologin app
 WORKDIR /app
 COPY --from=build --chown=root:root /app /app
