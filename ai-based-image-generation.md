@@ -2,6 +2,8 @@
 
 Created by Gitanshu Sankhla · @Gitanshu Sankhla · Nov 15, 2026
 
+> **Architecture note (Readmely):** this guide describes the pipeline in Go for illustration. In Readmely, all LLM orchestration (prompting, structured output, the repair loop) runs in the **Python AI service** (decision D1 in `plans/00-architecture.md`). The Go core provides the deterministic parts: graph extraction, layout, SVG rendering and validation. The Go snippets and tech-stack rows below will be rewritten when the diagram phase starts.
+
 ## Overview
 
 The tool reads a codebase, works out its architecture, and outputs a clean, coloured SVG diagram. The core rule: **the LLM decides structure and meaning; deterministic code decides geometry.** Claude's diagrams look good because a design system, layout discipline and a render-and-check loop sit around the model, not because of a special drawing ability. This guide rebuilds that scaffolding for your own model.
