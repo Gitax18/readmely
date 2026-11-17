@@ -19,8 +19,24 @@ import (
 
 const maxBodyBytes = 1 << 20 // 1 MiB
 
-// NewRouter builds the API router with the standard middleware chain.
-func NewRouter(logger *slog.Logger, h *health.Handler) http.Handler {
+// NewPublicRouter is the internet-facing router. It exposes liveness only:
+// readiness reveals which dependency is down and costs a database round trip
+// per call, so it lives on the internal router (audit item A1).
+func NewPublicRouter(logger *slog.Logger, h *health.Handler) http.Handler {
+	r := newBaseRouter(logger)
+	r.Get("/healthz", h.Healthz)
+	return r
+}
+
+// NewInternalRouter is served on the internal address only (probes, other services).
+func NewInternalRouter(logger *slog.Logger, h *health.Handler) http.Handler {
+	r := newBaseRouter(logger)
+	r.Get("/healthz", h.Healthz)
+	r.Get("/readyz", h.Readyz)
+	return r
+}
+
+func newBaseRouter(logger *slog.Logger) chi.Router {
 	r := chi.NewRouter()
 	r.Use(
 		httpx.RequestID,
@@ -29,8 +45,6 @@ func NewRouter(logger *slog.Logger, h *health.Handler) http.Handler {
 		httpx.SecureHeaders,
 		httpx.MaxBody(maxBodyBytes),
 	)
-	r.Get("/healthz", h.Healthz)
-	r.Get("/readyz", h.Readyz)
 	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, http.StatusNotFound, "not_found")
 	})

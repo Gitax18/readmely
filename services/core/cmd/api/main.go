@@ -67,18 +67,40 @@ func run(ctx context.Context, args []string, getenv func(string) string, stdout,
 		health.Check{Name: "postgres", Pinger: pool},
 		health.Check{Name: "redis", Pinger: redisPinger{rdb}},
 	)
-	srv := server.New(server.NewRouter(logger, checks))
-
 	var lc net.ListenConfig
-	ln, err := lc.Listen(ctx, "tcp", cfg.HTTPAddr)
+	publicLn, err := lc.Listen(ctx, "tcp", cfg.HTTPAddr)
 	if err != nil {
 		logger.Error("cannot listen", "addr", cfg.HTTPAddr, "error", err)
 		return 1
 	}
-	logger.Info("api listening", "addr", ln.Addr().String(), "env", cfg.Env)
+	internalLn, err := lc.Listen(ctx, "tcp", cfg.InternalAddr)
+	if err != nil {
+		_ = publicLn.Close()
+		logger.Error("cannot listen", "addr", cfg.InternalAddr, "error", err)
+		return 1
+	}
+	logger.Info("api listening",
+		"addr", publicLn.Addr().String(), "internal_addr", internalLn.Addr().String(), "env", cfg.Env)
 
-	if err := server.Run(ctx, srv, ln, cfg.ShutdownTimeout); err != nil {
-		logger.Error("api stopped with an error", "error", err)
+	// Both servers stop together: on shutdown, or as soon as either one fails.
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	errs := make(chan error, 2)
+	go func() {
+		errs <- server.Run(runCtx, server.New(server.NewPublicRouter(logger, checks)), publicLn, cfg.ShutdownTimeout)
+	}()
+	go func() {
+		errs <- server.Run(runCtx, server.New(server.NewInternalRouter(logger, checks)), internalLn, cfg.ShutdownTimeout)
+	}()
+	var runErr error
+	for range 2 {
+		if err := <-errs; err != nil && runErr == nil {
+			runErr = err
+			cancel()
+		}
+	}
+	if runErr != nil {
+		logger.Error("api stopped with an error", "error", runErr)
 		return 1
 	}
 	logger.Info("api stopped")

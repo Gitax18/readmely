@@ -1,23 +1,38 @@
 # Readmely task runner. Run `make help` for the list of targets.
 
-COMPOSE := docker compose --env-file .env -f infra/docker-compose.yml
+# Override for testing, e.g. `make verify-env ENV_FILE=./some.env`. Keep the ./ prefix for relative paths.
+ENV_FILE ?= ./.env
+COMPOSE := docker compose --env-file $(ENV_FILE) -f infra/docker-compose.yml
 GO_DIR  := services/core
 AI_DIR  := services/ai
 
 # Shell prelude for commands that run on the host against the compose stack:
 # loads .env and builds the connection URLs the services expect.
-LOCAL_ENV = set -a; . ./.env; set +a; \
+LOCAL_ENV = set -a; . $(ENV_FILE); set +a; \
 	export DATABASE_URL="postgres://$$POSTGRES_USER:$$POSTGRES_PASSWORD@127.0.0.1:$$POSTGRES_PORT/$$POSTGRES_DB?sslmode=disable"; \
 	export REDIS_URL="redis://:$$REDIS_PASSWORD@127.0.0.1:$$REDIS_PORT/0";
 
 .DEFAULT_GOAL := help
-.PHONY: help env-check up up-app down reset ps logs verify fmt lint test test-integration audit run-api run-ai docker-build
+.PHONY: help env-check up up-app down reset ps logs verify verify-env fmt lint test test-integration audit run-api run-ai docker-build
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  %-18s %s\n", $$1, $$2}'
 
 env-check:
-	@test -f .env || { echo "error: .env not found. Run: cp .env.example .env  (then change the passwords)"; exit 1; }
+	@test -f $(ENV_FILE) || { echo "error: $(ENV_FILE) not found. Run: cp .env.example .env  (then change the passwords)"; exit 1; }
+
+# Credentials are pasted into connection URLs, so characters such as @ : / ? # % break
+# them in confusing ways (audit A2). Prints variable names only, never values.
+URL_SAFE_VARS := POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB REDIS_PASSWORD RUSTFS_ACCESS_KEY RUSTFS_SECRET_KEY AI_SERVICE_TOKEN
+
+verify-env: env-check ## Check that credentials in the env file only use URL-safe characters
+	@set -a; . $(ENV_FILE); set +a; bad=""; \
+	for v in $(URL_SAFE_VARS); do \
+		eval "val=\$$$$v"; \
+		case "$$val" in *[!A-Za-z0-9_-]*) bad="$$bad $$v";; esac; \
+	done; \
+	if [ -n "$$bad" ]; then echo "FAIL unsafe characters in:$$bad (use only letters, digits, - and _)"; exit 1; \
+	else echo "ok   credentials use URL-safe characters"; fi
 
 up: env-check ## Start the local data stores and wait until they are healthy
 	@$(COMPOSE) up -d --wait
@@ -37,7 +52,7 @@ ps: env-check ## Show container status
 logs: env-check ## Follow container logs
 	@$(COMPOSE) --profile app logs -f
 
-verify: env-check ## Check that the data stores work and are bound to localhost only
+verify: verify-env ## Check credentials, then that the data stores work and are bound to localhost only
 	@$(COMPOSE) exec -T postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -tAc "select 1 from pg_available_extensions where name = '"'"'vector'"'"'"' | grep -q 1 \
 		&& echo "ok   postgres is up and pgvector is available" \
 		|| { echo "FAIL postgres or pgvector"; exit 1; }

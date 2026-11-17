@@ -100,7 +100,7 @@ A chat panel answers questions such as "how does auth work?" or "where is the pa
 - Basic visitor analytics, and an optional custom domain (later).
 
 ### 2.10 Account, providers & security
-- Sign up with **GitHub** (recommended, needed for private repositories) or with email. An email account can connect GitHub or GitLab later.
+- Sign up with **Google** or **GitHub** (GitHub is recommended and needed for private repositories), with **two-factor authentication (2FA)** available on every account. Plain email sign-up is still open and will be decided in the Phase 2 auth discussion. An account can connect GitHub or GitLab later.
 - **No API keys needed.** Readmely provides all AI generation. Users never supply their own provider keys (see §4.3).
 - **Privacy:** customer code is never used to train models. Raw source is kept only as long as needed for analysis; the derived index is stored, and code is only stored if the user keeps a project synced. Users can delete a project and all derived data with one click.
 
@@ -156,7 +156,17 @@ AI usage is measured in **credits**, so cost follows actual AI spend rather than
 ## 4. Business insights
 
 ### 4.1 Unit economics (what a generation costs us)
-List prices as of November 2026 (per 1M tokens, input / output): Claude Haiku 5.5 $0.10 / $0.50 · Claude Sonnet 5.5 $2 / $10 · Claude Opus 5.5 $4 / $20 · OpenAI GPT-5 mini ~$0.25 / $2. Batch APIs are about 50% cheaper, and cached input is up to ~95% cheaper.
+Launch providers are OpenAI and xAI (decision D8). List prices from their own pricing pages, checked 18 Nov 2026 (per 1M tokens, input / output, standard tier, short context):
+
+| Tier | OpenAI | xAI |
+|---|---|---|
+| Fast (Lite, indexing) | GPT-6 Luna $0.10 / $0.50 · GPT-5 nano $0.05 / $0.40 | Grok Build 0.1 $1 / $2 |
+| Quality (Champ) | GPT-6.1 Sol $2 / $10 | Grok 4.7 $2 / $6 · Grok 4.3 $1.25 / $2.50 |
+| Top tier (not planned for launch) | GPT-6.2 Astra $8 / $40 | none |
+
+Cached input is about 90% cheaper on OpenAI (GPT-6.1 Sol $0.10) and 75% cheaper on xAI (Grok 4.7 $0.50). xAI gives a 20% batch discount. Above 200K prompt tokens xAI doubles its rates. Prices change often, so re-check before launch.
+
+The estimates below use the OpenAI rates, the higher-cost launch provider for the quality tier (Luna as the fast model, Sol as the quality model). xAI's Grok 4.7 costs about 20–25% less per README because its output rate is lower.
 
 | Operation | Estimated cost to Readmely |
 |---|---|
