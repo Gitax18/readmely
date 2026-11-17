@@ -15,7 +15,7 @@ LOCAL_ENV = set -a; . $(ENV_FILE); set +a; \
 	export AI_SERVICE_URL="http://127.0.0.1:$${AI_PORT:-8000}";
 
 .DEFAULT_GOAL := help
-.PHONY: help hooks test-scripts env-check up up-app down reset ps logs verify verify-env fmt lint test contracts-check gen gen-check test-e2e test-integration audit run-api run-ai run-web docker-build
+.PHONY: help hooks check secrets test-scripts env-check up up-app down reset ps logs verify verify-env fmt lint test contracts-check gen gen-check test-e2e test-integration audit run-api run-ai run-web docker-build
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  %-18s %s\n", $$1, $$2}'
@@ -143,6 +143,14 @@ audit: ## Check Go, Python and web dependencies for known vulnerabilities (needs
 	@cd $(WEB_DIR) && pnpm install --frozen-lockfile --silent && pnpm audit --prod
 	@cd $(AI_DIR) && uv export --frozen --all-groups --no-emit-project --no-hashes --format requirements-txt -q \
 		| uv run --frozen pip-audit --strict -r /dev/stdin
+
+# Scans committed history only ("git" mode). It never reads untracked files, so a local .env is never touched.
+secrets: ## Scan the git history for committed secrets (needs gitleaks)
+	@command -v gitleaks > /dev/null || { echo "error: gitleaks is not installed (brew install gitleaks)"; exit 1; }
+	@gitleaks git --redact --no-banner --config .gitleaks.toml . && echo "ok   no secrets found in the git history"
+
+check: lint test gen-check audit secrets ## Everything CI runs that needs no containers
+	@echo "ok   all checks passed"
 
 run-api: env-check ## Run the API on the host against the local stack (stop the API container first)
 	@$(LOCAL_ENV) export HTTP_ADDR="127.0.0.1:$${API_PORT:-8080}"; cd $(GO_DIR) && go run ./cmd/api

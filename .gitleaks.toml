@@ -1,0 +1,6 @@
+# Secret scanning. Starts from gitleaks' default rules; add an allowlist entry here
+# only for a value that is provably fake, with a comment saying why.
+title = "readmely"
+
+[extend]
+useDefault = true
