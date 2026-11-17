@@ -100,7 +100,7 @@ A chat panel answers questions such as "how does auth work?" or "where is the pa
 - Basic visitor analytics, and an optional custom domain (later).
 
 ### 2.10 Account, providers & security
-- Sign up with **GitHub** (recommended, needed for private repositories) or with email. An email account can connect GitHub or GitLab later.
+- Sign up with **Google** or **GitHub** (GitHub is recommended and needed for private repositories), with **two-factor authentication (2FA)** available on every account. Plain email sign-up is still open and will be decided in the Phase 2 auth discussion. An account can connect GitHub or GitLab later.
 - **No API keys needed.** Readmely provides all AI generation. Users never supply their own provider keys (see §4.3).
 - **Privacy:** customer code is never used to train models. Raw source is kept only as long as needed for analysis; the derived index is stored, and code is only stored if the user keeps a project synced. Users can delete a project and all derived data with one click.
 
