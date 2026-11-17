@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/Gitax18/readmely/services/core/internal/contract/coreinternal"
+	"github.com/Gitax18/readmely/services/core/internal/contract/corepublic"
 	"github.com/Gitax18/readmely/services/core/internal/httpx"
 )
 
@@ -35,18 +37,13 @@ func New(logger *slog.Logger, timeout time.Duration, checks ...Check) *Handler {
 
 // Healthz reports that the process is alive. It never touches a dependency.
 func (h *Handler) Healthz(w http.ResponseWriter, _ *http.Request) {
-	httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-}
-
-type readyBody struct {
-	Status string            `json:"status"`
-	Checks map[string]string `json:"checks"`
+	httpx.WriteJSON(w, http.StatusOK, corepublic.Liveness{Status: corepublic.LivenessStatusOk})
 }
 
 // RunChecks probes every dependency concurrently, giving the whole run at most
 // the handler's timeout. It returns "ok" or "down" per dependency and whether
 // all of them are ok. Reasons are logged, never returned.
-func (h *Handler) RunChecks(ctx context.Context) (map[string]string, bool) {
+func (h *Handler) RunChecks(ctx context.Context) (coreinternal.CheckMap, bool) {
 	ctx, cancel := context.WithTimeout(ctx, h.timeout)
 	defer cancel()
 
@@ -56,11 +53,11 @@ func (h *Handler) RunChecks(ctx context.Context) (map[string]string, bool) {
 		go func() { results[i] <- probe(ctx, c.Pinger) }()
 	}
 
-	out := make(map[string]string, len(h.checks))
+	out := make(coreinternal.CheckMap, len(h.checks))
 	allOK := true
 	for i, c := range h.checks {
 		if err := <-results[i]; err != nil {
-			out[c.Name] = "down"
+			out[c.Name] = coreinternal.CheckStateDown
 			allOK = false
 			h.logger.WarnContext(ctx, "readiness check failed",
 				"request_id", httpx.RequestIDFrom(ctx),
@@ -68,7 +65,7 @@ func (h *Handler) RunChecks(ctx context.Context) (map[string]string, bool) {
 				"error", err)
 			continue
 		}
-		out[c.Name] = "ok"
+		out[c.Name] = coreinternal.CheckStateOk
 	}
 	return out, allOK
 }
@@ -76,10 +73,10 @@ func (h *Handler) RunChecks(ctx context.Context) (map[string]string, bool) {
 // Readyz reports RunChecks as 200 (ready) or 503 (unavailable).
 func (h *Handler) Readyz(w http.ResponseWriter, r *http.Request) {
 	checks, ok := h.RunChecks(r.Context())
-	body := readyBody{Status: "ready", Checks: checks}
+	body := coreinternal.Readiness{Status: coreinternal.ReadinessStatusReady, Checks: checks}
 	status := http.StatusOK
 	if !ok {
-		body.Status = "unavailable"
+		body.Status = coreinternal.ReadinessStatusUnavailable
 		status = http.StatusServiceUnavailable
 	}
 	httpx.WriteJSON(w, status, body)

@@ -13,20 +13,21 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Gitax18/readmely/services/core/internal/contract/coreinternal"
 	"github.com/Gitax18/readmely/services/core/internal/httpx"
 )
 
 var testToken = strings.Repeat("t0k3n", 7) // 35 chars
 
 type fakeChecker struct {
-	checks map[string]string
+	checks coreinternal.CheckMap
 	ok     bool
 }
 
-func (f fakeChecker) RunChecks(context.Context) (map[string]string, bool) { return f.checks, f.ok }
+func (f fakeChecker) RunChecks(context.Context) (coreinternal.CheckMap, bool) { return f.checks, f.ok }
 
 func healthyAPI() fakeChecker {
-	return fakeChecker{map[string]string{"postgres": "ok", "redis": "ok"}, true}
+	return fakeChecker{coreinternal.CheckMap{"postgres": "ok", "redis": "ok"}, true}
 }
 
 func logTo(buf *bytes.Buffer) *slog.Logger { return slog.New(slog.NewJSONHandler(buf, nil)) }
@@ -66,10 +67,10 @@ func TestAllOK(t *testing.T) {
 	var logs bytes.Buffer
 	h, _ := newHandler(t, healthyAPI(), aiReply(200, `{"status":"ready","checks":{"postgres":"ok"}}`), testToken, &logs)
 	code, r, _ := get(t, h)
-	if code != 200 || r.Status != Operational || r.Services["api"].Status != StateOK || r.Services["ai"].Status != StateOK {
+	if code != 200 || r.Status != Operational || r.Services.Api.Status != StateOK || r.Services.Ai.Status != StateOK {
 		t.Fatalf("got %d %+v", code, r)
 	}
-	if r.Services["ai"].Checks["postgres"] != "ok" || r.Services["api"].Checks["redis"] != "ok" {
+	if r.Services.Ai.Checks["postgres"] != "ok" || r.Services.Api.Checks["redis"] != "ok" {
 		t.Fatalf("detail missing: %+v", r)
 	}
 }
@@ -78,7 +79,7 @@ func TestAIReportsDownWithDetail(t *testing.T) {
 	var logs bytes.Buffer
 	h, _ := newHandler(t, healthyAPI(), aiReply(503, `{"status":"unavailable","checks":{"postgres":"down"}}`), testToken, &logs)
 	code, r, _ := get(t, h)
-	ai := r.Services["ai"]
+	ai := r.Services.Ai
 	if code != 200 || r.Status != Degraded || ai.Status != StateDown || ai.Checks["postgres"] != "down" {
 		t.Fatalf("got %d %+v", code, r)
 	}
@@ -86,17 +87,17 @@ func TestAIReportsDownWithDetail(t *testing.T) {
 
 func TestAPIPostgresDownIsUnavailable(t *testing.T) {
 	var logs bytes.Buffer
-	api := fakeChecker{map[string]string{"postgres": "down", "redis": "ok"}, false}
+	api := fakeChecker{coreinternal.CheckMap{"postgres": "down", "redis": "ok"}, false}
 	h, _ := newHandler(t, api, aiReply(200, `{"status":"ready","checks":{"postgres":"ok"}}`), testToken, &logs)
 	_, r, _ := get(t, h)
-	if r.Status != Unavailable || r.Services["api"].Status != StateDown {
+	if r.Status != Unavailable || r.Services.Api.Status != StateDown {
 		t.Fatalf("got %+v", r)
 	}
 }
 
 func TestAPIRedisDownIsDegraded(t *testing.T) {
 	var logs bytes.Buffer
-	api := fakeChecker{map[string]string{"postgres": "ok", "redis": "down"}, false}
+	api := fakeChecker{coreinternal.CheckMap{"postgres": "ok", "redis": "down"}, false}
 	h, _ := newHandler(t, api, aiReply(200, `{"status":"ready","checks":{"postgres":"ok"}}`), testToken, &logs)
 	if _, r, _ := get(t, h); r.Status != Degraded {
 		t.Fatalf("got %+v", r)
@@ -116,7 +117,7 @@ func TestAIHangsAndTheReportStillArrivesInTime(t *testing.T) {
 	if took := time.Since(start); took > 3*time.Second {
 		t.Fatalf("took %s, want under 3s", took)
 	}
-	if r.Services["ai"].Status != StateUnreachable || r.Status != Degraded {
+	if r.Services.Ai.Status != StateUnreachable || r.Status != Degraded {
 		t.Fatalf("got %+v", r)
 	}
 }
@@ -127,7 +128,7 @@ func TestAIConnectionRefusedIsUnreachable(t *testing.T) {
 	url := srv.URL
 	srv.Close()
 	h := NewHandler(healthyAPI(), NewAIClient(logTo(&logs), url, testToken))
-	if _, r, _ := get(t, h); r.Services["ai"].Status != StateUnreachable {
+	if _, r, _ := get(t, h); r.Services.Ai.Status != StateUnreachable {
 		t.Fatalf("got %+v", r)
 	}
 }
@@ -137,7 +138,7 @@ func TestWrongTokenHidesTheReason(t *testing.T) {
 	other := strings.Repeat("x", 40)
 	h, _ := newHandler(t, healthyAPI(), aiReply(200, `{}`), other, &logs)
 	_, r, body := get(t, h)
-	if r.Services["ai"].Status != StateDown {
+	if r.Services.Ai.Status != StateDown {
 		t.Fatalf("got %+v", r)
 	}
 	for _, leak := range []string{"401", "unauthorized", "token", other} {
@@ -166,7 +167,7 @@ func TestRedirectIsNotFollowedAndTokenNotForwarded(t *testing.T) {
 	if hits.Load() != 0 {
 		t.Fatalf("redirect target was contacted %d time(s)", hits.Load())
 	}
-	if r.Services["ai"].Status != StateDown {
+	if r.Services.Ai.Status != StateDown {
 		t.Fatalf("got %+v", r)
 	}
 }
@@ -184,7 +185,7 @@ func TestBadAIResponsesAreDownNotErrors(t *testing.T) {
 			var logs bytes.Buffer
 			h, _ := newHandler(t, healthyAPI(), aiReply(200, body), testToken, &logs)
 			code, r, _ := get(t, h)
-			if code != 200 || r.Services["ai"].Status != StateDown {
+			if code != 200 || r.Services.Ai.Status != StateDown {
 				t.Fatalf("got %d %+v", code, r)
 			}
 		})
@@ -195,8 +196,8 @@ func TestUnknownCheckValuesCountAsDown(t *testing.T) {
 	var logs bytes.Buffer
 	h, _ := newHandler(t, healthyAPI(), aiReply(200, `{"status":"ready","checks":{"postgres":"maybe"}}`), testToken, &logs)
 	_, r, _ := get(t, h)
-	ai := r.Services["ai"]
-	if ai.Status != StateDown || ai.Checks["postgres"] != StateDown {
+	ai := r.Services.Ai
+	if ai.Status != StateDown || ai.Checks["postgres"] != coreinternal.CheckStateDown {
 		t.Fatalf("got %+v", ai)
 	}
 }
@@ -204,7 +205,7 @@ func TestUnknownCheckValuesCountAsDown(t *testing.T) {
 func TestUnexpectedStatusCodeIsDown(t *testing.T) {
 	var logs bytes.Buffer
 	h, _ := newHandler(t, healthyAPI(), aiReply(500, `{"status":"ready","checks":{"postgres":"ok"}}`), testToken, &logs)
-	if _, r, _ := get(t, h); r.Services["ai"].Status != StateDown {
+	if _, r, _ := get(t, h); r.Services.Ai.Status != StateDown {
 		t.Fatalf("got %+v", r)
 	}
 }
@@ -215,10 +216,10 @@ func TestNoTokenMeansUnconfiguredAndNoRequest(t *testing.T) {
 	counter := http.HandlerFunc(func(http.ResponseWriter, *http.Request) { hits.Add(1) })
 	h, _ := newHandler(t, healthyAPI(), counter, "", &logs)
 	_, r, _ := get(t, h)
-	if hits.Load() != 0 || r.Services["ai"].Status != StateUnconfigured || r.Status != Degraded {
+	if hits.Load() != 0 || r.Services.Ai.Status != StateUnconfigured || r.Status != Degraded {
 		t.Fatalf("hits=%d %+v", hits.Load(), r)
 	}
-	if r.Services["ai"].Checks == nil {
+	if r.Services.Ai.Checks == nil {
 		t.Fatal("checks must be an object, not null")
 	}
 }

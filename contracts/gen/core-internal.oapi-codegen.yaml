@@ -3,3 +3,6 @@ package: coreinternal
 generate:
   models: true
 output: internal/contract/coreinternal/types.gen.go
+compatibility:
+  # Constants are always <Type><Value>, so adding a schema can never rename another one.
+  always-prefix-enum-values: true

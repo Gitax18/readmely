@@ -5,13 +5,13 @@ package corepublic
 
 // Defines values for LivenessStatus.
 const (
-	Ok LivenessStatus = "ok"
+	LivenessStatusOk LivenessStatus = "ok"
 )
 
 // Valid indicates whether the value is a known member of the LivenessStatus enum.
 func (e LivenessStatus) Valid() bool {
 	switch e {
-	case Ok:
+	case LivenessStatusOk:
 		return true
 	default:
 		return false

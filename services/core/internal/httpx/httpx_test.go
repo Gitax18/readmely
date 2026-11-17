@@ -10,6 +10,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/Gitax18/readmely/services/core/internal/contract/corepublic"
 )
 
 func discardLogger() *slog.Logger { return slog.New(slog.NewJSONHandler(io.Discard, nil)) }
@@ -74,11 +76,11 @@ func TestRecoverReturnsGenericErrorAndLogsDetails(t *testing.T) {
 	if strings.Contains(rec.Body.String(), "hunter2") || strings.Contains(rec.Body.String(), "goroutine") {
 		t.Fatalf("response leaks panic details: %s", rec.Body.String())
 	}
-	var body errorBody
+	var body corepublic.Error
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("body is not JSON: %v", err)
 	}
-	if body.Error != "internal_error" || body.RequestID != rec.Header().Get(RequestIDHeader) || body.RequestID == "" {
+	if body.Error != "internal_error" || body.RequestId != rec.Header().Get(RequestIDHeader) || body.RequestId == "" {
 		t.Fatalf("unexpected body %+v", body)
 	}
 	if !strings.Contains(logs.String(), "hunter2") || !strings.Contains(logs.String(), "stack") {

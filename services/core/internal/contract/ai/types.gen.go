@@ -38,16 +38,16 @@ func (e LivenessStatus) Valid() bool {
 
 // Defines values for ReadinessStatus.
 const (
-	Ready       ReadinessStatus = "ready"
-	Unavailable ReadinessStatus = "unavailable"
+	ReadinessStatusReady       ReadinessStatus = "ready"
+	ReadinessStatusUnavailable ReadinessStatus = "unavailable"
 )
 
 // Valid indicates whether the value is a known member of the ReadinessStatus enum.
 func (e ReadinessStatus) Valid() bool {
 	switch e {
-	case Ready:
+	case ReadinessStatusReady:
 		return true
-	case Unavailable:
+	case ReadinessStatusUnavailable:
 		return true
 	default:
 		return false

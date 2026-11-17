@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Gitax18/readmely/services/core/internal/contract/coreinternal"
 )
 
 type fakePinger func(ctx context.Context) error
@@ -26,11 +28,11 @@ func handler(timeout time.Duration, checks ...Check) *Handler {
 	return New(slog.New(slog.NewJSONHandler(io.Discard, nil)), timeout, checks...)
 }
 
-func readyz(t *testing.T, h *Handler) (int, readyBody, string) {
+func readyz(t *testing.T, h *Handler) (int, coreinternal.Readiness, string) {
 	t.Helper()
 	rec := httptest.NewRecorder()
 	h.Readyz(rec, httptest.NewRequest(http.MethodGet, "/readyz", http.NoBody))
-	var body readyBody
+	var body coreinternal.Readiness
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("body is not JSON: %v (%s)", err, rec.Body.String())
 	}

@@ -16,22 +16,22 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gitax18/readmely/services/core/internal/contract/ai"
+	"github.com/Gitax18/readmely/services/core/internal/contract/coreinternal"
 	"github.com/Gitax18/readmely/services/core/internal/httpx"
 )
 
-// Per-service and per-check states.
+// Per-service states and overall states come from the generated contract
+// (contracts/core-internal.yaml), so the compiler enforces the spec.
 const (
-	StateOK           = "ok"
-	StateDown         = "down"
-	StateUnreachable  = "unreachable"
-	StateUnconfigured = "unconfigured"
-)
+	StateOK           = coreinternal.ServiceReportStatusOk
+	StateDown         = coreinternal.ServiceReportStatusDown
+	StateUnreachable  = coreinternal.ServiceReportStatusUnreachable
+	StateUnconfigured = coreinternal.ServiceReportStatusUnconfigured
 
-// Overall states.
-const (
-	Operational = "operational"
-	Degraded    = "degraded"
-	Unavailable = "unavailable"
+	Operational = coreinternal.StatusReportStatusOperational
+	Degraded    = coreinternal.StatusReportStatusDegraded
+	Unavailable = coreinternal.StatusReportStatusUnavailable
 )
 
 const (
@@ -43,21 +43,15 @@ const (
 
 var checkName = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
 
-// Service is the state of one service and its dependencies.
-type Service struct {
-	Status string            `json:"status"`
-	Checks map[string]string `json:"checks"`
-}
-
-// Report is the response body of GET /api/v1/status.
-type Report struct {
-	Status   string             `json:"status"`
-	Services map[string]Service `json:"services"`
-}
+// Service and Report are the generated response types.
+type (
+	Service = coreinternal.ServiceReport
+	Report  = coreinternal.StatusReport
+)
 
 // Checker runs the API's own dependency checks.
 type Checker interface {
-	RunChecks(ctx context.Context) (map[string]string, bool)
+	RunChecks(ctx context.Context) (coreinternal.CheckMap, bool)
 }
 
 // AIClient reads readiness from the AI service.
@@ -88,7 +82,7 @@ func NewAIClient(logger *slog.Logger, baseURL, token string) *AIClient {
 // failure becomes a state in the report.
 func (c *AIClient) Fetch(ctx context.Context) Service {
 	if c.token == "" {
-		return Service{Status: StateUnconfigured, Checks: map[string]string{}}
+		return Service{Status: StateUnconfigured, Checks: coreinternal.CheckMap{}}
 	}
 	svc, err := c.fetch(ctx)
 	if err != nil {
@@ -99,7 +93,7 @@ func (c *AIClient) Fetch(ctx context.Context) Service {
 		if errors.As(err, &ue) {
 			state = StateUnreachable
 		}
-		return Service{Status: state, Checks: map[string]string{}}
+		return Service{Status: state, Checks: coreinternal.CheckMap{}}
 	}
 	return svc
 }
@@ -138,10 +132,7 @@ func (c *AIClient) fetch(ctx context.Context) (Service, error) {
 		return Service{}, errors.New("response too large")
 	}
 
-	var in struct {
-		Status string            `json:"status"`
-		Checks map[string]string `json:"checks"`
-	}
+	var in ai.Readiness
 	if err := json.Unmarshal(raw, &in); err != nil {
 		return Service{}, errors.New("response is not the expected JSON")
 	}
@@ -149,22 +140,22 @@ func (c *AIClient) fetch(ctx context.Context) (Service, error) {
 		return Service{}, errors.New("too many checks in response")
 	}
 
-	svc := Service{Status: StateOK, Checks: make(map[string]string, len(in.Checks))}
+	svc := Service{Status: StateOK, Checks: make(coreinternal.CheckMap, len(in.Checks))}
 	for name, v := range in.Checks {
 		if !checkName.MatchString(name) {
 			return Service{}, errors.New("invalid check name in response")
 		}
-		if v == StateOK {
-			svc.Checks[name] = StateOK
+		if v == ai.CheckStateOk {
+			svc.Checks[name] = coreinternal.CheckStateOk
 		} else {
-			svc.Checks[name] = StateDown // anything unknown counts as down
+			svc.Checks[name] = coreinternal.CheckStateDown // anything unknown counts as down
 		}
 	}
-	if resp.StatusCode != http.StatusOK || in.Status != "ready" {
+	if resp.StatusCode != http.StatusOK || in.Status != ai.ReadinessStatusReady {
 		svc.Status = StateDown
 	}
 	for _, v := range svc.Checks {
-		if v != StateOK {
+		if v != coreinternal.CheckStateOk {
 			svc.Status = StateDown
 		}
 	}
@@ -193,19 +184,19 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 	aiSvc := <-aiCh
 
-	httpx.WriteJSON(w, http.StatusOK, Report{
-		Status:   overall(apiSvc, aiSvc),
-		Services: map[string]Service{"api": apiSvc, "ai": aiSvc},
-	})
+	report := Report{Status: overall(apiSvc, aiSvc)}
+	report.Services.Api = apiSvc
+	report.Services.Ai = aiSvc
+	httpx.WriteJSON(w, http.StatusOK, report)
 }
 
 // overall: unavailable when the API cannot reach its own database (it cannot
 // do its job), operational when everything is ok, otherwise degraded.
-func overall(api, ai Service) string {
-	if api.Checks[apiDBCheckKey] != StateOK {
+func overall(api, aiSvc Service) coreinternal.StatusReportStatus {
+	if api.Checks[apiDBCheckKey] != coreinternal.CheckStateOk {
 		return Unavailable
 	}
-	if api.Status == StateOK && ai.Status == StateOK {
+	if api.Status == StateOK && aiSvc.Status == StateOK {
 		return Operational
 	}
 	return Degraded
