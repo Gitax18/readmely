@@ -174,7 +174,7 @@ services/ai/
 - **Open for later (deploy step):** HSTS and `upgrade-insecure-requests` once TLS terminates in front of the app.
 
 ### Step 5 · Contracts and type generation
-**Status:** Implemented 2026-11-18, awaiting sign-off (agreed: one spec per server, conformance tests on both servers, keep Zod and assert it matches the generated types).
+**Status:** Done 2026-11-18 (agreed: one spec per server, conformance tests on both servers, keep Zod and assert it matches the generated types).
 
 **Goal:** the API shapes are written down once, in OpenAPI files, and nothing can drift from them: types in all three languages are generated from the specs, and tests prove the real servers match the specs.
 
