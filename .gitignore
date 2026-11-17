@@ -19,3 +19,11 @@ ACHIEVEMENTS.md
 
 # Local session note (kept on disk, never committed)
 session-id.txt
+
+# Python tooling
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/

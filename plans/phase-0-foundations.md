@@ -112,6 +112,10 @@ services/ai/
 - Container: image builds, runs as non-root, port not reachable from the host, healthy; Postgres stopped → `/readyz` 503 (checked from inside the compose network).
 - Response shapes match the Go service exactly (audit B4).
 
+**Outcome (2026-11-17):** done. 82 unit tests plus 2 integration tests, 97% coverage measured including subprocesses, ruff and `mypy --strict` clean, every scenario above passing, image 54 MB, non-root.
+- **Found by testing:** Uvicorn re-raises SIGTERM after a graceful shutdown, so the process died with -15 (Docker 143) instead of exiting 0; `main()` now installs its own stop handlers, which also covers a signal during startup. Uvicorn exits with its own code 3 when it cannot bind; mapped to our documented 1. A request that crashed was missing from the access log; logging moved into `finally`. Error responses could carry the request ID and security headers twice; now added only when absent.
+- **Added at review:** `make audit` (govulncheck and pip-audit). Its first run found two Go standard-library vulnerabilities; recorded as audit item A9, fixed first on `fix/audit-items`.
+
 ### Step 4 · Next.js shell
 - App Router project with Tailwind and shadcn/ui, strict TypeScript.
 - One status page showing API and AI service health, fetched **through the Go API** (`GET /api/v1/status`), never directly from the AI service.

@@ -17,7 +17,7 @@ Every feature is built human-in-the-loop. Nothing is implemented without an appr
 |---|---|
 | [00-architecture.md](00-architecture.md) | Approved |
 | [security.md](security.md) | Approved |
-| [phase-0-foundations.md](phase-0-foundations.md) | Approved · Steps 1–2 done · Step 3 approved, in progress |
+| [phase-0-foundations.md](phase-0-foundations.md) | Approved · Steps 1–3 done |
 | [audit-2026-11-17.md](audit-2026-11-17.md) | Approved · fixes scheduled after Step 3 |
 
 ## Git conventions

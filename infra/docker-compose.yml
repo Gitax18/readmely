@@ -101,6 +101,41 @@ services:
       timeout: 3s
       retries: 10
 
+  # The Python AI service. Internal only: no port is published to the host.
+  # Started with `make up-app`; `make run-ai` runs it on the host instead (bound to 127.0.0.1).
+  ai:
+    profiles: ["app"]
+    build:
+      context: ..
+      dockerfile: infra/docker/ai.Dockerfile
+    image: readmely/ai:dev
+    restart: unless-stopped
+    environment:
+      APP_ENV: development
+      HTTP_HOST: "0.0.0.0"
+      HTTP_PORT: "8000"
+      DATABASE_URL: postgresql://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@postgres:5432/${POSTGRES_DB:?}?sslmode=disable
+      # Left empty when unset, so `make up` still works; the service itself then
+      # refuses to start and says AI_SERVICE_TOKEN is required.
+      AI_SERVICE_TOKEN: ${AI_SERVICE_TOKEN:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - internal
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.probe"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
 volumes:
   postgres-data:
   redis-data:
