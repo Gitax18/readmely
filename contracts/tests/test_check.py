@@ -104,3 +104,21 @@ def test_main_exit_codes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys
     monkeypatch.setattr(check, "run", lambda _d: ["x: broken"])
     assert check.main() == 1
     assert "FAIL x: broken" in capsys.readouterr().out
+
+
+def test_examples_extraction_is_complete_and_stable() -> None:
+    import extract_examples
+
+    doc = check.load(CONTRACTS / "core-internal.yaml")
+    first = extract_examples.render(doc)
+    assert first == extract_examples.render(doc)
+    extracted = extract_examples.extract(doc)
+    assert set(extracted["GET /api/v1/status 200"]) == {
+        "operational",
+        "ai_unreachable",
+        "ai_down",
+        "ai_unconfigured",
+        "redis_down",
+        "unavailable",
+    }
+    assert extracted["GET /readyz 200"]["example"]["status"] == "ready"

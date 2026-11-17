@@ -1,0 +1,5 @@
+# Models only: the servers keep their own routing. Run through `make gen`.
+package: corepublic
+generate:
+  models: true
+output: internal/contract/corepublic/types.gen.go

@@ -1,0 +1,5 @@
+# Models only: the servers keep their own routing. Run through `make gen`.
+package: ai
+generate:
+  models: true
+output: internal/contract/ai/types.gen.go

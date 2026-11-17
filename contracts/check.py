@@ -76,7 +76,7 @@ def check_shared(docs: dict[str, Doc]) -> list[str]:
     return problems
 
 
-def _examples(media: Doc) -> list[tuple[str, Any]]:
+def examples_of(media: Doc) -> list[tuple[str, Any]]:
     found: list[tuple[str, Any]] = []
     if "example" in media:
         found.append(("example", media["example"]))
@@ -92,7 +92,7 @@ def check_examples(name: str, doc: Doc) -> list[str]:
             for code, response in (op.get("responses") or {}).items():
                 for ctype, media in (response.get("content") or {}).items():
                     schema = deref(media.get("schema", {}), doc)
-                    for label, value in _examples(media):
+                    for label, value in examples_of(media):
                         errors = sorted(OAS30Validator(schema).iter_errors(value), key=lambda e: list(e.path))
                         problems.extend(
                             f"{name}: {method.upper()} {path} {code} {ctype} {label}: {e.message[:160]}" for e in errors

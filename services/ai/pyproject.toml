@@ -16,6 +16,7 @@ package = false
 
 [dependency-groups]
 dev = [
+    "datamodel-code-generator[black,isort]>=0.97.0",
     "httpx>=0.28.1",
     "mypy>=2.4.1",
     "openapi-spec-validator>=0.9.0",
@@ -36,6 +37,8 @@ addopts = "-m 'not integration' --strict-markers"
 
 [tool.coverage.run]
 source = ["app"]
+# Generated from contracts/; checked by `make gen-check` instead.
+omit = ["app/contract/*"]
 branch = true
 patch = ["subprocess"]
 parallel = true
@@ -48,6 +51,8 @@ skip_covered = true
 [tool.ruff]
 line-length = 120
 target-version = "py313"
+# Generated from contracts/ by `make gen`; never edited by hand.
+extend-exclude = ["app/contract"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "S", "ASYNC", "N", "SIM", "RUF", "PL"]

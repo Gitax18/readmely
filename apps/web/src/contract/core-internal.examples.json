@@ -1,0 +1,129 @@
+{
+  "GET /api/v1/status 200": {
+    "ai_down": {
+      "services": {
+        "ai": {
+          "checks": {
+            "postgres": "down"
+          },
+          "status": "down"
+        },
+        "api": {
+          "checks": {
+            "postgres": "ok",
+            "redis": "ok"
+          },
+          "status": "ok"
+        }
+      },
+      "status": "degraded"
+    },
+    "ai_unconfigured": {
+      "services": {
+        "ai": {
+          "checks": {},
+          "status": "unconfigured"
+        },
+        "api": {
+          "checks": {
+            "postgres": "ok",
+            "redis": "ok"
+          },
+          "status": "ok"
+        }
+      },
+      "status": "degraded"
+    },
+    "ai_unreachable": {
+      "services": {
+        "ai": {
+          "checks": {},
+          "status": "unreachable"
+        },
+        "api": {
+          "checks": {
+            "postgres": "ok",
+            "redis": "ok"
+          },
+          "status": "ok"
+        }
+      },
+      "status": "degraded"
+    },
+    "operational": {
+      "services": {
+        "ai": {
+          "checks": {
+            "postgres": "ok"
+          },
+          "status": "ok"
+        },
+        "api": {
+          "checks": {
+            "postgres": "ok",
+            "redis": "ok"
+          },
+          "status": "ok"
+        }
+      },
+      "status": "operational"
+    },
+    "redis_down": {
+      "services": {
+        "ai": {
+          "checks": {
+            "postgres": "ok"
+          },
+          "status": "ok"
+        },
+        "api": {
+          "checks": {
+            "postgres": "ok",
+            "redis": "down"
+          },
+          "status": "down"
+        }
+      },
+      "status": "degraded"
+    },
+    "unavailable": {
+      "services": {
+        "ai": {
+          "checks": {},
+          "status": "unreachable"
+        },
+        "api": {
+          "checks": {
+            "postgres": "down",
+            "redis": "ok"
+          },
+          "status": "down"
+        }
+      },
+      "status": "unavailable"
+    }
+  },
+  "GET /healthz 200": {
+    "example": {
+      "status": "ok"
+    }
+  },
+  "GET /readyz 200": {
+    "example": {
+      "checks": {
+        "postgres": "ok",
+        "redis": "ok"
+      },
+      "status": "ready"
+    }
+  },
+  "GET /readyz 503": {
+    "example": {
+      "checks": {
+        "postgres": "down",
+        "redis": "ok"
+      },
+      "status": "unavailable"
+    }
+  }
+}
