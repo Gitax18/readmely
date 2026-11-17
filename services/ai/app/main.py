@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from app.config import ServiceSettings
+from app.contract.models import Liveness
 from app.health import Check, readiness
 from app.security import RequestContextMiddleware, install_error_handlers, request_id_from, service_token_dependency
 
@@ -39,9 +40,9 @@ def create_app(settings: ServiceSettings, db: DatabaseLike) -> FastAPI:
     checks = [Check("postgres", db)]
 
     @app.get("/healthz")
-    async def healthz() -> dict[str, str]:
+    async def healthz() -> JSONResponse:
         """Liveness: never touches a dependency, needs no token (used by the container probe)."""
-        return {"status": "ok"}
+        return JSONResponse(Liveness(status="ok").model_dump(mode="json"))
 
     # Every route on this router requires the service token.
     internal = APIRouter(dependencies=[Depends(service_token_dependency(settings.ai_service_token.get_secret_value()))])
@@ -49,7 +50,7 @@ def create_app(settings: ServiceSettings, db: DatabaseLike) -> FastAPI:
     @internal.get("/readyz")
     async def readyz(request: Request) -> JSONResponse:
         status, body = await readiness(checks, READINESS_TIMEOUT_SECONDS, request_id_from(request.scope))
-        return JSONResponse(body, status_code=status)
+        return JSONResponse(body.model_dump(mode="json"), status_code=status)
 
     app.include_router(internal)
     return app
