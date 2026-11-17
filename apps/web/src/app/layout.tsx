@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -6,7 +7,10 @@ export const metadata: Metadata = {
   description: "Current status of the Readmely services.",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Reading request headers makes every page render per request, which the
+  // per-request CSP nonce requires. Static pages would carry no valid nonce.
+  await headers();
   return (
     <html lang="en">
       <body className="min-h-screen font-sans antialiased">{children}</body>
