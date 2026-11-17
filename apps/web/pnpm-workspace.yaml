@@ -1,0 +1,5 @@
+# Supply-chain hardening for installs.
+# Lifecycle scripts of dependencies are blocked unless listed here.
+onlyBuiltDependencies: []
+# Refuse versions published less than 7 days ago (minutes).
+minimumReleaseAge: 10080

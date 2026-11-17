@@ -81,6 +81,10 @@ services:
       HTTP_ADDR: ":8080"
       # /readyz lives here. Reachable on the internal network only: never add it to `ports`.
       INTERNAL_ADDR: "0.0.0.0:8081"
+      # The status report asks the AI service for its readiness with this token.
+      # Without a token the report says "unconfigured" and no request is made.
+      AI_SERVICE_URL: http://ai:8000
+      AI_SERVICE_TOKEN: ${AI_SERVICE_TOKEN:-}
       DATABASE_URL: postgres://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@postgres:5432/${POSTGRES_DB:?}?sslmode=disable
       REDIS_URL: redis://:${REDIS_PASSWORD:?}@redis:6379/0
     depends_on:
@@ -134,6 +138,46 @@ services:
       - no-new-privileges:true
     healthcheck:
       test: ["CMD", "python", "-m", "app.probe"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # The Next.js web app. The only service meant to face users; published on
+  # 127.0.0.1 only. Its server talks to the Go API's internal listener, so the
+  # browser never sees that address or the status detail beyond STATUS_DETAIL.
+  web:
+    profiles: ["app"]
+    build:
+      context: ..
+      dockerfile: infra/docker/web.Dockerfile
+    image: readmely/web:dev
+    restart: unless-stopped
+    environment:
+      API_INTERNAL_URL: http://api:8081
+      # The image runs in production mode, which defaults to "coarse". Locally
+      # we want the detail; set STATUS_DETAIL=coarse in .env to see production's view.
+      STATUS_DETAIL: ${STATUS_DETAIL:-full}
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${WEB_PORT:-3000}:3000"
+    networks:
+      - internal
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      # Distroless has no shell or curl: probe with Node itself.
+      test:
+        - CMD
+        - /nodejs/bin/node
+        - -e
+        - "fetch('http://127.0.0.1:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
       interval: 5s
       timeout: 3s
       retries: 10

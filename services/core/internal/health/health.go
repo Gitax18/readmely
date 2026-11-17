@@ -43,10 +43,11 @@ type readyBody struct {
 	Checks map[string]string `json:"checks"`
 }
 
-// Readyz probes every dependency concurrently. The response only says
-// "ok" or "down" per dependency; the reason is logged, never returned.
-func (h *Handler) Readyz(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), h.timeout)
+// RunChecks probes every dependency concurrently, giving the whole run at most
+// the handler's timeout. It returns "ok" or "down" per dependency and whether
+// all of them are ok. Reasons are logged, never returned.
+func (h *Handler) RunChecks(ctx context.Context) (map[string]string, bool) {
+	ctx, cancel := context.WithTimeout(ctx, h.timeout)
 	defer cancel()
 
 	results := make([]chan error, len(h.checks))
@@ -55,20 +56,31 @@ func (h *Handler) Readyz(w http.ResponseWriter, r *http.Request) {
 		go func() { results[i] <- probe(ctx, c.Pinger) }()
 	}
 
-	body := readyBody{Status: "ready", Checks: make(map[string]string, len(h.checks))}
-	status := http.StatusOK
+	out := make(map[string]string, len(h.checks))
+	allOK := true
 	for i, c := range h.checks {
 		if err := <-results[i]; err != nil {
-			body.Checks[c.Name] = "down"
-			body.Status = "unavailable"
-			status = http.StatusServiceUnavailable
-			h.logger.WarnContext(r.Context(), "readiness check failed",
-				"request_id", httpx.RequestIDFrom(r.Context()),
+			out[c.Name] = "down"
+			allOK = false
+			h.logger.WarnContext(ctx, "readiness check failed",
+				"request_id", httpx.RequestIDFrom(ctx),
 				"check", c.Name,
 				"error", err)
 			continue
 		}
-		body.Checks[c.Name] = "ok"
+		out[c.Name] = "ok"
+	}
+	return out, allOK
+}
+
+// Readyz reports RunChecks as 200 (ready) or 503 (unavailable).
+func (h *Handler) Readyz(w http.ResponseWriter, r *http.Request) {
+	checks, ok := h.RunChecks(r.Context())
+	body := readyBody{Status: "ready", Checks: checks}
+	status := http.StatusOK
+	if !ok {
+		body.Status = "unavailable"
+		status = http.StatusServiceUnavailable
 	}
 	httpx.WriteJSON(w, status, body)
 }

@@ -23,7 +23,7 @@ func TestLoadDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if c.Env != EnvDevelopment || c.HTTPAddr != ":8080" || c.InternalAddr != "127.0.0.1:8081" || c.LogLevel != slog.LevelInfo || c.ShutdownTimeout != 10*time.Second {
+	if c.Env != EnvDevelopment || c.HTTPAddr != ":8080" || c.InternalAddr != "127.0.0.1:8081" || c.AIServiceURL != "http://ai:8000" || c.AIServiceToken != "" || c.LogLevel != slog.LevelInfo || c.ShutdownTimeout != 10*time.Second {
 		t.Fatalf("unexpected defaults: %+v", c)
 	}
 }
@@ -67,6 +67,11 @@ func TestLoadRejectsBadValues(t *testing.T) {
 		{"addr port out of range", map[string]string{"HTTP_ADDR": ":70000"}, "HTTP_ADDR: port must be"},
 		{"addr port not a number", map[string]string{"HTTP_ADDR": ":http"}, "HTTP_ADDR: port must be"},
 		{"bad env", map[string]string{"APP_ENV": "staging"}, "APP_ENV: must be"},
+		{"ai url wrong scheme", map[string]string{"AI_SERVICE_URL": "ftp://ai:8000"}, "AI_SERVICE_URL: scheme must be"},
+		{"ai url with credentials", map[string]string{"AI_SERVICE_URL": "http://user:pw@ai:8000"}, "AI_SERVICE_URL: must not contain credentials"},
+		{"ai url with query", map[string]string{"AI_SERVICE_URL": "http://ai:8000/?x=1"}, "AI_SERVICE_URL: must not contain"},
+		{"ai token too short", map[string]string{"AI_SERVICE_TOKEN": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, "AI_SERVICE_TOKEN: must be at least 32"},
+		{"ai token unsafe chars", map[string]string{"AI_SERVICE_TOKEN": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@:/"}, "AI_SERVICE_TOKEN: may only contain"},
 		{"bad internal addr", map[string]string{"INTERNAL_ADDR": "8081"}, "INTERNAL_ADDR: must be host:port"},
 		{"internal same as public", map[string]string{"HTTP_ADDR": ":9000", "INTERNAL_ADDR": ":9000"}, "INTERNAL_ADDR: must differ"},
 		{"bad log level", map[string]string{"LOG_LEVEL": "loud"}, "LOG_LEVEL: must be"},
@@ -141,5 +146,26 @@ func TestLoadBaseNeedsNoURLs(t *testing.T) {
 	}
 	if _, err := LoadBase(env(map[string]string{"LOG_LEVEL": "nope"})); err == nil {
 		t.Fatal("expected an error for a bad log level")
+	}
+}
+
+func TestLoadAcceptsAIServiceSettings(t *testing.T) {
+	token := strings.Repeat("ab", 16)
+	m := validEnv()
+	m["AI_SERVICE_URL"] = "http://127.0.0.1:8000"
+	m["AI_SERVICE_TOKEN"] = token
+	c, err := Load(env(m))
+	if err != nil || c.AIServiceURL != "http://127.0.0.1:8000" || c.AIServiceToken != token {
+		t.Fatalf("got %+v, %v", c, err)
+	}
+}
+
+func TestLoadNeverPrintsTheToken(t *testing.T) {
+	secret := "bad token with spaces " + strings.Repeat("z", 20)
+	m := validEnv()
+	m["AI_SERVICE_TOKEN"] = secret
+	_, err := Load(env(m))
+	if err == nil || strings.Contains(err.Error(), secret) || strings.Contains(err.Error(), "zzzz") {
+		t.Fatalf("error must exist and not contain the value: %v", err)
 	}
 }

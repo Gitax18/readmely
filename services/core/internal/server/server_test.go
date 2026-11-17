@@ -18,7 +18,7 @@ import (
 func discardLogger() *slog.Logger { return slog.New(slog.NewJSONHandler(io.Discard, nil)) }
 
 func newRouter() http.Handler {
-	return NewInternalRouter(discardLogger(), health.New(discardLogger(), time.Second))
+	return NewInternalRouter(discardLogger(), health.New(discardLogger(), time.Second), stubStatus)
 }
 
 func do(t *testing.T, method, path string) *httptest.ResponseRecorder {
@@ -254,6 +254,25 @@ func TestPublicRouterHasNoReadiness(t *testing.T) {
 		r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, http.NoBody))
 		if rec.Code != want {
 			t.Errorf("public %s = %d, want %d", path, rec.Code, want)
+		}
+	}
+}
+
+func stubStatus(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("{}")) }
+
+func TestStatusIsInternalOnly(t *testing.T) {
+	logger, h := discardLogger(), health.New(discardLogger(), time.Second)
+	for name, tc := range map[string]struct {
+		router http.Handler
+		want   int
+	}{
+		"public":   {NewPublicRouter(logger, h), http.StatusNotFound},
+		"internal": {NewInternalRouter(logger, h, stubStatus), http.StatusOK},
+	} {
+		rec := httptest.NewRecorder()
+		tc.router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/status", http.NoBody))
+		if rec.Code != tc.want {
+			t.Errorf("%s /api/v1/status = %d, want %d", name, rec.Code, tc.want)
 		}
 	}
 }

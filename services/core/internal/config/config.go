@@ -22,13 +22,18 @@ const (
 	EnvProduction  = "production"
 )
 
-const maxShutdownTimeout = 60 * time.Second
+const (
+	maxShutdownTimeout = 60 * time.Second
+	minTokenLength     = 32
+)
 
 // Config is the validated configuration of a Readmely Go process.
 type Config struct {
 	Env             string
 	HTTPAddr        string
-	InternalAddr    string // serves /readyz; never published to the internet
+	InternalAddr    string // serves /readyz and /api/v1/status; never published to the internet
+	AIServiceURL    string
+	AIServiceToken  string // optional; empty means the status report says "unconfigured"
 	DatabaseURL     string
 	RedisURL        string
 	LogLevel        slog.Level
@@ -52,6 +57,17 @@ func Load(getenv func(string) string) (Config, error) {
 		errs = append(errs, fieldError("INTERNAL_ADDR", err))
 	} else if c.InternalAddr == c.HTTPAddr {
 		errs = append(errs, fieldError("INTERNAL_ADDR", errors.New("must differ from HTTP_ADDR")))
+	}
+
+	c.AIServiceURL = value(getenv, "AI_SERVICE_URL", "http://ai:8000")
+	if err := validateServiceURL(c.AIServiceURL); err != nil {
+		errs = append(errs, fieldError("AI_SERVICE_URL", err))
+	}
+	c.AIServiceToken = value(getenv, "AI_SERVICE_TOKEN", "")
+	if c.AIServiceToken != "" {
+		if err := validateToken(c.AIServiceToken); err != nil {
+			errs = append(errs, fieldError("AI_SERVICE_TOKEN", err))
+		}
 	}
 
 	c.DatabaseURL = value(getenv, "DATABASE_URL", "")
@@ -143,6 +159,34 @@ func validateURL(v string, schemes ...string) error {
 	}
 	if u.Host == "" {
 		return errors.New("must include a host")
+	}
+	return nil
+}
+
+// validateServiceURL accepts a plain http(s) base URL: no credentials, query
+// or fragment, so nothing secret can sit in it and it can be logged safely.
+func validateServiceURL(v string) error {
+	if err := validateURL(v, "http", "https"); err != nil {
+		return err
+	}
+	u, _ := url.Parse(v) // already parsed successfully above
+	if u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+		return errors.New("must not contain credentials, a query or a fragment")
+	}
+	return nil
+}
+
+// validateToken matches the AI service: at least 32 characters, and only
+// characters that are safe in an HTTP header.
+func validateToken(v string) error {
+	if len(v) < minTokenLength {
+		return fmt.Errorf("must be at least %d characters", minTokenLength)
+	}
+	for _, r := range v {
+		ok := r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_'
+		if !ok {
+			return errors.New("may only contain letters, digits, - and _")
+		}
 	}
 	return nil
 }

@@ -143,6 +143,13 @@ func TestAPIStaysUpWhenDependenciesAreDown(t *testing.T) {
 	if code, _ := getJSON(t, base+"/readyz"); code != http.StatusNotFound {
 		t.Errorf("public /readyz = %d, want 404", code)
 	}
+	if code, _ := getJSON(t, base+"/api/v1/status"); code != http.StatusNotFound {
+		t.Errorf("public /api/v1/status = %d, want 404", code)
+	}
+	// With nothing reachable the report still arrives (200) and says so.
+	if code, rep := getJSON(t, "http://"+internal+"/api/v1/status"); code != http.StatusOK || rep["status"] != "unavailable" {
+		t.Errorf("internal /api/v1/status = %d %v, want 200 unavailable", code, rep)
+	}
 	code, body := getJSON(t, "http://"+internal+"/readyz")
 	if code != http.StatusServiceUnavailable {
 		t.Errorf("/readyz = %d, want 503", code)

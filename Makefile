@@ -5,15 +5,17 @@ ENV_FILE ?= ./.env
 COMPOSE := docker compose --env-file $(ENV_FILE) -f infra/docker-compose.yml
 GO_DIR  := services/core
 AI_DIR  := services/ai
+WEB_DIR := apps/web
 
 # Shell prelude for commands that run on the host against the compose stack:
 # loads .env and builds the connection URLs the services expect.
 LOCAL_ENV = set -a; . $(ENV_FILE); set +a; \
 	export DATABASE_URL="postgres://$$POSTGRES_USER:$$POSTGRES_PASSWORD@127.0.0.1:$$POSTGRES_PORT/$$POSTGRES_DB?sslmode=disable"; \
-	export REDIS_URL="redis://:$$REDIS_PASSWORD@127.0.0.1:$$REDIS_PORT/0";
+	export REDIS_URL="redis://:$$REDIS_PASSWORD@127.0.0.1:$$REDIS_PORT/0"; \
+	export AI_SERVICE_URL="http://127.0.0.1:$${AI_PORT:-8000}";
 
 .DEFAULT_GOAL := help
-.PHONY: help env-check up up-app down reset ps logs verify verify-env fmt lint test test-integration audit run-api run-ai docker-build
+.PHONY: help env-check up up-app down reset ps logs verify verify-env fmt lint test test-e2e test-integration audit run-api run-ai run-web docker-build
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  %-18s %s\n", $$1, $$2}'
@@ -72,24 +74,31 @@ verify: verify-env ## Check credentials, then that the data stores work and are 
 		echo "FAIL a port is published on all interfaces"; exit 1; \
 	else echo "ok   all ports are bound to 127.0.0.1"; fi
 
-fmt: ## Format the Go and Python code
+fmt: ## Format the Go, Python and web code
 	@cd $(GO_DIR) && gofmt -w .
 	@cd $(AI_DIR) && uv run --frozen ruff format . && uv run --frozen ruff check --fix .
+	@cd $(WEB_DIR) && pnpm install --frozen-lockfile --silent && pnpm run format
 
-lint: ## Lint the Go and Python code (Python includes strict type checking)
+lint: ## Lint the Go, Python and web code (Python and TypeScript include strict type checking)
 	@cd $(GO_DIR) && golangci-lint run ./... && golangci-lint run --build-tags=integration ./...
 	@cd $(AI_DIR) && uv run --frozen ruff check . && uv run --frozen ruff format --check . && uv run --frozen mypy
+	@cd $(WEB_DIR) && pnpm install --frozen-lockfile --silent && pnpm run lint && pnpm run format:check
 
-test: ## Run the Go and Python unit tests (no containers needed)
+test: ## Run the Go, Python and web unit tests (no containers needed)
 	@cd $(GO_DIR) && go test -race -count=1 ./...
 	@cd $(AI_DIR) && uv run --frozen pytest -q --cov
+	@cd $(WEB_DIR) && pnpm install --frozen-lockfile --silent && pnpm test
+
+test-e2e: ## Run the web browser tests against a production build and a fake API (first time: cd apps/web && pnpm exec playwright install chromium)
+	@cd $(WEB_DIR) && pnpm install --frozen-lockfile --silent && pnpm run test:e2e
 
 test-integration: env-check ## Run the integration tests against the running local stack
 	@$(LOCAL_ENV) cd $(GO_DIR) && go test -race -count=1 -tags=integration ./internal/health/...
 	@$(LOCAL_ENV) cd $(AI_DIR) && uv run --frozen pytest -q -m integration -o addopts=''
 
-audit: ## Check Go and Python dependencies for known vulnerabilities (needs network)
+audit: ## Check Go, Python and web dependencies for known vulnerabilities (needs network)
 	@cd $(GO_DIR) && go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+	@cd $(WEB_DIR) && pnpm install --frozen-lockfile --silent && pnpm audit --prod
 	@cd $(AI_DIR) && uv export --frozen --no-dev --no-hashes --format requirements-txt -q \
 		| uv run --frozen pip-audit --strict -r /dev/stdin
 
@@ -99,8 +108,12 @@ run-api: env-check ## Run the API on the host against the local stack (stop the 
 run-ai: env-check ## Run the AI service on the host against the local stack (bound to 127.0.0.1)
 	@$(LOCAL_ENV) export HTTP_HOST=127.0.0.1 HTTP_PORT="$${AI_PORT:-8000}"; cd $(AI_DIR) && uv run --frozen python -m app.server
 
-docker-build: ## Build the api, ingest, render and ai images
+run-web: env-check ## Run the web app in dev mode on the host (stop the web container first). Needs the API: `make run-api`
+	@$(LOCAL_ENV) export API_INTERNAL_URL="http://127.0.0.1:8081"; cd $(WEB_DIR) && pnpm install --frozen-lockfile --silent && pnpm exec next dev --hostname 127.0.0.1 --port "$${WEB_PORT:-3000}"
+
+docker-build: ## Build the api, ingest, render, ai and web images
 	@for c in api ingest render; do \
 		docker build -q -f infra/docker/core.Dockerfile --build-arg CMD=$$c -t readmely/$$c:dev . || exit 1; \
 	done
 	@docker build -q -f infra/docker/ai.Dockerfile -t readmely/ai:dev .
+	@docker build -q -f infra/docker/web.Dockerfile -t readmely/web:dev .
