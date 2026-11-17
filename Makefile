@@ -167,9 +167,14 @@ audit-ai:
 		| uv run --frozen pip-audit --strict -r /dev/stdin
 
 # Scans committed history only ("git" mode). It never reads untracked files, so a local .env is never touched.
+# SECRETS_LOG_OPTS picks the commits: the whole history of the current branch by default; CI
+# narrows it to the commits a pull request adds (BASE..HEAD). Never --all: that includes every
+# remote branch, so one branch's mistake would fail every other branch's checks.
+SECRETS_LOG_OPTS ?= HEAD
+
 secrets: ## Scan the git history for committed secrets (needs gitleaks)
 	@command -v gitleaks > /dev/null || { echo "error: gitleaks is not installed (brew install gitleaks)"; exit 1; }
-	@gitleaks git --redact --no-banner --config .gitleaks.toml . && echo "ok   no secrets found in the git history"
+	@gitleaks git --log-opts="$(SECRETS_LOG_OPTS)" --redact --no-banner --config .gitleaks.toml . && echo "ok   no secrets found in the scanned commits"
 
 check: lint test gen-check audit secrets ## Everything CI runs that needs no containers
 	@echo "ok   all checks passed"

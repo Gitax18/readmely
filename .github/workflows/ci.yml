@@ -57,7 +57,14 @@ jobs:
           mkdir -p "$RUNNER_TEMP/bin"
           tar -xzf gitleaks.tar.gz -C "$RUNNER_TEMP/bin" gitleaks
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
-      - run: make secrets
+      - name: Scan the commits this change adds (the whole history on main)
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then range="$BASE..$HEAD"; else range="HEAD"; fi
+          make secrets SECRETS_LOG_OPTS="$range"
 
   workflows:
     name: Workflow files
