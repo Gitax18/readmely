@@ -1,0 +1,38 @@
+# Weekly update pull requests, one group per ecosystem. The 7-day cooldown matches
+# the package-age rule already used for pnpm: a release must be a week old first.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+    cooldown: { default-days: 7 }
+    groups:
+      actions: { patterns: ["*"] }
+
+  - package-ecosystem: gomod
+    directory: /services/core
+    schedule: { interval: weekly }
+    cooldown: { default-days: 7 }
+    groups:
+      go: { patterns: ["*"] }
+
+  - package-ecosystem: uv
+    directory: /services/ai
+    schedule: { interval: weekly }
+    cooldown: { default-days: 7 }
+    groups:
+      python: { patterns: ["*"] }
+
+  - package-ecosystem: npm
+    directory: /apps/web
+    schedule: { interval: weekly }
+    cooldown: { default-days: 7 }
+    groups:
+      web: { patterns: ["*"] }
+
+  - package-ecosystem: docker
+    directory: /infra/docker
+    schedule: { interval: weekly }
+    cooldown: { default-days: 7 }
+    groups:
+      images: { patterns: ["*"] }
