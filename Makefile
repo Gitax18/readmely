@@ -15,7 +15,7 @@ LOCAL_ENV = set -a; . $(ENV_FILE); set +a; \
 	export AI_SERVICE_URL="http://127.0.0.1:$${AI_PORT:-8000}";
 
 .DEFAULT_GOAL := help
-.PHONY: help env-check up up-app down reset ps logs verify verify-env fmt lint test test-e2e test-integration audit run-api run-ai run-web docker-build
+.PHONY: help env-check up up-app down reset ps logs verify verify-env fmt lint test contracts-check test-e2e test-integration audit run-api run-ai run-web docker-build
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  %-18s %s\n", $$1, $$2}'
@@ -83,11 +83,17 @@ lint: ## Lint the Go, Python and web code (Python and TypeScript include strict 
 	@cd $(GO_DIR) && golangci-lint run ./... && golangci-lint run --build-tags=integration ./...
 	@cd $(AI_DIR) && uv run --frozen ruff check . && uv run --frozen ruff format --check . && uv run --frozen mypy
 	@cd $(WEB_DIR) && pnpm install --frozen-lockfile --silent && pnpm run lint && pnpm run format:check
+	@uv run --frozen --project $(AI_DIR) ruff check --config contracts/ruff.toml contracts && uv run --frozen --project $(AI_DIR) ruff format --check --config contracts/ruff.toml contracts
 
 test: ## Run the Go, Python and web unit tests (no containers needed)
 	@cd $(GO_DIR) && go test -race -count=1 ./...
 	@cd $(AI_DIR) && uv run --frozen pytest -q --cov
 	@cd $(WEB_DIR) && pnpm install --frozen-lockfile --silent && pnpm test
+	@$(MAKE) --no-print-directory contracts-check
+
+contracts-check: ## Validate the OpenAPI specs in contracts/ (valid, shared schemas identical, examples match)
+	@uv run --frozen --project $(AI_DIR) python contracts/check.py
+	@uv run --frozen --project $(AI_DIR) pytest contracts/tests -q -o addopts='' -p no:cacheprovider -p no:asyncio
 
 test-e2e: ## Run the web browser tests against a production build and a fake API (first time: cd apps/web && pnpm exec playwright install chromium)
 	@cd $(WEB_DIR) && pnpm install --frozen-lockfile --silent && pnpm run test:e2e
