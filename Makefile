@@ -15,7 +15,7 @@ LOCAL_ENV = set -a; . $(ENV_FILE); set +a; \
 	export AI_SERVICE_URL="http://127.0.0.1:$${AI_PORT:-8000}";
 
 .DEFAULT_GOAL := help
-.PHONY: help hooks check secrets test-scripts env-check up up-app down reset ps logs verify verify-env fmt lint test contracts-check gen gen-check test-e2e test-integration audit run-api run-ai run-web docker-build
+.PHONY: help hooks check secrets test-scripts lint-go lint-ai lint-web lint-tools test-go test-ai test-web audit-go audit-ai audit-web env-check up up-app down reset ps logs verify verify-env fmt lint test contracts-check gen gen-check test-e2e test-integration audit run-api run-ai run-web docker-build
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  %-18s %s\n", $$1, $$2}'
@@ -85,17 +85,31 @@ fmt: ## Format the Go, Python and web code
 	@cd $(AI_DIR) && uv run --frozen ruff format . && uv run --frozen ruff check --fix .
 	@cd $(WEB_DIR) && pnpm install --frozen-lockfile --silent && pnpm run format
 
-lint: ## Lint the Go, Python and web code (Python and TypeScript include strict type checking)
+lint: lint-go lint-ai lint-web lint-tools ## Lint the Go, Python and web code (Python and TypeScript include strict type checking)
+
+lint-go:
 	@cd $(GO_DIR) && golangci-lint run ./... && golangci-lint run --build-tags=integration ./...
+
+lint-ai:
 	@cd $(AI_DIR) && uv run --frozen ruff check . && uv run --frozen ruff format --check . && uv run --frozen mypy
+
+lint-web:
 	@cd $(WEB_DIR) && pnpm install --frozen-lockfile --silent && pnpm run lint && pnpm run format:check
+
+# The helper scripts and the contract tooling share one ruff config.
+lint-tools:
 	@uv run --frozen --project $(AI_DIR) ruff check --config contracts/ruff.toml contracts scripts && uv run --frozen --project $(AI_DIR) ruff format --check --config contracts/ruff.toml contracts scripts
 
-test: ## Run the Go, Python and web unit tests (no containers needed)
+test: test-go test-ai test-web contracts-check test-scripts ## Run the Go, Python and web unit tests (no containers needed)
+
+test-go:
 	@cd $(GO_DIR) && go test -race -count=1 ./...
+
+test-ai:
 	@cd $(AI_DIR) && uv run --frozen pytest -q --cov
+
+test-web:
 	@cd $(WEB_DIR) && pnpm install --frozen-lockfile --silent && pnpm test
-	@$(MAKE) --no-print-directory contracts-check test-scripts
 
 contracts-check: ## Validate the OpenAPI specs in contracts/ (valid, shared schemas identical, examples match)
 	@uv run --frozen --project $(AI_DIR) python contracts/check.py
@@ -138,9 +152,17 @@ test-integration: env-check ## Run the integration tests against the running loc
 	@$(LOCAL_ENV) cd $(GO_DIR) && go test -race -count=1 -tags=integration ./internal/health/...
 	@$(LOCAL_ENV) cd $(AI_DIR) && uv run --frozen pytest -q -m integration -o addopts=''
 
-audit: ## Check Go, Python and web dependencies for known vulnerabilities (needs network)
-	@cd $(GO_DIR) && go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+GOVULNCHECK_VERSION := v1.10.0
+
+audit: audit-go audit-web audit-ai ## Check Go, Python and web dependencies for known vulnerabilities (needs network)
+
+audit-go:
+	@cd $(GO_DIR) && go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
+
+audit-web:
 	@cd $(WEB_DIR) && pnpm install --frozen-lockfile --silent && pnpm audit --prod
+
+audit-ai:
 	@cd $(AI_DIR) && uv export --frozen --all-groups --no-emit-project --no-hashes --format requirements-txt -q \
 		| uv run --frozen pip-audit --strict -r /dev/stdin
 
