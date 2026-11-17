@@ -1,0 +1,59 @@
+#!/bin/sh
+# Checks the staged files only. CI runs the full checks; this is the fast first gate.
+# Note: tools read the working-tree copy of a file, so a partly staged file is checked as a whole.
+cd "$(git rev-parse --show-toplevel)" || exit 1
+
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+[ -n "$staged" ] || exit 0
+
+fail=0
+have() { command -v "$1" > /dev/null 2>&1; }
+skip() { echo "skip $1 is not installed (CI will still check)"; }
+step() { echo "hook $1"; }
+pick() { printf '%s\n' "$staged" | grep -E "$1" || true; }
+
+# Go
+go_files=$(pick '^services/core/.*\.go$')
+if [ -n "$go_files" ]; then
+	step "gofmt"
+	bad=$(gofmt -l $go_files) && [ -z "$bad" ] || { echo "FAIL gofmt: run 'make fmt'. Files: $bad"; fail=1; }
+	if have golangci-lint; then step "golangci-lint"; (cd services/core && golangci-lint run ./...) || fail=1; else skip golangci-lint; fi
+fi
+
+# Python (the AI service uses its own config; scripts and contracts share another)
+ai_files=$(pick '^services/ai/.*\.py$' | sed 's|^services/ai/||')
+if [ -n "$ai_files" ]; then
+	step "ruff (services/ai)"
+	(cd services/ai && uv run --frozen ruff check $ai_files && uv run --frozen ruff format --check $ai_files) || fail=1
+fi
+tool_files=$(pick '^(contracts|scripts)/.*\.py$')
+if [ -n "$tool_files" ]; then
+	step "ruff (contracts, scripts)"
+	uv run --frozen --project services/ai ruff check --config contracts/ruff.toml $tool_files \
+		&& uv run --frozen --project services/ai ruff format --check --config contracts/ruff.toml $tool_files || fail=1
+fi
+
+# Web
+web_files=$(pick '^apps/web/.*\.(ts|tsx|js|mjs|css|json|md)$' | grep -v '^apps/web/src/contract/' | sed 's|^apps/web/||')
+if [ -n "$web_files" ]; then
+	step "prettier and eslint (apps/web)"
+	(cd apps/web && pnpm exec prettier --check $web_files) || fail=1
+	lintable=$(printf '%s\n' $web_files | grep -E '\.(ts|tsx|js|mjs)$' || true)
+	[ -z "$lintable" ] || (cd apps/web && pnpm exec eslint $lintable) || fail=1
+fi
+
+# Contracts and generated code
+if [ -n "$(pick '^(contracts/|services/core/internal/contract/|services/ai/app/contract/|apps/web/src/contract/)')" ]; then
+	step "contracts-check and gen-check"
+	make --no-print-directory contracts-check gen-check || fail=1
+fi
+
+# Secrets
+if have gitleaks; then
+	step "gitleaks"
+	gitleaks git --pre-commit --staged --redact --no-banner || fail=1
+else
+	skip gitleaks
+fi
+
+if [ "$fail" -ne 0 ]; then echo "commit blocked: fix the problems above (CI runs the same checks)"; exit 1; fi

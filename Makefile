@@ -15,7 +15,7 @@ LOCAL_ENV = set -a; . $(ENV_FILE); set +a; \
 	export AI_SERVICE_URL="http://127.0.0.1:$${AI_PORT:-8000}";
 
 .DEFAULT_GOAL := help
-.PHONY: help env-check up up-app down reset ps logs verify verify-env fmt lint test contracts-check gen gen-check test-e2e test-integration audit run-api run-ai run-web docker-build
+.PHONY: help hooks test-scripts env-check up up-app down reset ps logs verify verify-env fmt lint test contracts-check gen gen-check test-e2e test-integration audit run-api run-ai run-web docker-build
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  %-18s %s\n", $$1, $$2}'
@@ -26,6 +26,12 @@ env-check:
 # Credentials are pasted into connection URLs, so characters such as @ : / ? # % break
 # them in confusing ways (audit A2). Prints variable names only, never values.
 URL_SAFE_VARS := POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB REDIS_PASSWORD RUSTFS_ACCESS_KEY RUSTFS_SECRET_KEY AI_SERVICE_TOKEN
+
+hooks: ## Enable the git hooks in .githooks/ (commit message check, staged-file checks)
+	@git config core.hooksPath .githooks && echo "ok   git hooks enabled (core.hooksPath=.githooks)"
+
+test-scripts: ## Test the helper scripts in scripts/
+	@uv run --frozen --project $(AI_DIR) pytest scripts/tests -q -o addopts='' -p no:cacheprovider -p no:asyncio
 
 verify-env: env-check ## Check that credentials in the env file only use URL-safe characters
 	@set -a; . $(ENV_FILE); set +a; bad=""; \
@@ -83,13 +89,13 @@ lint: ## Lint the Go, Python and web code (Python and TypeScript include strict 
 	@cd $(GO_DIR) && golangci-lint run ./... && golangci-lint run --build-tags=integration ./...
 	@cd $(AI_DIR) && uv run --frozen ruff check . && uv run --frozen ruff format --check . && uv run --frozen mypy
 	@cd $(WEB_DIR) && pnpm install --frozen-lockfile --silent && pnpm run lint && pnpm run format:check
-	@uv run --frozen --project $(AI_DIR) ruff check --config contracts/ruff.toml contracts && uv run --frozen --project $(AI_DIR) ruff format --check --config contracts/ruff.toml contracts
+	@uv run --frozen --project $(AI_DIR) ruff check --config contracts/ruff.toml contracts scripts && uv run --frozen --project $(AI_DIR) ruff format --check --config contracts/ruff.toml contracts scripts
 
 test: ## Run the Go, Python and web unit tests (no containers needed)
 	@cd $(GO_DIR) && go test -race -count=1 ./...
 	@cd $(AI_DIR) && uv run --frozen pytest -q --cov
 	@cd $(WEB_DIR) && pnpm install --frozen-lockfile --silent && pnpm test
-	@$(MAKE) --no-print-directory contracts-check
+	@$(MAKE) --no-print-directory contracts-check test-scripts
 
 contracts-check: ## Validate the OpenAPI specs in contracts/ (valid, shared schemas identical, examples match)
 	@uv run --frozen --project $(AI_DIR) python contracts/check.py

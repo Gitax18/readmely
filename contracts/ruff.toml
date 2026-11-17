@@ -2,4 +2,4 @@
 extend = "../services/ai/pyproject.toml"
 
 [lint.per-file-ignores]
-"**/tests/**" = ["S101", "PLR2004", "PLC0415"]
+"**/tests/**" = ["S101", "PLR2004", "PLC0415", "S603", "S607", "PLW1510"]

@@ -235,7 +235,7 @@ services/ai/
 - **Next:** Step 6 wires `make gen-check` and `make contracts-check` into CI.
 
 ### Step 6 · Quality gates and CI
-**Status:** Draft, awaiting review (agreed 2026-11-18: plain hooks in the repo, run everything on every PR, protect `main` after CI is green, pin actions to commit SHAs with Dependabot).
+**Status:** Approved 2026-11-18 (agreed: plain hooks in the repo, run everything on every PR, protect `main` after CI is green, pin actions to commit SHAs with Dependabot).
 
 **Goal:** a change that breaks lint, tests, the contracts, the commit convention, or leaks a secret is stopped twice: on the developer's machine before it is committed, and on GitHub before it can be merged.
 
