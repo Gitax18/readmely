@@ -117,10 +117,51 @@ services/ai/
 - **Added at review:** `make audit` (govulncheck and pip-audit). Its first run found two Go standard-library vulnerabilities; recorded as audit item A9, fixed first on `fix/audit-items`.
 
 ### Step 4 · Next.js shell
-- App Router project with Tailwind and shadcn/ui, strict TypeScript.
-- One status page showing API and AI service health, fetched **through the Go API** (`GET /api/v1/status`), never directly from the AI service.
-- Security headers (Content-Security-Policy, `X-Content-Type-Options`, `Referrer-Policy`, frame denial).
-- **Tests:** unit test for the status component (healthy, degraded, API unreachable); one Playwright test that loads the page.
+**Status:** Draft, awaiting review (agreed 2026-11-18: server-side fetch, detailed status, pnpm + Vitest + Playwright, containerised).
+
+**Goal:** a secure Next.js app that renders one status page for the API and the AI service, with the whole path (browser → Next.js server → Go → Python) working and tested.
+
+**Data flow.** The browser only talks to Next.js. The page is a server component that fetches `GET /api/v1/status` from the Go API over the internal network (`API_INTERNAL_URL`, server-only, never `NEXT_PUBLIC_*`). The Go API asks the AI service for its `/readyz` with the service token. No CORS, no token or internal address in the browser.
+
+**Go: `GET /api/v1/status`** (served on the **internal listener only**, like `/readyz`, so the detail never appears on the public port)
+- New config: `AI_SERVICE_URL` (default `http://ai:8000`) and `AI_SERVICE_TOKEN` (optional, 32+ chars if set; empty means the AI check reports `unconfigured`). Values never printed.
+- Always 200 when Go itself is running; it is a report. Body:
+  `{"status": "operational|degraded|unavailable", "services": {"api": {"status": "ok|down", "checks": {"postgres": "ok|down", "redis": "ok|down"}}, "ai": {"status": "ok|down|unreachable|unconfigured", "checks": {"postgres": "ok|down"}}}}`
+- Overall: `operational` if everything is ok; `unavailable` if the API's own Postgres is down; otherwise `degraded`.
+- AI call: 2 s timeout, Bearer token, **redirects not followed** (the token must never go to another host), response read through a 64 KiB limit, body parsed against a strict shape, unknown values treated as `down`. Failure reasons go to the log only.
+- `api` checks reuse the existing readiness probes; the AI call runs in parallel with them so one hung part can't stall the report.
+
+**Web app (`apps/web`)**
+- Next.js 16, React 19, Tailwind 4, shadcn/ui (Card and Badge only), strict TypeScript, ESLint, Prettier. `pnpm` with exact versions, committed lockfile, install scripts blocked except an allowlist, `pnpm audit` in `make audit`.
+- `/` status page, rendered per request (`no-store`, 3 s fetch timeout). Four states: operational, degraded, unavailable, **API unreachable**. Status is shown as text and icon, never colour alone.
+- The API response is untrusted: validated with Zod; anything that doesn't match is shown as "invalid response from API". Values are rendered as text only.
+- Detail level: `STATUS_DETAIL=full|coarse`. `full` (default in development) shows each dependency; `coarse` shows only overall and per-service state. Redaction happens on the server, so hidden data is never sent to the browser. **Proposal: production defaults to `coarse`**, because a public page naming internal dependencies helps attackers; you can override that when we deploy.
+- `GET /healthz` route for the container healthcheck.
+- Environment validated at startup; errors name the variable and never the value.
+
+**Security headers** (set per request in the Next.js proxy/middleware): CSP with a per-request nonce (`default-src 'self'`, `script-src 'self' 'nonce-…' 'strict-dynamic'`, `object-src 'none'`, `base-uri 'self'`, `frame-ancestors 'none'`, `form-action 'self'`; no `unsafe-eval` or `unsafe-inline` in production), `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `X-Frame-Options: DENY`, a locked-down `Permissions-Policy`, and `X-Powered-By` removed. HSTS is added at deploy time behind TLS.
+
+**Container and compose**
+- `infra/docker/web.Dockerfile`: multi-stage pnpm build, Next.js `standalone` output, pinned Node 24 slim/alpine image, non-root user, no package manager in the final image, healthcheck through Node.
+- Compose service `web` in the `app` profile: published on `127.0.0.1:${WEB_PORT:-3000}` only, read-only filesystem with a `/tmp` tmpfs, capabilities dropped, `no-new-privileges`, `API_INTERNAL_URL=http://api:8081`.
+- `.env.example` gains `WEB_PORT`, `AI_SERVICE_URL`. Go service in compose gets `AI_SERVICE_URL` and `AI_SERVICE_TOKEN`.
+- Makefile: `make run-web` (dev server bound to `127.0.0.1`); `lint`, `test`, `fmt`, `test-integration`, `audit` and `docker-build` include the web app; `verify` also checks the web port is local-only.
+
+**Tests**
+- Go (`/api/v1/status`, fake AI server): all ok; AI 503 with detail; AI hangs (timeout, API still answers within 3 s); AI returns 401 (reason absent from the response); AI redirects (second server receives no request, so no token leak); oversized and malformed AI bodies; unknown status values; token not configured; AI down gives `degraded`; API Postgres down gives `unavailable`; token never in logs or response; config validation for the two new variables; not served on the public router.
+- Web unit (Vitest + Testing Library): each of the four states; `full` vs `coarse` output (hidden detail absent from the HTML); malformed and hostile payloads (script text rendered as text, wrong types, extra fields); fetch timeout and network error; environment validation.
+- Playwright (against a small fake API): page loads and shows operational; shows degraded; shows API unreachable when the fake is stopped; response headers present, CSP nonce changes per request, no inline script without a nonce; `/healthz`; keyboard and semantics check (landmarks, heading, status text).
+- Container: image builds, runs as non-root, read-only filesystem works, healthy; page returns 200 through the real stack (web → Go → Python); stop the AI container and the page shows degraded; stop Go and the page shows API unreachable; web port bound to `127.0.0.1` only.
+- Whole-repo: `make lint test test-integration audit verify` all green.
+
+**Commits (one branch, `feat/web-shell`)**
+1. `feat(core): add internal GET /api/v1/status` (+ config, tests)
+2. `feat(web): scaffold Next.js app with Tailwind and shadcn/ui`
+3. `feat(web): status page with validated API client`
+4. `security(web): add CSP and security headers`
+5. `build(infra): containerise the web app and add make run-web`
+6. `test(web): Playwright page and header tests`
+7. `docs(plans): record Step 4 outcome`
 
 ### Step 5 · Contracts and type generation
 - `public.yaml` (browser ↔ core) and `internal.yaml` (core ↔ ai), starting with the health and status endpoints.
