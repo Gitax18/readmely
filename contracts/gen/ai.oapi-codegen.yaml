@@ -1,0 +1,8 @@
+# Models only: the servers keep their own routing. Run through `make gen`.
+package: ai
+generate:
+  models: true
+output: internal/contract/ai/types.gen.go
+compatibility:
+  # Constants are always <Type><Value>, so adding a schema can never rename another one.
+  always-prefix-enum-values: true

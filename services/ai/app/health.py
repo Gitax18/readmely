@@ -8,6 +8,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
+from app.contract.models import CheckMap, CheckState, Readiness
+
 logger = logging.getLogger("app.health")
 
 
@@ -35,10 +37,10 @@ async def _probe(check: Check, limit_seconds: float, request_id: str) -> bool:
     return True
 
 
-async def readiness(checks: Sequence[Check], limit_seconds: float, request_id: str) -> tuple[int, dict[str, object]]:
-    """Run every check concurrently. Returns (HTTP status, body)."""
+async def readiness(checks: Sequence[Check], limit_seconds: float, request_id: str) -> tuple[int, Readiness]:
+    """Run every check concurrently. Returns (HTTP status, body); the body type comes from contracts/ai.yaml."""
     results = await asyncio.gather(*(_probe(c, limit_seconds, request_id) for c in checks))
-    statuses = {c.name: ("ok" if ok else "down") for c, ok in zip(checks, results, strict=True)}
+    states = {c.name: CheckState(root="ok" if ok else "down") for c, ok in zip(checks, results, strict=True)}
     ready = all(results)
-    body: dict[str, object] = {"status": "ready" if ready else "unavailable", "checks": statuses}
+    body = Readiness(status="ready" if ready else "unavailable", checks=CheckMap(root=states))
     return (200 if ready else 503), body

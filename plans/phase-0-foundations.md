@@ -174,9 +174,65 @@ services/ai/
 - **Open for later (deploy step):** HSTS and `upgrade-insecure-requests` once TLS terminates in front of the app.
 
 ### Step 5 · Contracts and type generation
-- `public.yaml` (browser ↔ core) and `internal.yaml` (core ↔ ai), starting with the health and status endpoints.
-- `make gen` produces Go, Python, and TypeScript types; generated code is committed.
-- **Tests:** CI fails if `make gen` produces a diff, which proves contracts and code cannot drift.
+**Status:** Done 2026-11-18 (agreed: one spec per server, conformance tests on both servers, keep Zod and assert it matches the generated types).
+
+**Goal:** the API shapes are written down once, in OpenAPI files, and nothing can drift from them: types in all three languages are generated from the specs, and tests prove the real servers match the specs.
+
+**Specs (`contracts/`, OpenAPI 3.0.3).** 3.0.3 rather than 3.1 because the Go validator (`kin-openapi`) has no confirmed 3.1 support and `oapi-codegen` only has an initial one; every tool we use handles 3.0.3 fully. Move to 3.1 once the tools catch up.
+- `core-public.yaml`: the Go API's public listener (`GET /healthz`).
+- `core-internal.yaml`: the Go API's internal listener (`GET /healthz`, `GET /readyz`, `GET /api/v1/status`). Documented as reachable on the internal network only.
+- `ai.yaml`: the AI service (`GET /healthz`, `GET /readyz` with bearer auth).
+- Every object has `additionalProperties: false`; status values are enums; check names have the same pattern and 8-entry cap the code enforces. Each response documents `X-Request-ID`; errors share one `Error` schema (`error`, `request_id`); 401, 405 and 503 are documented where the server can send them. Each response has examples (every state of `/api/v1/status`, ready and unavailable).
+- Files are self-contained. The few shared schemas (`Error`, liveness, readiness) are repeated, and `make contracts-check` fails if the copies differ.
+
+**Generation (`make gen`, output committed, marked `linguist-generated`).**
+- Go: `oapi-codegen` v2.8.2 (pinned as a `tool` in `go.mod`), models only, into `internal/contract/{corepublic,coreinternal,ai}`.
+- Python: `datamodel-code-generator` 0.97 (dev dependency), Pydantic v2 models for `ai.yaml` into `app/contract/`.
+- TypeScript: `openapi-typescript` 7.13 (pinned dev dependency), `core-internal.d.ts` into `apps/web/src/contract/`, plus the spec's examples extracted to JSON for tests.
+- Output is deterministic (no timestamps). `make gen-check` regenerates and fails if `git` shows any difference or untracked generated file. It is wired into CI in Step 6.
+- Generated files are excluded from lint, formatting and coverage; mypy still checks the Python models.
+- New tooling is dev-only and never reaches an image. `make audit` now also scans the Python dev group, so the generators are covered.
+
+**Code uses the generated types (so a shape change breaks the build, not just a test).**
+- Go: `health` (liveness, readiness), `status` (`Report`, `Service`, and the AI response it parses) and `httpx` (error body) switch to the generated types.
+- Python: `health.py` and `security.py` build their responses from the generated models.
+- Web: the hand-written Zod schema stays (strict runtime validation, already tested). A compile-time check requires it to match the generated type in both directions; a fixture with a deliberately drifted schema and `@ts-expect-error` proves the check really fails.
+
+**Conformance tests (the spec cannot lie).**
+- Go (`kin-openapi`, test-only): every response of both routers is validated against its spec: all `/api/v1/status` states, `/readyz` 200 and 503, `/healthz`, wrong-method 405, the unknown-route 404 body. A route-parity test walks the chi routers: every registered route is in the spec and every spec path is registered.
+- Python (`openapi-core`, test-only): the same for the AI service: `/healthz`, `/readyz` 200, 503 and 401, 405, oversized 413, plus route parity against the FastAPI app.
+- Web: every example in `core-internal.yaml` must pass the Zod schema, so the runtime validator accepts everything the spec documents.
+- Parity checkers are themselves tested against a planted extra route and a planted missing route.
+
+**Commits (branch `feat/contracts`)**
+1. `feat(contracts): add OpenAPI specs for core and AI` (specs, `make contracts-check`)
+2. `build(contracts): generate Go, Python and TypeScript types` (`make gen`, `make gen-check`, tool pins, excludes)
+3. `refactor(core): use generated contract types` (+ Go conformance and parity tests)
+4. `refactor(ai): use generated contract types` (+ Python conformance and parity tests)
+5. `refactor(web): check the Zod schema against generated types` (+ examples test, drift fixture)
+6. `docs(plans): record Step 5 outcome`
+
+**Tests / verify (each planted, seen failing, then reverted)**
+- Edit a spec without running `make gen`: `make gen-check` fails. Hand-edit a generated file: fails. Clean tree: passes and is stable over repeated runs.
+- A deliberately invalid spec is rejected by `make contracts-check`; so are two shared schemas that differ.
+- Add a route in Go (or FastAPI) without a spec entry, and delete one spec path: parity tests fail.
+- Change a handler's response field name or type: conformance test and compile both fail.
+- Change the Zod schema (add, drop or retype a field): `tsc` fails; change a spec example into something Zod rejects: the web test fails.
+- Whole repo: `make lint test test-e2e test-integration audit gen-check` all green; all three images still build.
+
+**Out of scope:** generated clients or server stubs (types only for now), contracts for endpoints that don't exist yet (each later feature adds its own, in its own plan), and the CI job itself (Step 6).
+
+**Outcome (2026-11-18):** implemented as planned on `feat/contracts` (7 commits: the 6 planned plus one to audit the Python dev dependencies). Three OpenAPI 3.0.3 specs, 6 documented `/api/v1/status` states plus readiness and error examples; types generated for Go (3 packages), Python (Pydantic v2) and TypeScript; the handlers in Go and Python are built from the generated types. Tests: 67 Go (+7 conformance), 98 Python (+16), 84 web unit (+15, 100% of lines), 13 contract tests, 16 browser tests; lint, `make gen-check` and `make audit` clean; all three images rebuild and the live stack is unchanged. Every guard was planted, seen failing, and reverted: stale spec, hand-edited and deleted generated files, an undocumented route (Go and FastAPI), a wrong enum, example or header in a spec, a changed Zod schema, and a spec change with no Zod update.
+- **Found by testing or tooling:**
+  - `oapi-codegen` names enum constants differently depending on collisions (`Ok` in one package, `LivenessStatusOk` in another); fixed with `always-prefix-enum-values`.
+  - `uv` silently resolved `openapi-core` to 0.14.2 (from 2021) because the current one needs `openapi-spec-validator` below 0.9; caught by reading the resolution, pinned compatibly.
+  - FastAPI 0.163 hides routes added with `include_router` behind an `_IncludedRouter`, so a naive route-parity walker saw `/readyz` as missing; it now recurses.
+  - The generated error model validates the request ID, which could make an error handler throw when the ID was empty; the Python error path now always generates a valid one (tested).
+  - `kin-openapi` cannot route a wrong-method request to a 405 documented under the real operation; a small helper looks the route up by its documented method.
+  - My own mistakes, caught by checking: an example-label bug in the extractor, a test query that matched several headings, and planted faults that did nothing (BSD `sed`, zsh word splitting), which I redid with verified changes. The auto-mode check stopped a restore that would have discarded uncommitted work; faults are now planted with backups.
+- **Limits recorded:** OpenAPI 3.0 cannot express "property names match a pattern", so the dependency-name rule lives in the `CheckMap` description and is enforced in code (Zod, Go, Python) and by examples. Contract tests cover the AI service and both Go listeners; the web app's fake API in the browser tests is a hand-written double, not generated.
+- **Known and accepted:** `pnpm audit` (including dev) reports 2 advisories (picomatch high, minimatch moderate) through `eslint-config-next`. Both are regex denial-of-service in lint-time glob matching, predate this step, and never reach an image; `pnpm audit --prod` is clean and is what `make audit` runs. Revisit when `eslint-config-next` updates.
+- **Next:** Step 6 wires `make gen-check` and `make contracts-check` into CI.
 
 ### Step 6 · Quality gates and CI
 - `make lint`, `make test`, `make fmt` cover all three languages.

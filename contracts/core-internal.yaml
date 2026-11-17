@@ -1,0 +1,259 @@
+openapi: 3.0.3
+info:
+  title: Readmely core API (internal listener)
+  version: 0.1.0
+  description: >-
+    Reachable on the internal network only (never published to the host or the internet). It carries everything that reveals dependency state.
+servers:
+  - url: http://127.0.0.1:8081
+paths:
+  /healthz:
+    get:
+      operationId: getHealthz
+      summary: Liveness
+      responses:
+            '200':
+              description: The process is alive. Never touches a dependency.
+              headers:
+                X-Request-ID:
+                  $ref: '#/components/headers/RequestId'
+              content:
+                application/json:
+                  schema:
+                    $ref: '#/components/schemas/Liveness'
+                  example:
+                    status: ok
+            '405':
+              description: Method not allowed (method_not_allowed).
+              headers:
+                X-Request-ID:
+                  $ref: '#/components/headers/RequestId'
+              content:
+                application/json:
+                  schema:
+                    $ref: '#/components/schemas/Error'
+            default:
+              description: Any other error, such as an unknown route (not_found) or an unexpected failure (internal_error).
+              headers:
+                X-Request-ID:
+                  $ref: '#/components/headers/RequestId'
+              content:
+                application/json:
+                  schema:
+                    $ref: '#/components/schemas/Error'
+  /readyz:
+    get:
+      operationId: getReadyz
+      summary: Readiness of the API's own dependencies
+      responses:
+            '200':
+              description: Every dependency answered.
+              headers:
+                X-Request-ID:
+                  $ref: '#/components/headers/RequestId'
+              content:
+                application/json:
+                  schema:
+                    $ref: '#/components/schemas/Readiness'
+                  example:
+                    status: ready
+                    checks: {postgres: ok, redis: ok}
+            '503':
+              description: At least one dependency is down. The reason is logged, never returned.
+              headers:
+                X-Request-ID:
+                  $ref: '#/components/headers/RequestId'
+              content:
+                application/json:
+                  schema:
+                    $ref: '#/components/schemas/Readiness'
+                  example:
+                    status: unavailable
+                    checks: {postgres: down, redis: ok}
+            '405':
+              description: Method not allowed (method_not_allowed).
+              headers:
+                X-Request-ID:
+                  $ref: '#/components/headers/RequestId'
+              content:
+                application/json:
+                  schema:
+                    $ref: '#/components/schemas/Error'
+            default:
+              description: Any other error, such as an unknown route (not_found) or an unexpected failure (internal_error).
+              headers:
+                X-Request-ID:
+                  $ref: '#/components/headers/RequestId'
+              content:
+                application/json:
+                  schema:
+                    $ref: '#/components/schemas/Error'
+  /api/v1/status:
+    get:
+      operationId: getStatus
+      summary: Combined status of the API and the AI service
+      description: >-
+        Read by the web app's server. Served on the internal listener only. The API asks the
+        AI service for its readiness with a 2 s timeout and a 64 KiB response limit, never
+        follows redirects, and puts failure reasons in the log, not here.
+      responses:
+        '200':
+          description: >-
+            Always 200 while the API itself is running: the body is a report, and "the AI
+            service is down" is a normal thing for it to say.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusReport'
+              examples:
+                operational:
+                  summary: Everything is up
+                  value:
+                    status: operational
+                    services:
+                      api: {status: ok, checks: {postgres: ok, redis: ok}}
+                      ai: {status: ok, checks: {postgres: ok}}
+                ai_unreachable:
+                  summary: The AI service does not answer
+                  value:
+                    status: degraded
+                    services:
+                      api: {status: ok, checks: {postgres: ok, redis: ok}}
+                      ai: {status: unreachable, checks: {}}
+                ai_down:
+                  summary: The AI service answers but one of its dependencies is down
+                  value:
+                    status: degraded
+                    services:
+                      api: {status: ok, checks: {postgres: ok, redis: ok}}
+                      ai: {status: down, checks: {postgres: down}}
+                ai_unconfigured:
+                  summary: No AI service token is configured
+                  value:
+                    status: degraded
+                    services:
+                      api: {status: ok, checks: {postgres: ok, redis: ok}}
+                      ai: {status: unconfigured, checks: {}}
+                redis_down:
+                  summary: The API's cache is down but its database is up
+                  value:
+                    status: degraded
+                    services:
+                      api: {status: down, checks: {postgres: ok, redis: down}}
+                      ai: {status: ok, checks: {postgres: ok}}
+                unavailable:
+                  summary: The API cannot reach its own database
+                  value:
+                    status: unavailable
+                    services:
+                      api: {status: down, checks: {postgres: down, redis: ok}}
+                      ai: {status: unreachable, checks: {}}
+        '405':
+          description: Method not allowed (method_not_allowed).
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          description: Any other error, such as an unknown route (not_found) or an unexpected failure (internal_error).
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  headers:
+    RequestId:
+      description: The request ID, echoed back or generated by the server.
+      required: true
+      schema:
+        type: string
+        pattern: '^[A-Za-z0-9._-]{8,64}$'
+  schemas:
+    Error:
+      type: object
+      description: >-
+        The generic error body. Details never appear here; they go to the log only.
+        The Go API sends not_found, method_not_allowed and internal_error. The AI
+        service also sends unauthorized, payload_too_large and invalid_request.
+      required: [error, request_id]
+      additionalProperties: false
+      properties:
+        error:
+          type: string
+          pattern: '^[a-z][a-z_]{0,31}$'
+          description: A stable machine-readable code.
+          example: not_found
+        request_id:
+          type: string
+          pattern: '^[A-Za-z0-9._-]{8,64}$'
+          example: 6P5E3ETHKJKOTOXXMXCEJGDW6I
+    Liveness:
+      type: object
+      required: [status]
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          enum: [ok]
+    CheckState:
+      type: string
+      enum: [ok, down]
+    CheckMap:
+      type: object
+      description: >-
+        Dependency name to state. Names match ^[a-z][a-z0-9_]{0,31}$ (OpenAPI 3.0 has no
+        way to express a pattern on property names, so servers and clients enforce it in code).
+        At most 8 entries.
+      maxProperties: 8
+      additionalProperties:
+        $ref: '#/components/schemas/CheckState'
+    Readiness:
+      type: object
+      required: [status, checks]
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          enum: [ready, unavailable]
+        checks:
+          $ref: '#/components/schemas/CheckMap'
+    ServiceReport:
+      type: object
+      required: [status, checks]
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          enum: [ok, down, unreachable, unconfigured]
+        checks:
+          $ref: '#/components/schemas/CheckMap'
+    StatusReport:
+      type: object
+      required: [status, services]
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          description: >-
+            unavailable when the API cannot reach its own database; operational when
+            everything is ok; otherwise degraded.
+          enum: [operational, degraded, unavailable]
+        services:
+          type: object
+          required: [api, ai]
+          additionalProperties: false
+          properties:
+            api:
+              $ref: '#/components/schemas/ServiceReport'
+            ai:
+              $ref: '#/components/schemas/ServiceReport'

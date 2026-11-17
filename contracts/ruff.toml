@@ -1,0 +1,5 @@
+# Same rules as the AI service, plus the usual allowances for tests and for a CLI tool.
+extend = "../services/ai/pyproject.toml"
+
+[lint.per-file-ignores]
+"**/tests/**" = ["S101", "PLR2004", "PLC0415"]

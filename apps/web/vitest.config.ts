@@ -20,7 +20,13 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       include: ["src/lib/**", "src/components/**"],
-      exclude: ["src/**/*.test.{ts,tsx}", "src/test/**"],
+      // contract-check.ts and *.fixture.ts hold only compile-time checks (verified by `tsc`).
+      exclude: [
+        "src/**/*.test.{ts,tsx}",
+        "src/test/**",
+        "src/lib/contract-check.ts",
+        "src/**/*.fixture.ts",
+      ],
       thresholds: { lines: 90, functions: 90, branches: 85, statements: 90 },
     },
   },

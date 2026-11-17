@@ -15,7 +15,7 @@ LOCAL_ENV = set -a; . $(ENV_FILE); set +a; \
 	export AI_SERVICE_URL="http://127.0.0.1:$${AI_PORT:-8000}";
 
 .DEFAULT_GOAL := help
-.PHONY: help env-check up up-app down reset ps logs verify verify-env fmt lint test test-e2e test-integration audit run-api run-ai run-web docker-build
+.PHONY: help env-check up up-app down reset ps logs verify verify-env fmt lint test contracts-check gen gen-check test-e2e test-integration audit run-api run-ai run-web docker-build
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  %-18s %s\n", $$1, $$2}'
@@ -83,11 +83,47 @@ lint: ## Lint the Go, Python and web code (Python and TypeScript include strict 
 	@cd $(GO_DIR) && golangci-lint run ./... && golangci-lint run --build-tags=integration ./...
 	@cd $(AI_DIR) && uv run --frozen ruff check . && uv run --frozen ruff format --check . && uv run --frozen mypy
 	@cd $(WEB_DIR) && pnpm install --frozen-lockfile --silent && pnpm run lint && pnpm run format:check
+	@uv run --frozen --project $(AI_DIR) ruff check --config contracts/ruff.toml contracts && uv run --frozen --project $(AI_DIR) ruff format --check --config contracts/ruff.toml contracts
 
 test: ## Run the Go, Python and web unit tests (no containers needed)
 	@cd $(GO_DIR) && go test -race -count=1 ./...
 	@cd $(AI_DIR) && uv run --frozen pytest -q --cov
 	@cd $(WEB_DIR) && pnpm install --frozen-lockfile --silent && pnpm test
+	@$(MAKE) --no-print-directory contracts-check
+
+contracts-check: ## Validate the OpenAPI specs in contracts/ (valid, shared schemas identical, examples match)
+	@uv run --frozen --project $(AI_DIR) python contracts/check.py
+	@uv run --frozen --project $(AI_DIR) pytest contracts/tests -q -o addopts='' -p no:cacheprovider -p no:asyncio
+
+# Directories that hold only generated code. Never edit them by hand.
+GEN_DIRS := services/core/internal/contract services/ai/app/contract apps/web/src/contract
+
+gen: ## Regenerate the Go, Python and TypeScript types and test examples from contracts/ (output is committed)
+	@for pair in core-public:corepublic core-internal:coreinternal ai:ai; do \
+		spec=$${pair%%:*}; pkg=$${pair##*:}; \
+		mkdir -p $(GO_DIR)/internal/contract/$$pkg; \
+		(cd $(GO_DIR) && go tool oapi-codegen -config ../../contracts/gen/$$spec.oapi-codegen.yaml ../../contracts/$$spec.yaml) || exit 1; \
+	done
+	@mkdir -p $(AI_DIR)/app/contract && touch $(AI_DIR)/app/contract/__init__.py
+	@PYTHONWARNINGS='ignore:Black/isort will become optional:FutureWarning' uv run --frozen --project $(AI_DIR) datamodel-codegen --input contracts/ai.yaml --input-file-type openapi \
+		--output $(AI_DIR)/app/contract/models.py --output-model-type pydantic_v2.BaseModel \
+		--target-python-version 3.13 --formatters black isort --use-annotated --use-standard-collections \
+		--use-union-operator --enum-field-as-literal all --disable-timestamp --field-constraints --use-schema-description
+	@mkdir -p $(WEB_DIR)/src/contract
+	@cd $(WEB_DIR) && pnpm install --frozen-lockfile --silent && pnpm exec openapi-typescript ../../contracts/core-internal.yaml -o src/contract/core-internal.d.ts > /dev/null
+	@uv run --frozen --project $(AI_DIR) python contracts/extract_examples.py
+	@echo "ok   generated types are up to date"
+
+# Fails when generating changes anything: the specs were edited without running
+# `make gen`, or a generated file was edited by hand, or one is missing.
+gen-check: ## Fail if the generated code is out of date with contracts/
+	@b=$$(mktemp); a=$$(mktemp); \
+	find $(GEN_DIRS) -type f 2>/dev/null | sort | xargs shasum > $$b 2>/dev/null; \
+	$(MAKE) --no-print-directory gen > /dev/null || { rm -f $$b $$a; exit 1; }; \
+	find $(GEN_DIRS) -type f | sort | xargs shasum > $$a; \
+	if cmp -s $$b $$a; then echo "ok   generated code matches contracts/"; rm -f $$b $$a; \
+	else echo "FAIL generated code was out of date: run 'make gen' and commit the result"; \
+		diff $$b $$a | grep '^[<>]' | awk '{print "     " $$3}' | sort -u; rm -f $$b $$a; exit 1; fi
 
 test-e2e: ## Run the web browser tests against a production build and a fake API (first time: cd apps/web && pnpm exec playwright install chromium)
 	@cd $(WEB_DIR) && pnpm install --frozen-lockfile --silent && pnpm run test:e2e
@@ -99,7 +135,7 @@ test-integration: env-check ## Run the integration tests against the running loc
 audit: ## Check Go, Python and web dependencies for known vulnerabilities (needs network)
 	@cd $(GO_DIR) && go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 	@cd $(WEB_DIR) && pnpm install --frozen-lockfile --silent && pnpm audit --prod
-	@cd $(AI_DIR) && uv export --frozen --no-dev --no-hashes --format requirements-txt -q \
+	@cd $(AI_DIR) && uv export --frozen --all-groups --no-emit-project --no-hashes --format requirements-txt -q \
 		| uv run --frozen pip-audit --strict -r /dev/stdin
 
 run-api: env-check ## Run the API on the host against the local stack (stop the API container first)

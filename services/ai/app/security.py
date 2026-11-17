@@ -19,6 +19,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.contract.models import Error
+
 Scope = MutableMapping[str, Any]
 Message = MutableMapping[str, Any]
 Receive = Callable[[], Awaitable[Message]]
@@ -50,6 +52,14 @@ error_logger = logging.getLogger("app.error")
 
 def new_request_id() -> str:
     return secrets.token_hex(13)  # 26 characters, same length as the Go IDs
+
+
+def error_body(status: int, request_id: str) -> dict[str, Any]:
+    """The generic error body from contracts/ai.yaml. It must never fail, because it runs inside error
+    handling: an empty ID (an error before the middleware stored one) gets a generated one."""
+    return Error(error=_ERROR_CODES.get(status, "http_error"), request_id=request_id or new_request_id()).model_dump(
+        mode="json"
+    )
 
 
 def request_id_from(scope: Scope) -> str:
@@ -137,10 +147,7 @@ class RequestContextMiddleware:
 
 
 async def _send_error(send: Send, status: int, request_id: str) -> None:
-    body = JSONResponse(
-        {"error": _ERROR_CODES.get(status, "http_error"), "request_id": request_id},
-        status_code=status,
-    ).body
+    body = JSONResponse(error_body(status, request_id), status_code=status).body
     await send(
         {
             "type": "http.response.start",
@@ -154,9 +161,9 @@ async def _send_error(send: Send, status: int, request_id: str) -> None:
 def error_response(request: Request, status: int, headers: dict[str, str] | None = None) -> JSONResponse:
     # A 500 is sent by Starlette's outermost error middleware, outside
     # RequestContextMiddleware, so the request ID and security headers are set here too.
-    request_id = request_id_from(request.scope)
+    request_id = request_id_from(request.scope) or new_request_id()
     return JSONResponse(
-        {"error": _ERROR_CODES.get(status, "http_error"), "request_id": request_id},
+        error_body(status, request_id),
         status_code=status,
         headers={
             REQUEST_ID_HEADER: request_id,

@@ -14,6 +14,8 @@ import (
 	"time"
 
 	chimw "github.com/go-chi/chi/v5/middleware"
+
+	"github.com/Gitax18/readmely/services/core/internal/contract/corepublic"
 )
 
 // RequestIDHeader is read from the client when well-formed and always set on responses.
@@ -43,11 +45,6 @@ func RequestIDFrom(ctx context.Context) string {
 	return id
 }
 
-type errorBody struct {
-	Error     string `json:"error"`
-	RequestID string `json:"request_id,omitempty"`
-}
-
 // WriteJSON writes v as a JSON response with the given status.
 func WriteJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
@@ -58,7 +55,7 @@ func WriteJSON(w http.ResponseWriter, status int, v any) {
 // WriteError writes a generic error body. code is a stable machine-readable
 // string; nothing about the underlying failure is ever sent to the client.
 func WriteError(w http.ResponseWriter, r *http.Request, status int, code string) {
-	WriteJSON(w, status, errorBody{Error: code, RequestID: RequestIDFrom(r.Context())})
+	WriteJSON(w, status, corepublic.Error{Error: code, RequestId: RequestIDFrom(r.Context())})
 }
 
 // Recover turns a handler panic into a generic 500 and logs the details.
