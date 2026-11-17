@@ -117,7 +117,7 @@ services/ai/
 - **Added at review:** `make audit` (govulncheck and pip-audit). Its first run found two Go standard-library vulnerabilities; recorded as audit item A9, fixed first on `fix/audit-items`.
 
 ### Step 4 · Next.js shell
-**Status:** Approved 2026-11-18 (agreed 2026-11-18: server-side fetch, detailed status, pnpm + Vitest + Playwright, containerised).
+**Status:** Implemented 2026-11-18, awaiting sign-off (agreed 2026-11-18: server-side fetch, detailed status, pnpm + Vitest + Playwright, containerised).
 
 **Goal:** a secure Next.js app that renders one status page for the API and the AI service, with the whole path (browser → Next.js server → Go → Python) working and tested.
 
@@ -162,6 +162,16 @@ services/ai/
 5. `build(infra): containerise the web app and add make run-web`
 6. `test(web): Playwright page and header tests`
 7. `docs(plans): record Step 4 outcome`
+
+**Outcome (2026-11-18):** implemented as planned on `feat/web-shell` (7 commits). 60 Go tests (15 new, `internal/status` at 95.5% coverage), 82 Python tests (unchanged), 69 web unit tests (100% of lines), 16 Playwright tests, lint and `make audit` clean in all three languages. Web image 68 MB, non-root, read-only, distroless. Checked live in containers: full path operational; AI stopped gives degraded; API stopped gives "API unreachable" while the web container stays healthy; Postgres stopped gives unavailable; everything recovers; `/api/v1/status` returns 404 on the public port and the internal port is not reachable from the host; the AI token appears in no log.
+- **Found by testing or tooling:**
+  - pnpm's 7-day release-age rule rejected the freshly resolved lockfile (64 packages published within a week). Re-resolved so every dependency is at least 7 days old.
+  - `typescript-eslint` does not support TypeScript 7, so TypeScript is pinned to 6.0.3. ESLint is pinned to 9.39.5 because the Next.js lint plugins do not yet support ESLint 10 (npm marks 9.x as end of life; revisit when the plugins catch up).
+  - A Go test deadlocked because cleanups run in reverse order: the fake server waited on a handler that was only released afterwards. Fixed the order.
+  - A browser test showed that an inline script created through the DOM runs under `'strict-dynamic'`. That is by design (trust passes from nonce'd scripts); the real attack, an injected `<script>` in the HTML, is blocked and now tested that way.
+  - Zod drops a `__proto__` key instead of rejecting it; verified no pollution and tested it.
+- **Decision recorded:** production defaults `STATUS_DETAIL` to `coarse`. Change before deploy if the detailed public view is wanted.
+- **Open for later (deploy step):** HSTS and `upgrade-insecure-requests` once TLS terminates in front of the app.
 
 ### Step 5 · Contracts and type generation
 - `public.yaml` (browser ↔ core) and `internal.yaml` (core ↔ ai), starting with the health and status endpoints.
