@@ -1,9 +1,11 @@
 # Keep secrets and bulk out of every image build context.
 .git
 .claude
-.env
-.env.*
-!.env.example
+# Any depth (audit F6): Docker matches these against the context root only unless they start
+# with **/, so apps/web/.env.local would otherwise be sent to the build.
+**/.env
+**/.env.*
+!**/.env.example
 **/node_modules
 **/.next
 plans
