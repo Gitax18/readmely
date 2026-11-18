@@ -190,6 +190,7 @@ jobs:
             sed -i "s|^${v}=.*|${v}=$(openssl rand -hex 24)|" .env
           done
           sed -i "s|^AI_SERVICE_TOKEN=.*|AI_SERVICE_TOKEN=$(openssl rand -hex 32)|" .env
+          sed -i "s|^AUTH_CODE_KEY=.*|AUTH_CODE_KEY=$(openssl rand -hex 32)|" .env
       - run: make up
       - run: make verify
       - run: make test-integration

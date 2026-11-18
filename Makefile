@@ -26,7 +26,7 @@ env-check:
 
 # Credentials are pasted into connection URLs, so characters such as @ : / ? # % break
 # them in confusing ways (audit A2). Prints variable names only, never values.
-URL_SAFE_VARS := POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB REDIS_PASSWORD RUSTFS_ACCESS_KEY RUSTFS_SECRET_KEY AI_SERVICE_TOKEN APP_DB_PASSWORD AI_DB_PASSWORD
+URL_SAFE_VARS := POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB REDIS_PASSWORD RUSTFS_ACCESS_KEY RUSTFS_SECRET_KEY AI_SERVICE_TOKEN APP_DB_PASSWORD AI_DB_PASSWORD AUTH_CODE_KEY
 
 hooks: ## Enable the git hooks in .githooks/ (commit message check, staged-file checks)
 	@git config core.hooksPath .githooks && echo "ok   git hooks enabled (core.hooksPath=.githooks)"

@@ -42,6 +42,7 @@ func deadDeps() map[string]string {
 		"DATABASE_URL":     "postgres://u:secretpw@127.0.0.1:1/db?sslmode=disable&connect_timeout=1",
 		"REDIS_URL":        "redis://:secretpw@127.0.0.1:1/0",
 		"SHUTDOWN_TIMEOUT": "2s",
+		"AUTH_CODE_KEY":    "test-auth-code-key-0123456789abcdef-0123456789",
 	}
 }
 
