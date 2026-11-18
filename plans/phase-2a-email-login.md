@@ -1,6 +1,6 @@
 # Phase 2a · Sessions and passwordless email login
 
-**Status:** Approved (2026-11-18), amended after the 2026-11-18 audit (F13–F16, marked **[audit]**; approved 2026-11-18) · **Last updated:** 2026-11-18
+**Status:** Built, awaiting sign-off · approved 2026-11-18, amended after the 2026-11-18 audit (F13–F16, marked **[audit]**; approved 2026-11-18) · **Last updated:** 2026-11-19
 
 Phase 2 is split into three slices, each with its own plan, branch and sign-off: **2a** (this one) sessions and email-code login with account basics, **2b** Google and GitHub login with safe account linking, **2c** TOTP, recovery codes, account deletion and the settings UI.
 
@@ -118,3 +118,38 @@ Each step is one reviewed commit (or a few) on branch `feat/auth-email`.
 2. **File mailer** for tests and e2e (writes each email as a JSON file to a directory; never allowed in production), in addition to the log mailer for day-to-day development.
 3. **Session lifetimes:** 7 days idle, 30 days absolute. Say if you want shorter.
 4. **Production email provider** is not chosen in 2a. The app will refuse to start in production without one, so it has to be picked before the MVP release.
+
+## Outcome (2026-11-19)
+
+Steps 1 to 6 are built on `feat/auth-email`. This section records what differs from the plan above, and the decisions taken while the developer was away (steps 4 to 6 were built in one unattended session, so nothing below has been reviewed yet).
+
+### Decisions taken without review (reverse any of them by saying so)
+
+1. **The `/api/*` bridge is a Next.js route handler, not a `rewrites()` entry.** Rewrites are fixed at build time, cannot filter what they forward, and cannot decide what to do with `X-Forwarded-For`. The handler forwards only the seven account paths (audit F14 holds by construction, and a browser test checks `/api/readyz`, `/api/healthz`, `/api/api/v1/status`), only the headers the API needs, and only the response headers the browser needs.
+2. **`WEB_BEHIND_PROXY` (default `false`).** The web server cannot see the visitor's socket address, so it passes `X-Forwarded-For` on only when told that a trusted proxy in front sets it. The safe default drops it: every visitor then shares the web server's address for the per-address limits (20 codes an hour for the whole site), which fails loudly and early rather than letting anyone forge an address. Production needs both `WEB_BEHIND_PROXY=true` and `TRUSTED_PROXIES` on the API; the hosting choice (D7) decides the values.
+3. **Email addresses are ASCII only.** Non-ASCII mailboxes are rare, and accepting them means Go's and Postgres's idea of "the same address in lower case" must agree for every script, which is where account-takeover bugs hide. Revisit if international addresses matter.
+4. **Browser tests read the code from the API's log mailer**, not from the file mailer, so the tests need no shared directory with the container (file ownership differs between a distroless container and the CI runner). The file mailer still exists for tests that run the API on the host.
+5. **A missing `Origin` header is refused** on state-changing requests (browsers always send it on `POST`, `PATCH` and `DELETE`); `curl` and scripts must set it.
+6. **The mutating routes answer `400 invalid_request`, not 413, for a body over 8 KiB** (the shared reader error is not distinguished).
+7. **After sign-in and sign-out the pages navigate with `router.replace` plus `router.refresh`**, and the server re-checks the cookie on every account render, so a stale client state cannot show account data.
+
+### Differences from the plan text
+
+- The challenge column is `closed_at` (set when a code is used or superseded), not `consumed_at`.
+- `login_challenge_create` also takes the request address; both new tables are held to the schema conventions by the existing test.
+- The conformance `planned` list is empty. Every response in the sign-in tests is also validated against `core-public.yaml`.
+- `make test-integration` takes `PKGS=` to run one Go package; `make test-e2e-stack` runs the new browser tests; `make gen` also generates `core-public.d.ts`.
+
+### Known limits (accepted for 2a)
+
+- Someone who knows an address can use up its five codes an hour and so stop that person signing in for a while. This is the usual cost of per-address limits; the per-client limits keep one machine from doing it at scale. A step-up check (2c) or a captcha would narrow it.
+- Authenticated endpoints (`/v1/me`, sessions) have no rate limit of their own yet.
+- Safari over plain `http://127.0.0.1` may reject the `__Host-` cookie (audit F16); use Chromium or Firefox locally, or add local HTTPS.
+- No production mailer: the API refuses to start in production until one is chosen.
+
+### Evidence
+
+- Go: 20 planted faults, each caught by the intended test (origin, content type, CSRF token, session middleware, wrong guess, suspended user, foreign revoke, both rate limits, client address, three cookie attributes, logout, display-name rules, session listing scope, idle slide, address-bound code hash, normalisation, enumeration timing).
+- Web: 22 planted faults, each caught (allow-list, forwarded headers, `X-Forwarded-For`, `Set-Cookie`, leaked response headers, redirects, size limits, error text, CSRF header, id encoding, status check, `Retry-After`, session check, response shape, digits, cooldown, double submit, list reload, 401 handling, current-session sign-out).
+- Tests: Go unit and integration (auth package, with every response checked against the OpenAPI spec), 197 web unit tests (98% line coverage), 16 existing and 8 new browser tests (the new ones against the real web, API, Postgres and Redis).
+- Scenarios 1 to 20 are each covered; 15 and 18 to 20 by the browser tests.
