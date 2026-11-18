@@ -161,6 +161,9 @@ services:
     restart: unless-stopped
     environment:
       API_INTERNAL_URL: http://api:8081
+      # The account pages and the same-origin /api bridge talk to the PUBLIC listener only
+      # (audit F14); the internal one (readiness, status detail) is never reachable from a browser.
+      API_PUBLIC_URL: http://api:8080
       # The image runs in production mode, which defaults to "coarse". Locally
       # we want the detail; set STATUS_DETAIL=coarse in .env to see production's view.
       STATUS_DETAIL: ${STATUS_DETAIL:-full}

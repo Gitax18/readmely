@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { loadEnv } from "./env";
+import { loadApiPublicEnv, loadEnv } from "./env";
 
 const ok = { API_INTERNAL_URL: "http://api:8081" };
 
@@ -50,6 +50,41 @@ describe("loadEnv", () => {
       const message = String(e);
       expect(message).not.toContain("hunter2");
       expect(message).not.toContain("admin");
+    }
+  });
+});
+
+describe("loadApiPublicEnv", () => {
+  const good = { API_PUBLIC_URL: "http://api:8080" };
+
+  it("accepts a valid URL and does not trust forwarded headers by default", () => {
+    expect(loadApiPublicEnv(good)).toEqual({ apiPublicUrl: "http://api:8080", behindProxy: false });
+  });
+
+  it("strips trailing slashes and reads WEB_BEHIND_PROXY", () => {
+    expect(
+      loadApiPublicEnv({ API_PUBLIC_URL: "http://api:8080//", WEB_BEHIND_PROXY: "true" }),
+    ).toEqual({ apiPublicUrl: "http://api:8080", behindProxy: true });
+    expect(loadApiPublicEnv({ ...good, WEB_BEHIND_PROXY: "false" }).behindProxy).toBe(false);
+  });
+
+  it.each([
+    ["missing", {}, "API_PUBLIC_URL: is required"],
+    ["not a URL", { API_PUBLIC_URL: "nonsense" }, "API_PUBLIC_URL: must be a valid URL"],
+    ["credentials", { API_PUBLIC_URL: "http://u:p@api" }, "must not contain credentials"],
+    ["bad flag", { ...good, WEB_BEHIND_PROXY: "yes" }, "WEB_BEHIND_PROXY: must be true or false"],
+  ])("rejects %s, naming the variable only", (_name, env, message) => {
+    expect(() => loadApiPublicEnv(env)).toThrow(message);
+  });
+
+  it("never puts a value in the error", () => {
+    expect(() => loadApiPublicEnv({ API_PUBLIC_URL: "http://user:hunter2@api" })).not.toThrow(
+      /hunter2/,
+    );
+    try {
+      loadApiPublicEnv({ API_PUBLIC_URL: "http://user:hunter2@api" });
+    } catch (e) {
+      expect(String(e)).not.toContain("hunter2");
     }
   });
 });
