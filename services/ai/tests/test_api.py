@@ -243,13 +243,25 @@ async def test_access_log_has_no_query_string(client: object, caplog: pytest.Log
     import httpx
 
     assert isinstance(client, httpx.AsyncClient)
-    caplog.set_level("INFO")
+    caplog.set_level("DEBUG")
     await client.get("/healthz?token=abc123")
     records = [r for r in caplog.records if r.name == "app.access"]
     assert records
     assert all("abc123" not in str(vars(r)) for r in records)
     assert getattr(records[-1], "path", None) == "/healthz"
     assert getattr(records[-1], "status", None) == 200
+
+
+async def test_successful_liveness_probes_are_logged_at_debug(client: object, caplog: pytest.LogCaptureFixture) -> None:
+    import httpx
+
+    assert isinstance(client, httpx.AsyncClient)
+    caplog.set_level("DEBUG")
+    await client.get("/healthz")
+    await client.post("/healthz")  # 405: a failing probe stays visible
+    await client.get("/readyz")  # 401 without a token
+    levels = {(r.path, r.status): r.levelname for r in caplog.records if r.name == "app.access"}  # type: ignore[attr-defined]
+    assert levels == {("/healthz", 200): "DEBUG", ("/healthz", 405): "INFO", ("/readyz", 401): "INFO"}
 
 
 async def test_lifespan_opens_and_closes_the_database(make_app: Callable[..., FastAPI]) -> None:

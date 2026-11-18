@@ -117,6 +117,28 @@ func TestAccessLogOmitsQueryString(t *testing.T) {
 	}
 }
 
+func TestSuccessfulLivenessProbesAreLoggedAtDebug(t *testing.T) {
+	for _, tc := range []struct {
+		path   string
+		status int
+		want   string
+	}{
+		{"/healthz", http.StatusOK, "DEBUG"},
+		{"/healthz", http.StatusMethodNotAllowed, "INFO"},
+		{"/readyz", http.StatusOK, "INFO"},
+		{"/healthz/x", http.StatusOK, "INFO"},
+	} {
+		var logs bytes.Buffer
+		logger := slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+		AccessLog(logger)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(tc.status)
+		})).ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, tc.path, http.NoBody))
+		if !strings.Contains(logs.String(), `"level":"`+tc.want+`"`) {
+			t.Errorf("%s %d logged as %s, want %s", tc.path, tc.status, logs.String(), tc.want)
+		}
+	}
+}
+
 func TestAccessLogDefaultsStatusTo200(t *testing.T) {
 	var logs bytes.Buffer
 	h := AccessLog(slog.New(slog.NewJSONHandler(&logs, nil)))(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
