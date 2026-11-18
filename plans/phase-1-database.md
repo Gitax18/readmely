@@ -1,6 +1,6 @@
 # Phase 1 · Database
 
-**Status:** Approved 2026-11-18 (agreed: design the whole MVP model, build only the core tables now; **goose** migrations; **sqlc** for Go and **psycopg + Pydantic** for Python; **UUIDv7** keys).
+**Status:** Implemented 2026-11-18, awaiting sign-off (agreed: design the whole MVP model, build only the core tables now; **goose** migrations; **sqlc** for Go and **psycopg + Pydantic** for Python; **UUIDv7** keys).
 
 **Goal:** one reviewed entity model for the whole MVP, and the tables that Phases 2 to 5 need first, built with migrations you can trust: repeatable from an empty database, least-privilege access, generated type-checked Go queries, and tests that attack the parts that can go wrong (the job queue and the credit ledger).
 
@@ -137,3 +137,31 @@ Auth, GitHub, index, graph, vector, document and artifact tables (designed above
 1. Is the **anonymise-but-keep ledger** rule in §4 acceptable?
 2. Are you happy with **auth tables waiting for Phase 2**, since their shape depends on the password-or-passwordless decision (the one open item in the architecture)?
 3. Should I include the **least-privilege roles** now (my recommendation, small cost), or leave them for the deployment phase?
+
+## 10. Outcome (2026-11-18)
+
+Implemented on `feat/database` as planned (10 commits: the 7 planned, plus the migrations guide and two fixes found along the way). Five migrations, four tables (`users`, `projects`, `jobs`, `credit_ledger`) with a view and three functions, a `migrate` command and image, sqlc-generated queries, a Python model with a drift test, and seed data. Tests: 218 Go (116 plain, 102 against real Postgres), 112 Python, 84 web unit, 13 contract, 24 script and 16 browser tests; lint, `make gen-check`, `make audit`, `make verify` and all images clean; the full stack runs from a clean checkout with the services logged in as the limited roles. Every guard was planted, seen failing and reverted (about 25 planted faults).
+
+**Where it differs from the plan**
+- Migrations are in `services/core/migrations/` (Go can only embed files inside its module), not `db/migrations/`; the seed is `services/core/seed/dev.sql`, loaded by `migrate seed` (so it is embedded, tested and has the same guard as `down` and `reset`).
+- `seed` is refused unless `APP_ENV` is unset, `development` or `test`, which also refuses staging, stricter than "production".
+- **Added beyond the plan:** a composite foreign key so a job can only point at a project of its own user; a conventions test that holds every future table to the rules (primary key, `timestamptz`, trigger, delete rule, foreign-key index, constraint names); per-kind sign rules and resolution rules in the ledger (a settle or refund must answer a real reserve of the same user, never return more than was held, one resolution per reserve); `credit_reserve()` as a SQL function with a per-user lock; the shared trigger no longer moves `updated_at` on an update that changes nothing (idempotent replays rely on it); `.env.example`, compose and CI gained `APP_DB_PASSWORD` and `AI_DB_PASSWORD`.
+- Auth tables are designed (§2) and wait for Phase 2, as agreed. Your answers to §9: ledger rows are kept and anonymised on account deletion; least-privilege roles are in.
+
+**Found by testing and tooling**
+- Without the per-user lock, 18 of 50 concurrent reservations succeeded against a balance that covers 10; the test now guards that.
+- The conventions test caught a missing index for the composite foreign key before it merged.
+- Postgres runs `BEFORE` triggers before `CHECK`s, so a trigger fired ahead of the constraint that should have named the error; the trigger now leaves a missing `reservation_id` to the `CHECK`.
+- The pre-commit hook did not lint integration-tagged Go files; `make lint-go` found an unused type the hook missed. Fixed in its own commit, with a planted fault.
+- `make db-new` accepted uppercase names because `[a-z]` matches uppercase in some locales; and my first migration was dated later than the clock, so goose would have rejected every newer one. Both fixed.
+- A test cleanup left cluster-wide roles behind; fixed and checked over repeated runs (no leaked roles or databases).
+- sqlc would not link on this machine (the macOS SDK linker files use an unknown architecture tag); it is built with `CGO_ENABLED=0`, which also makes it reproducible. sqlc inferred nullable parameters from nullable columns; explicit casts fix it.
+- My own mistakes, caught by checking: a shell glob that mangled a database URL, and a stray test migration that was applied to a scratch database because a delete never ran.
+
+**Limits recorded**
+- Roles are cluster-wide in Postgres, so two environments sharing one cluster share the names `readmely_app` and `readmely_ai`; fine for now (one database per cluster).
+- Only the `jobs` table has a Python model; each later Python feature adds its own with the same drift test. The drift test reads the development database, so it needs `make up` (or `make db-up`) first, and says so when the table is missing.
+- Settle, refund and the worker loop are not built yet (Phase 5 and Phase 3); the schema enforces their rules already and tests insert them directly.
+- Backups, point-in-time recovery and partitioning are deliberately left for the deployment phase.
+
+**You need to do once after merging:** add `APP_DB_PASSWORD` and `AI_DB_PASSWORD` to your local `.env` (see `.env.example`; at least 16 characters, letters, digits, `-` and `_`; `openssl rand -hex 24` works). Without them, `make up-app` stops with a message naming the missing variable. `make up` then migrates your existing database and sets the role passwords.
