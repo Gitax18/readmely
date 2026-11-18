@@ -353,3 +353,39 @@ func TestConcurrentReplaysChargeOnce(t *testing.T) {
 		t.Fatalf("charged %d, want 40 once", 100-got)
 	}
 }
+
+// Audit F5: a ledger entry cannot point at another user's job, and deleting an account never
+// leaves an entry pointing at a job that no longer exists.
+func TestLedgerEntriesOnlyReferenceTheirOwnersJobs(t *testing.T) {
+	t.Parallel()
+	db := dbtest.New(t)
+	ctx := ctxT(t)
+	ada := mustUser(t, db, "ada@example.invalid")
+	bob := mustUser(t, db, "bob@example.invalid")
+	adaJob := mustJob(t, db, ada, nil, "job-ada-0001")
+	mustGrant(t, db, ada, 100, "grant-ada-0001")
+	mustGrant(t, db, bob, 100, "grant-bob-0001")
+
+	_, err := reserve(ctx, db, bob, 10, &adaJob, "reserve-bob-01")
+	wantRejected(t, err, "23503", "credit_ledger_job_id_user_id_fkey")
+	_, err = db.Pool.Exec(ctx,
+		`INSERT INTO credit_ledger (user_id, delta, kind, job_id, idempotency_key) VALUES ($1, 5, 'grant', $2, 'grant-bob-0002')`, bob, adaJob)
+	wantRejected(t, err, "23503", "credit_ledger_job_id_user_id_fkey")
+	if got := balance(t, db, bob); got != 100 {
+		t.Fatalf("bob's balance moved to %d", got)
+	}
+
+	// The owner may, and deleting the owner (which deletes the job) leaves no dangling reference.
+	if _, err := reserve(ctx, db, ada, 10, &adaJob, "reserve-ada-01"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Pool.Exec(ctx, `DELETE FROM users WHERE id = $1`, ada); err != nil {
+		t.Fatal(err)
+	}
+	if n := count(t, db, `SELECT count(*) FROM credit_ledger l WHERE l.job_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j.id = l.job_id)`); n != 0 {
+		t.Fatalf("%d ledger entries point at a deleted job", n)
+	}
+	if n := count(t, db, `SELECT count(*) FROM credit_ledger WHERE user_id IS NULL AND job_id IS NULL AND delta IN (100, -10)`); n != 2 {
+		t.Fatalf("ada's entries should be kept and anonymised, found %d", n)
+	}
+}
