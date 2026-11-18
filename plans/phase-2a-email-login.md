@@ -1,6 +1,6 @@
 # Phase 2a · Sessions and passwordless email login
 
-**Status:** Approved (2026-11-18) · **Last updated:** 2026-11-18
+**Status:** Approved (2026-11-18), amended after the 2026-11-18 audit (F13–F16, marked **[audit]**; awaiting review) · **Last updated:** 2026-11-18
 
 Phase 2 is split into three slices, each with its own plan, branch and sign-off: **2a** (this one) sessions and email-code login with account basics, **2b** Google and GitHub login with safe account linking, **2c** TOTP, recovery codes, account deletion and the settings UI.
 
@@ -17,7 +17,7 @@ Google and GitHub login (2b). TOTP, recovery codes, step-up for sensitive action
 ## Flow
 
 1. The login page asks for an email and calls `POST /v1/auth/email/start`.
-2. The API normalises the email, checks the rate limits, stores a **login challenge** (hashed code, expiry, attempt counter) and sends the code through the `Mailer`. It answers `202` **with the same body and similar timing whether or not the address has an account**, so the form cannot be used to discover who is registered.
+2. The API normalises the email, checks the rate limits, stores a **login challenge** (hashed code, expiry, attempt counter) and hands the code to a **bounded send queue** drained by the `Mailer` **[audit F15]**. It answers `202` **with the same body and similar timing whether or not the address has an account**, so the form cannot be used to discover who is registered.
 3. The page asks for the 6-digit code and calls `POST /v1/auth/email/verify` with the email and code.
 4. On success the API consumes the challenge (single use), creates the user if this is a first sign-in (marking `email_verified_at`), creates a **session**, and sets the cookie. A suspended account gets the same generic failure as a wrong code and no session.
 5. Later requests carry the cookie. State-changing requests must also send the CSRF token (§Security). `POST /v1/auth/logout` deletes the session.
@@ -56,17 +56,23 @@ Mapped to threats T6, T7 and T10 in [security.md](security.md).
 
 - **Code guessing:** 6 digits from a CSPRNG, 10 minute life, 5 attempts per challenge, single use, a new request invalidates the old code, plus a per-IP limit on verify attempts. At 5 tries the chance of guessing a live code is 5 in 1,000,000.
 - **Account enumeration:** `start` answers identically and in similar time for known and unknown addresses (the email is sent in the background, never awaited). `verify` has one failure message.
-- **Mail bombing and cost abuse:** Redis limits: 1 code per address per 60 seconds, 5 per address per hour, 20 per IP per hour; verify 30 per IP per 15 minutes. Limits apply before any email is sent. The client IP comes from `X-Forwarded-For` only when the request arrives from a configured trusted proxy, otherwise from the socket.
+- **Mail bombing and cost abuse:** Redis limits: 1 code per address per 60 seconds, 5 per address per hour, 20 per IP per hour; verify 30 per IP per 15 minutes. Limits apply before any email is sent.
+- **Client address behind the web proxy [audit F13]:** with the same-origin rewrite, every request reaches the API from the web server, so the socket address alone would make "20 per IP" a limit for the whole site, letting one person lock everyone out. The API therefore reads `X-Forwarded-For`, but only when the connection comes from an address in `TRUSTED_PROXIES` (the web server), and takes the **right-most** address that is not itself a trusted proxy; the left-most entries are whatever the client sent and are never used. Requests from anywhere else use the socket address, and the header is ignored. The web server's rewrite passes the browser's address on. Tests: a spoofed header from an untrusted caller is ignored; a client-supplied prefix behind the proxy is ignored; two clients behind the proxy are limited separately; an empty or malformed header falls back to the socket address.
 - **Session theft and fixation:** 256-bit random token in `__Host-rm_session` (`Secure`, `HttpOnly`, `SameSite=Lax`, `Path=/`, no `Domain`); only its hash is stored; a new session id is minted on every login; logout and revoke delete the row, so they take effect on the next request; idle and absolute expiry are enforced in the query, not just the cookie.
 - **CSRF (T7):** `SameSite=Lax`, an `Origin` check on every state-changing request against an allow-list (`WEB_ORIGIN`), `application/json` required, and a per-session CSRF token (HMAC of the session id) returned by `GET /v1/me` and sent as `X-CSRF-Token`. The web app calls the API through same-origin `/api/*` rewrites, so no CORS is enabled at all.
-- **Secrets and logs:** the code is never logged in production. The log mailer and the file mailer refuse to start when `APP_ENV=production`, and startup fails clearly if no production mailer is configured. Emails, codes and tokens are redacted from request logs.
+- **Sending email [audit F15]:** `start` puts the message on a bounded in-memory queue (a few senders, capacity of a few hundred) and returns at once. A full queue drops the message, logs it without the address or code, and counts it; the response is unchanged, so overload reveals nothing. On shutdown the queue is drained within the shutdown timeout.
+- **Secrets and logs:** the code is never logged in production. The log mailer and the file mailer run only when `APP_ENV=development` (an allow-list, as for `migrate` after audit F1), and startup fails clearly if no production mailer is configured. Emails, codes and tokens are redacted from request logs.
 - **Open redirects and host header:** there is no `redirect` parameter; the post-login destination is a fixed route. Links in emails (none in 2a, the email carries only the code) would be built from configuration, never from request headers.
 - **Email handling:** trimmed, lower-cased, ≤ 254 characters, no control characters, one `@`. Sub-address tricks (`+tag`) are kept as given, never merged.
 - **Secrets configuration:** `AUTH_CODE_KEY` (≥ 32 bytes, for code HMACs and CSRF tokens) is required and validated like the existing secrets; `.env.example`, compose and CI get a placeholder.
 
 ## Web
 
-`/login` (email step, then code step, with resend after the cooldown and clear errors), an authenticated `/account` page showing the user, an inline display-name editor, the session list with a revoke button, and sign out. Unauthenticated visits to `/account` redirect to `/login`; the check happens on the server by calling `/v1/me`, never by trusting a client flag. The CSP from Phase 0 is unchanged. Accessible form labels, focus handling, and error text read by screen readers.
+`/login` (email step, then code step, with resend after the cooldown and clear errors), an authenticated `/account` page showing the user, an inline display-name editor, the session list with a revoke button, and sign out. Unauthenticated visits to `/account` redirect to `/login`; the check happens on the server by calling `/v1/me`, never by trusting a client flag.
+
+**The `/api/*` rewrite [audit F14]** targets the API's **public** listener only, configured as its own variable (`API_PUBLIC_URL`), never `API_INTERNAL_URL`: the internal listener serves `/readyz` and the status detail and must stay unreachable from the browser. A browser test checks that `/api/readyz`, `/api/api/v1/status` and `/api/healthz` on the internal port are not reachable through the web app.
+
+**Local development and `__Host-` cookies [audit F16]:** the cookie must be `Secure`. Chromium and Firefox treat `http://127.0.0.1` as a secure context and accept it; Safari has not always done so, so local sign-in may silently fail there. The browser tests run on Chromium; the README says to use Chromium or Firefox locally, and HTTPS for local development can be added later if Safari matters. The CSP from Phase 0 is unchanged. Accessible form labels, focus handling, and error text read by screen readers.
 
 ## Scenarios (each becomes a test)
 
@@ -86,6 +92,10 @@ Mapped to threats T6, T7 and T10 in [security.md](security.md).
 14. Cleanup removes expired challenges and sessions and nothing else.
 15. Browser: full login, reload keeps the session, sign out, revoke another session, redirect when signed out.
 16. Display name rules (length, control characters) and that the response never contains token or hash fields.
+17. **[audit F13]** Behind the trusted proxy, two client addresses are limited separately; a forged `X-Forwarded-For` from an untrusted caller, or a forged prefix behind the proxy, does not change the address used.
+18. **[audit F14]** Internal listener paths are not reachable through the web app's `/api/*` rewrite.
+19. **[audit F15]** A full send queue still answers `202` with the same body, logs no address or code, and the queue drains on shutdown.
+20. **[audit F16]** The cookie is accepted by Chromium over `http://127.0.0.1` in the browser tests.
 
 ## Test plan
 
@@ -97,9 +107,9 @@ Each step is one reviewed commit (or a few) on branch `feat/auth-email`.
 
 1. `feat(contracts)`: the endpoints and schemas, regenerated types, conformance stubs.
 2. `feat(db)`: migration for `login_challenges` and `sessions`, sqlc queries, schema tests.
-3. `feat(core)`: `Mailer` (log, file), the Redis limiter, config (`AUTH_CODE_KEY`, `WEB_ORIGIN`, trusted proxies, `MAILER`), with tests.
+3. `feat(core)`: `Mailer` (log, file) with the bounded send queue, the Redis limiter, client-address resolution behind trusted proxies, config (`AUTH_CODE_KEY`, `WEB_ORIGIN`, `TRUSTED_PROXIES`, `MAILER`), with tests.
 4. `feat(core)`: the auth service and handlers: start, verify, logout, me, sessions, CSRF and origin middleware, cleanup timer.
-5. `feat(web)`: `/login`, `/account`, the same-origin API rewrite, server-side session check.
+5. `feat(web)`: `/login`, `/account`, the same-origin API rewrite to the public listener (`API_PUBLIC_URL`) forwarding the client address, server-side session check.
 6. `test` and `docs(plans)`: Playwright flow, security fixtures, docs, plan outcome.
 
 ## Decisions to confirm when approving
