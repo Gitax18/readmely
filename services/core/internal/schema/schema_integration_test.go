@@ -314,6 +314,64 @@ func TestServiceRolePrivileges(t *testing.T) {
 
 // TestConventions holds every table to the rules in plans/phase-1-database.md, so a table added
 // later by someone in a hurry cannot quietly break them.
+// Audit F4: the service roles are cut off when a statement, a lock wait or an open transaction
+// runs too long. Settings are per database and apply at login.
+func TestServiceRolesAreTimeBounded(t *testing.T) {
+	t.Parallel()
+	db := dbtest.New(t)
+	want := map[string]string{"statement_timeout": "30s", "lock_timeout": "10s", "idle_in_transaction_session_timeout": "60s"}
+	for _, role := range []string{"readmely_app", "readmely_ai"} {
+		rows, err := db.Pool.Query(ctxT(t), `
+			SELECT split_part(c, '=', 1), split_part(c, '=', 2)
+			FROM pg_db_role_setting s
+			JOIN pg_roles r ON r.oid = s.setrole
+			JOIN pg_database d ON d.oid = s.setdatabase
+			CROSS JOIN unnest(s.setconfig) AS c
+			WHERE r.rolname = $1 AND d.datname = current_database()`, role)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := map[string]string{}
+		for rows.Next() {
+			var k, v string
+			if err := rows.Scan(&k, &v); err != nil {
+				t.Fatal(err)
+			}
+			got[k] = v
+		}
+		rows.Close()
+		for k, v := range want {
+			if got[k] != v {
+				t.Errorf("%s: %s = %q, want %q", role, k, got[k], v)
+			}
+		}
+	}
+}
+
+// Audit F12: a function added by a later migration is private until granted.
+func TestNewFunctionsArePrivateByDefault(t *testing.T) {
+	t.Parallel()
+	db := dbtest.New(t)
+	ctx := ctxT(t)
+	if _, err := db.Pool.Exec(ctx, `CREATE FUNCTION audit_probe() RETURNS int LANGUAGE sql AS 'SELECT 1'`); err != nil {
+		t.Fatal(err)
+	}
+	for _, role := range []string{"readmely_app", "readmely_ai"} {
+		var can bool
+		if err := db.Pool.QueryRow(ctx, `SELECT has_function_privilege($1, 'audit_probe()', 'EXECUTE')`, role).Scan(&can); err != nil {
+			t.Fatal(err)
+		}
+		if can {
+			t.Errorf("%s can execute a function nobody granted it", role)
+		}
+	}
+	// The one function that is granted on purpose still is.
+	var can bool
+	if err := db.Pool.QueryRow(ctx, `SELECT has_function_privilege('readmely_app', 'credit_reserve(uuid,bigint,uuid,text)', 'EXECUTE')`).Scan(&can); err != nil || !can {
+		t.Fatalf("readmely_app lost EXECUTE on credit_reserve (err %v)", err)
+	}
+}
+
 func TestConventions(t *testing.T) {
 	t.Parallel()
 	db := dbtest.New(t)
