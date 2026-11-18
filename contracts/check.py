@@ -89,7 +89,8 @@ def check_examples(name: str, doc: Doc) -> list[str]:
     problems: list[str] = []
     for path, item in doc.get("paths", {}).items():
         for method, op in item.items():
-            for code, response in (op.get("responses") or {}).items():
+            for code, raw_response in (op.get("responses") or {}).items():
+                response = deref(raw_response, doc)  # shared responses live in components.responses
                 for ctype, media in (response.get("content") or {}).items():
                     schema = deref(media.get("schema", {}), doc)
                     for label, value in examples_of(media):
