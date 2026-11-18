@@ -19,7 +19,7 @@ Every feature is built human-in-the-loop. Nothing is implemented without an appr
 | [security.md](security.md) | Approved |
 | [phase-0-foundations.md](phase-0-foundations.md) | Done · Steps 1–6 |
 | [phase-1-database.md](phase-1-database.md) | Done |
-| [phase-2a-email-login.md](phase-2a-email-login.md) | Draft |
+| [phase-2a-email-login.md](phase-2a-email-login.md) | Approved |
 | [audit-2026-11-18.md](audit-2026-11-18.md) | Approved · fix-now items on `fix/audit-2026-11-18` |
 | [audit-2026-11-17.md](audit-2026-11-17.md) | Done · fixes merged (fix-audit-items.md) |
 
