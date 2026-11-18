@@ -27,6 +27,10 @@ $$;
 CREATE FUNCTION set_updated_at() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
+    -- An update that changes nothing (an idempotent replay) is not a modification.
+    IF NEW IS NOT DISTINCT FROM OLD THEN
+        RETURN NEW;
+    END IF;
     NEW.updated_at = clock_timestamp();
     RETURN NEW;
 END

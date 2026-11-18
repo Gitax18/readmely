@@ -119,14 +119,15 @@ contracts-check: ## Validate the OpenAPI specs in contracts/ (valid, shared sche
 	@uv run --frozen --project $(AI_DIR) pytest contracts/tests -q -o addopts='' -p no:cacheprovider -p no:asyncio
 
 # Directories that hold only generated code. Never edit them by hand.
-GEN_DIRS := services/core/internal/contract services/ai/app/contract apps/web/src/contract
+GEN_DIRS := services/core/internal/contract services/core/internal/db/store services/ai/app/contract apps/web/src/contract
 
-gen: ## Regenerate the Go, Python and TypeScript types and test examples from contracts/ (output is committed)
+gen: ## Regenerate the API types (contracts/) and the Go database queries (migrations + SQL); output is committed
 	@for pair in core-public:corepublic core-internal:coreinternal ai:ai; do \
 		spec=$${pair%%:*}; pkg=$${pair##*:}; \
 		mkdir -p $(GO_DIR)/internal/contract/$$pkg; \
 		(cd $(GO_DIR) && go tool oapi-codegen -config ../../contracts/gen/$$spec.oapi-codegen.yaml ../../contracts/$$spec.yaml) || exit 1; \
 	done
+	@cd $(GO_DIR) && CGO_ENABLED=0 go tool sqlc generate
 	@mkdir -p $(AI_DIR)/app/contract && touch $(AI_DIR)/app/contract/__init__.py
 	@PYTHONWARNINGS='ignore:Black/isort will become optional:FutureWarning' uv run --frozen --project $(AI_DIR) datamodel-codegen --input contracts/ai.yaml --input-file-type openapi \
 		--output $(AI_DIR)/app/contract/models.py --output-model-type pydantic_v2.BaseModel \

@@ -143,6 +143,19 @@ func TestUpdatedAtMovesAndCreatedAtDoesNot(t *testing.T) {
 	if !updated1.After(updated0) {
 		t.Fatalf("updated_at did not move: %v then %v", updated0, updated1)
 	}
+
+	// An update that changes nothing is not a modification (an idempotent replay relies on this).
+	time.Sleep(20 * time.Millisecond)
+	if _, err := db.Pool.Exec(ctx, `UPDATE users SET display_name = 'Ada' WHERE id = $1`, id); err != nil {
+		t.Fatal(err)
+	}
+	var updated2 time.Time
+	if err := db.Pool.QueryRow(ctx, `SELECT updated_at FROM users WHERE id = $1`, id).Scan(&updated2); err != nil {
+		t.Fatal(err)
+	}
+	if !updated2.Equal(updated1) {
+		t.Fatalf("a no-op update moved updated_at: %v then %v", updated1, updated2)
+	}
 }
 
 func TestProjects(t *testing.T) {

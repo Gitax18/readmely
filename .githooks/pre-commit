@@ -43,7 +43,7 @@ if [ -n "$web_files" ]; then
 fi
 
 # Contracts and generated code
-if [ -n "$(pick '^(contracts/|services/core/internal/contract/|services/ai/app/contract/|apps/web/src/contract/)')" ]; then
+if [ -n "$(pick '^(contracts/|services/core/migrations/|services/core/sqlc.yaml|services/core/internal/db/|services/core/internal/contract/|services/ai/app/contract/|apps/web/src/contract/)')" ]; then
 	step "contracts-check and gen-check"
 	make --no-print-directory contracts-check gen-check || fail=1
 fi
