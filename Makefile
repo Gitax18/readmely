@@ -35,10 +35,19 @@ test-scripts: ## Test the helper scripts in scripts/
 	@uv run --frozen --project $(AI_DIR) pytest scripts/tests -q -o addopts='' -p no:cacheprovider -p no:asyncio
 
 verify-env: env-check ## Check that credentials in the env file only use URL-safe characters
-	@set -a; . $(ENV_FILE); set +a; bad=""; \
+	@set -a; . $(ENV_FILE); set +a; bad=""; cr=$$(printf '\r'); \
 	for v in $(URL_SAFE_VARS); do \
 		eval "val=\$$$$v"; \
-		case "$$val" in *[!A-Za-z0-9_-]*) bad="$$bad $$v";; esac; \
+		case "$$val" in *[!A-Za-z0-9_-]*) \
+			case "$$val" in \
+				*"$$cr"*) why="a Windows line ending (CR): save the file with LF line endings";; \
+				*[[:space:]]*) why="a space or tab";; \
+				*[\"\']*) why="a quote character inside the value";; \
+				*[+/=]*) why="+, / or =, typical of base64: generate with openssl rand -hex instead";; \
+				*) why="another character that is not a letter, digit, - or _";; \
+			esac; \
+			echo "     $$v contains $$why"; bad="$$bad $$v";; \
+		esac; \
 	done; \
 	if [ -n "$$bad" ]; then echo "FAIL unsafe characters in:$$bad (use only letters, digits, - and _)"; exit 1; \
 	else echo "ok   credentials use URL-safe characters"; fi
