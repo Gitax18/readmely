@@ -42,6 +42,229 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /v1/auth/email/start:
+    post:
+      operationId: startEmailLogin
+      summary: Send a one-time sign-in code to an email address
+      description: >-
+        Answers 202 in the same way and in similar time whether or not the address has an account, so the
+        form cannot be used to find out who is registered. The code is valid for 10 minutes and 5 attempts.
+        A new request replaces any earlier unused code for the same address.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartEmailLoginRequest'
+            example:
+              email: ada@example.com
+      responses:
+        '202':
+          description: Accepted. If the address can receive a code, one is on its way.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Accepted'
+              example:
+                status: accepted
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        default:
+          $ref: '#/components/responses/UnexpectedError'
+  /v1/auth/email/verify:
+    post:
+      operationId: verifyEmailLogin
+      summary: Exchange the emailed code for a session
+      description: >-
+        Creates the account on a first sign-in. Sets the session cookie. Every failure (wrong, expired,
+        already used or superseded code, unknown address, suspended account) is the same 400 invalid_code.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyEmailLoginRequest'
+            example:
+              email: ada@example.com
+              code: '013842'
+      responses:
+        '200':
+          description: Signed in.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Set-Cookie:
+              $ref: '#/components/headers/SessionCookie'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+              example:
+                user:
+                  id: 01900000-0000-7000-8000-000000000001
+                  email: ada@example.com
+                  display_name: Ada Lovelace
+                  created_at: '2026-11-18T09:30:00Z'
+                csrf_token: 4f7c1e9a0b3d5c6e8f2a4b6d8e0c1a3f5b7d9e1c3a5f7b9d1e3c5a7f9b1d3e5c
+        '400':
+          $ref: '#/components/responses/InvalidCode'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        default:
+          $ref: '#/components/responses/UnexpectedError'
+  /v1/auth/logout:
+    post:
+      operationId: logout
+      summary: End the current session
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '204':
+          description: Signed out. The session is deleted and the cookie cleared.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Set-Cookie:
+              $ref: '#/components/headers/SessionCookie'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/UnexpectedError'
+  /v1/me:
+    get:
+      operationId: getMe
+      summary: The signed-in user, and the CSRF token for this session
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: The current user.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+              example:
+                user:
+                  id: 01900000-0000-7000-8000-000000000001
+                  email: ada@example.com
+                  display_name: Ada Lovelace
+                  created_at: '2026-11-18T09:30:00Z'
+                csrf_token: 4f7c1e9a0b3d5c6e8f2a4b6d8e0c1a3f5b7d9e1c3a5f7b9d1e3c5a7f9b1d3e5c
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        default:
+          $ref: '#/components/responses/UnexpectedError'
+    patch:
+      operationId: updateMe
+      summary: Change the display name
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMeRequest'
+            example:
+              display_name: Ada Lovelace
+      responses:
+        '200':
+          description: The updated user.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+              example:
+                id: 01900000-0000-7000-8000-000000000001
+                email: ada@example.com
+                display_name: Ada Lovelace
+                created_at: '2026-11-18T09:30:00Z'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/UnexpectedError'
+  /v1/me/sessions:
+    get:
+      operationId: listSessions
+      summary: The signed-in user's active sessions
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Active sessions, newest first.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionList'
+              example:
+                sessions:
+                  - id: 01900000-0000-7000-8000-000000000401
+                    created_at: '2026-11-18T09:30:00Z'
+                    last_seen_at: '2026-11-18T10:02:11Z'
+                    device: Safari on macOS
+                    current: true
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        default:
+          $ref: '#/components/responses/UnexpectedError'
+  /v1/me/sessions/{id}:
+    delete:
+      operationId: revokeSession
+      summary: End one of the signed-in user's sessions
+      description: A session that belongs to someone else is indistinguishable from one that does not exist (404).
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '204':
+          description: The session is gone.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/UnexpectedError'
+
 components:
   headers:
     RequestId:
@@ -50,6 +273,13 @@ components:
       schema:
         type: string
         pattern: '^[A-Za-z0-9._-]{8,64}$'
+    SessionCookie:
+      description: >-
+        The session cookie: set on sign-in, cleared (Max-Age=0) on sign-out.
+        Always __Host-rm_session=...; Path=/; Secure; HttpOnly; SameSite=Lax.
+      required: true
+      schema:
+        type: string
   schemas:
     Error:
       type: object
@@ -99,3 +329,209 @@ components:
           enum: [ready, unavailable]
         checks:
           $ref: '#/components/schemas/CheckMap'
+    Accepted:
+      type: object
+      required: [status]
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          enum: [accepted]
+    StartEmailLoginRequest:
+      type: object
+      required: [email]
+      additionalProperties: false
+      properties:
+        email:
+          type: string
+          minLength: 3
+          maxLength: 254
+          example: ada@example.com
+    VerifyEmailLoginRequest:
+      type: object
+      required: [email, code]
+      additionalProperties: false
+      properties:
+        email:
+          type: string
+          minLength: 3
+          maxLength: 254
+        code:
+          type: string
+          pattern: '^[0-9]{6}$'
+    UpdateMeRequest:
+      type: object
+      required: [display_name]
+      additionalProperties: false
+      properties:
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 80
+          description: No control characters (enforced by the server).
+    User:
+      type: object
+      required: [id, email, display_name, created_at]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+        display_name:
+          type: string
+          description: Empty until the user sets one.
+        created_at:
+          type: string
+          format: date-time
+    Me:
+      type: object
+      required: [user, csrf_token]
+      additionalProperties: false
+      properties:
+        user:
+          $ref: '#/components/schemas/User'
+        csrf_token:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+    Session:
+      type: object
+      required: [id, created_at, last_seen_at, device, current]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: A handle for revoking this session. It is not the cookie value.
+        created_at:
+          type: string
+          format: date-time
+        last_seen_at:
+          type: string
+          format: date-time
+        device:
+          type: string
+          maxLength: 100
+          description: A short label made from the user agent, such as "Safari on macOS". Empty if unknown.
+        current:
+          type: boolean
+    SessionList:
+      type: object
+      required: [sessions]
+      additionalProperties: false
+      properties:
+        sessions:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/Session'
+
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: __Host-rm_session
+      description: >-
+        Opaque 256-bit token. Set with Secure, HttpOnly, SameSite=Lax, Path=/ and no Domain. Only its hash is stored.
+  parameters:
+    CsrfToken:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      description: The csrf_token from GET /v1/me, bound to the current session. Required on every state-changing request that has a session.
+      schema:
+        type: string
+        pattern: '^[0-9a-f]{64}$'
+  responses:
+    BadRequest:
+      description: The request is malformed or breaks a rule (invalid_request).
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: invalid_request
+            request_id: 6P5E3ETHKJKOTOXXMXCEJGDW6I
+    InvalidCode:
+      description: The code is wrong, expired, used, superseded, or the account cannot sign in (invalid_code). One answer for all of them.
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: invalid_code
+            request_id: 6P5E3ETHKJKOTOXXMXCEJGDW6I
+    Unauthenticated:
+      description: No valid session (unauthenticated).
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: unauthenticated
+            request_id: 6P5E3ETHKJKOTOXXMXCEJGDW6I
+    Forbidden:
+      description: Missing or wrong CSRF token, foreign Origin, or a body that is not JSON (forbidden).
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: forbidden
+            request_id: 6P5E3ETHKJKOTOXXMXCEJGDW6I
+    NotFound:
+      description: No such resource for this user (not_found).
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: not_found
+            request_id: 6P5E3ETHKJKOTOXXMXCEJGDW6I
+    RateLimited:
+      description: Too many requests (rate_limited). Wait Retry-After seconds.
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestId'
+        Retry-After:
+          required: true
+          description: Seconds until the request may be tried again.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 86400
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: rate_limited
+            request_id: 6P5E3ETHKJKOTOXXMXCEJGDW6I
+    UnexpectedError:
+      description: Any other error, such as a method that is not allowed or an unexpected failure.
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: internal_error
+            request_id: 6P5E3ETHKJKOTOXXMXCEJGDW6I

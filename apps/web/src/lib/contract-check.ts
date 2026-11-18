@@ -1,4 +1,6 @@
 import type { components } from "@/contract/core-internal";
+import type { components as publicComponents } from "@/contract/core-public";
+import type { Me, Session, User } from "./account-schema";
 import type { Report } from "./status-schema";
 
 /**
@@ -15,3 +17,11 @@ export type SameShape<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false)
 export type GeneratedReport = components["schemas"]["StatusReport"];
 
 export const reportMatchesContract: SameShape<Report, GeneratedReport> = true;
+
+// The account endpoints (contracts/core-public.yaml): the Zod schemas the browser and the
+// server pages use must accept exactly what the contract describes.
+
+export const userMatchesContract: SameShape<User, publicComponents["schemas"]["User"]> = true;
+export const meMatchesContract: SameShape<Me, publicComponents["schemas"]["Me"]> = true;
+export const sessionMatchesContract: SameShape<Session, publicComponents["schemas"]["Session"]> =
+  true;

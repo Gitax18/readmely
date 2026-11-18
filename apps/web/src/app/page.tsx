@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { StatusPanel } from "@/components/status-panel";
 import { loadEnv } from "@/lib/env";
 import { fetchStatus } from "@/lib/status-client";
@@ -16,6 +17,11 @@ export default async function Home() {
       <header>
         <h1 className="text-2xl font-semibold">Readmely status</h1>
         <p className="text-muted-foreground text-sm">Reload the page to refresh.</p>
+        <p className="mt-2 text-sm">
+          <Link href="/account" className="underline">
+            Sign in or open your account
+          </Link>
+        </p>
       </header>
       <StatusPanel view={view} />
     </main>

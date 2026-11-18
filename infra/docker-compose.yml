@@ -89,6 +89,10 @@ services:
       # The API logs in as a limited role that can change data but never the schema.
       DATABASE_URL: postgres://readmely_app:${APP_DB_PASSWORD:?APP_DB_PASSWORD is not set in .env}@postgres:5432/${POSTGRES_DB:?}?sslmode=disable
       REDIS_URL: redis://:${REDIS_PASSWORD:?}@redis:6379/0
+      # Sign-in (Phase 2a). Locally, codes are written to the API's log (MAILER=log).
+      AUTH_CODE_KEY: ${AUTH_CODE_KEY:?AUTH_CODE_KEY is not set in .env (openssl rand -hex 32)}
+      WEB_ORIGIN: http://127.0.0.1:${WEB_PORT:-3000}
+      MAILER: log
     depends_on:
       postgres:
         condition: service_healthy
@@ -157,6 +161,9 @@ services:
     restart: unless-stopped
     environment:
       API_INTERNAL_URL: http://api:8081
+      # The account pages and the same-origin /api bridge talk to the PUBLIC listener only
+      # (audit F14); the internal one (readiness, status detail) is never reachable from a browser.
+      API_PUBLIC_URL: http://api:8080
       # The image runs in production mode, which defaults to "coarse". Locally
       # we want the detail; set STATUS_DETAIL=coarse in .env to see production's view.
       STATUS_DETAIL: ${STATUS_DETAIL:-full}

@@ -5,6 +5,7 @@
 package store
 
 import (
+	"net/netip"
 	"time"
 
 	"github.com/google/uuid"
@@ -46,6 +47,18 @@ type Job struct {
 	FinishedAt     *time.Time
 }
 
+type LoginChallenge struct {
+	ID          uuid.UUID
+	Email       string
+	CodeHash    []byte
+	Attempts    int32
+	MaxAttempts int32
+	ExpiresAt   time.Time
+	ClosedAt    *time.Time
+	RequestedIp *netip.Addr
+	CreatedAt   time.Time
+}
+
 type Project struct {
 	ID        uuid.UUID
 	UserID    uuid.UUID
@@ -53,6 +66,18 @@ type Project struct {
 	Status    string
 	CreatedAt time.Time
 	UpdatedAt time.Time
+}
+
+type Session struct {
+	ID            uuid.UUID
+	UserID        uuid.UUID
+	TokenHash     []byte
+	CreatedAt     time.Time
+	LastSeenAt    time.Time
+	ExpiresAt     time.Time
+	IdleExpiresAt time.Time
+	UserAgent     string
+	Ip            *netip.Addr
 }
 
 type User struct {

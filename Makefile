@@ -16,7 +16,7 @@ LOCAL_ENV = set -a; . $(ENV_FILE); set +a; \
 	export MIGRATE_DATABASE_URL="$$DATABASE_URL";
 
 .DEFAULT_GOAL := help
-.PHONY: help db-up db-down db-reset db-status db-seed db-new hooks check secrets test-scripts lint-go lint-ai lint-web lint-tools test-go test-ai test-web audit-go audit-ai audit-web env-check up up-app down reset ps logs verify verify-env fmt lint test contracts-check gen gen-check test-e2e test-integration audit run-api run-ai run-web docker-build
+.PHONY: help db-up db-down db-reset db-status db-seed db-new hooks check secrets test-scripts lint-go lint-ai lint-web lint-tools test-go test-ai test-web audit-go audit-ai audit-web env-check up up-app down reset ps logs verify verify-env fmt lint test contracts-check gen gen-check test-e2e test-e2e-stack test-integration audit run-api run-ai run-web docker-build
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  %-18s %s\n", $$1, $$2}'
@@ -26,7 +26,7 @@ env-check:
 
 # Credentials are pasted into connection URLs, so characters such as @ : / ? # % break
 # them in confusing ways (audit A2). Prints variable names only, never values.
-URL_SAFE_VARS := POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB REDIS_PASSWORD RUSTFS_ACCESS_KEY RUSTFS_SECRET_KEY AI_SERVICE_TOKEN APP_DB_PASSWORD AI_DB_PASSWORD
+URL_SAFE_VARS := POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB REDIS_PASSWORD RUSTFS_ACCESS_KEY RUSTFS_SECRET_KEY AI_SERVICE_TOKEN APP_DB_PASSWORD AI_DB_PASSWORD AUTH_CODE_KEY
 
 hooks: ## Enable the git hooks in .githooks/ (commit message check, staged-file checks)
 	@git config core.hooksPath .githooks && echo "ok   git hooks enabled (core.hooksPath=.githooks)"
@@ -35,10 +35,19 @@ test-scripts: ## Test the helper scripts in scripts/
 	@uv run --frozen --project $(AI_DIR) pytest scripts/tests -q -o addopts='' -p no:cacheprovider -p no:asyncio
 
 verify-env: env-check ## Check that credentials in the env file only use URL-safe characters
-	@set -a; . $(ENV_FILE); set +a; bad=""; \
+	@set -a; . $(ENV_FILE); set +a; bad=""; cr=$$(printf '\r'); \
 	for v in $(URL_SAFE_VARS); do \
 		eval "val=\$$$$v"; \
-		case "$$val" in *[!A-Za-z0-9_-]*) bad="$$bad $$v";; esac; \
+		case "$$val" in *[!A-Za-z0-9_-]*) \
+			case "$$val" in \
+				*"$$cr"*) why="a Windows line ending (CR): save the file with LF line endings";; \
+				*[[:space:]]*) why="a space or tab";; \
+				*[\"\']*) why="a quote character inside the value";; \
+				*[+/=]*) why="+, / or =, typical of base64: generate with openssl rand -hex instead";; \
+				*) why="another character that is not a letter, digit, - or _";; \
+			esac; \
+			echo "     $$v contains $$why"; bad="$$bad $$v";; \
+		esac; \
 	done; \
 	if [ -n "$$bad" ]; then echo "FAIL unsafe characters in:$$bad (use only letters, digits, - and _)"; exit 1; \
 	else echo "ok   credentials use URL-safe characters"; fi
@@ -135,6 +144,7 @@ gen: ## Regenerate the API types (contracts/) and the Go database queries (migra
 		--use-union-operator --enum-field-as-literal all --disable-timestamp --field-constraints --use-schema-description
 	@mkdir -p $(WEB_DIR)/src/contract
 	@cd $(WEB_DIR) && pnpm install --frozen-lockfile --silent && pnpm exec openapi-typescript ../../contracts/core-internal.yaml -o src/contract/core-internal.d.ts > /dev/null
+	@cd $(WEB_DIR) && pnpm exec openapi-typescript ../../contracts/core-public.yaml -o src/contract/core-public.d.ts > /dev/null
 	@uv run --frozen --project $(AI_DIR) python contracts/extract_examples.py
 	@echo "ok   generated types are up to date"
 
@@ -152,9 +162,15 @@ gen-check: ## Fail if the generated code is out of date with contracts/
 test-e2e: ## Run the web browser tests against a production build and a fake API (first time: cd apps/web && pnpm exec playwright install chromium)
 	@cd $(WEB_DIR) && pnpm install --frozen-lockfile --silent && pnpm run test:e2e
 
+test-e2e-stack: env-check ## Browser tests of sign-in against the running stack (first: make up-app; chromium: cd apps/web && pnpm exec playwright install chromium)
+	@$(LOCAL_ENV) cd $(WEB_DIR) && pnpm install --frozen-lockfile --silent && pnpm run test:e2e:stack
+
+# Narrow the Go run while working: make test-integration PKGS=./internal/auth/... (Python is skipped then).
+PKGS ?= ./...
+
 test-integration: env-check ## Run the integration tests against the running local stack
-	@$(LOCAL_ENV) cd $(GO_DIR) && go test -race -count=1 -tags=integration ./...
-	@$(LOCAL_ENV) cd $(AI_DIR) && uv run --frozen pytest -q -m integration -o addopts=''
+	@$(LOCAL_ENV) cd $(GO_DIR) && go test -race -count=1 -tags=integration $(PKGS)
+	@if [ "$(PKGS)" = "./..." ]; then $(LOCAL_ENV) cd $(AI_DIR) && uv run --frozen pytest -q -m integration -o addopts=''; fi
 
 GOVULNCHECK_VERSION := v1.10.0
 

@@ -122,3 +122,13 @@ def test_examples_extraction_is_complete_and_stable() -> None:
         "unavailable",
     }
     assert extracted["GET /readyz 200"]["example"]["status"] == "ready"
+
+
+def test_a_broken_example_in_a_shared_response_is_reported_for_every_operation_that_uses_it(specs: Path) -> None:
+    def break_shared(d: dict) -> None:  # type: ignore[type-arg]
+        d["components"]["responses"]["Unauthenticated"]["content"]["application/json"]["example"]["error"] = "Nope!"
+
+    edit(specs, "core-public", break_shared)
+    problems = check.run(specs)
+    assert any("GET /v1/me 401" in p for p in problems)
+    assert any("POST /v1/auth/logout 401" in p for p in problems)

@@ -39,6 +39,14 @@ API shapes live in [`contracts/`](contracts/README.md) as OpenAPI specs. `make g
 The web app is at <http://127.0.0.1:3000> and shows the status of the API and AI service. The API serves `/healthz` publicly; `/readyz` is on an internal-only port (`INTERNAL_ADDR`).
 The AI service needs `AI_SERVICE_TOKEN` in `.env` (generate with `openssl rand -hex 32`).
 
+### Signing in locally
+
+Go to <http://127.0.0.1:3000/login>, enter any email address, and read the six-digit code from the API log (`docker compose --env-file ./.env -f infra/docker-compose.yml --profile app logs api`; or the terminal when you use `make run-api`). The development mailer writes emails to the log instead of sending them, and the API refuses to start in production until a real mailer is configured. Use Chromium or Firefox: the session cookie is `Secure`, which they accept over `http://127.0.0.1` and Safari may not.
+
+`make test-e2e-stack` signs in through a real browser against the running stack (`make up-app` first; once, `cd apps/web && pnpm exec playwright install chromium`).
+
+Settings (see `.env.example` and the compose file): `AUTH_CODE_KEY` (required), `WEB_ORIGIN` (the one origin allowed to change state), `MAILER` (`log` or `file`, development only), `TRUSTED_PROXIES` (addresses whose `X-Forwarded-For` the API believes, set it to the web server's network when the web server sits behind a load balancer), and for the web server `API_PUBLIC_URL` and `WEB_BEHIND_PROXY` (`true` only when a trusted proxy in front sets `X-Forwarded-For`; otherwise the header is dropped and every visitor shares one rate-limit address).
+
 ## Security
 
 Never commit `.env`. Threats and the per-feature checklist are in [`plans/security.md`](plans/security.md).

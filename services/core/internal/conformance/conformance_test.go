@@ -24,6 +24,8 @@ import (
 	"github.com/getkin/kin-openapi/routers/legacy"
 	"github.com/go-chi/chi/v5"
 
+	"github.com/Gitax18/readmely/services/core/internal/auth"
+	"github.com/Gitax18/readmely/services/core/internal/clientip"
 	"github.com/Gitax18/readmely/services/core/internal/contract/coreinternal"
 	"github.com/Gitax18/readmely/services/core/internal/health"
 	"github.com/Gitax18/readmely/services/core/internal/httpx"
@@ -118,6 +120,23 @@ func (s spec) example(t *testing.T, path string, code int, name string) any {
 	return ex.Value.Value
 }
 
+func atoi(s string) int {
+	n := 0
+	for _, c := range s {
+		n = n*10 + int(c-'0')
+	}
+	return n
+}
+
+func mustJSON(t *testing.T, v any) string {
+	t.Helper()
+	b, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
 func decode(t *testing.T, body []byte) any {
 	t.Helper()
 	var v any
@@ -180,7 +199,7 @@ var errDown = errors.New("down")
 
 func TestPublicListenerConformsToItsSpec(t *testing.T) {
 	s := loadSpec(t, "core-public")
-	h := server.NewPublicRouter(logger(), apiChecks(nil, nil))
+	h := publicRouter(apiChecks(nil, nil))
 
 	rec := s.conforms(t, h, http.MethodGet, "/healthz", http.StatusOK)
 	if got, want := decode(t, rec.Body.Bytes()), s.example(t, "/healthz", 200, ""); !reflect.DeepEqual(got, want) {
@@ -242,7 +261,7 @@ func TestStatusEveryDocumentedStateMatchesItsExample(t *testing.T) {
 
 func TestErrorBodiesMatchTheErrorSchema(t *testing.T) {
 	s := loadSpec(t, "core-public")
-	h := server.NewPublicRouter(logger(), apiChecks(nil, nil))
+	h := publicRouter(apiChecks(nil, nil))
 
 	// An unknown route cannot be a path in the spec, so check it against the schema directly.
 	rec := httptest.NewRecorder()
@@ -337,14 +356,51 @@ func parity(code, spec []string) (undocumented, unimplemented []string) {
 	return undocumented, unimplemented
 }
 
+// planned lists operations that are in a spec (contracts come first) before their handler exists.
+// Implementing one means deleting it from this list; the test below fails until you do, and fails
+// if an entry is not in the spec, so the list cannot rot. It is empty now that the account
+// endpoints exist (Phase 2a step 4); the next feature to add a contract first uses it again.
+var planned = map[string][]string{}
+
+// publicRouter is the public listener as main wires it. The account routes only need to be
+// registered here: nothing in these tests reaches a handler that touches a database.
+func publicRouter(checks *health.Handler) http.Handler {
+	return server.NewPublicRouter(logger(), checks, accountRoutes)
+}
+
+// accountRoutes registers the /v1 account endpoints on a router.
+func accountRoutes(r chi.Router) {
+	svc := auth.NewService(nil, nil, nil, auth.NewKeys(testToken), logger())
+	auth.NewHandler(svc, clientip.New(nil), "http://127.0.0.1:3000", logger()).Mount(r)
+}
+
+func withoutPlanned(spec, skip []string) []string {
+	var out []string
+	for _, r := range spec {
+		if !slices.Contains(skip, r) {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
 func TestRoutesMatchTheSpecs(t *testing.T) {
 	checks := apiChecks(nil, nil)
 	for name, h := range map[string]http.Handler{
-		"core-public":   server.NewPublicRouter(logger(), checks),
+		"core-public":   publicRouter(checks),
 		"core-internal": internalRouter(checks, aiUnconfigured(t)),
 	} {
 		t.Run(name, func(t *testing.T) {
-			undocumented, unimplemented := parity(registered(t, h), documented(loadSpec(t, name).doc))
+			spec, code := documented(loadSpec(t, name).doc), registered(t, h)
+			for _, p := range planned[name] {
+				if !slices.Contains(spec, p) {
+					t.Errorf("planned route %q is not in the spec; remove it from planned", p)
+				}
+				if slices.Contains(code, p) {
+					t.Errorf("planned route %q is implemented now; remove it from planned", p)
+				}
+			}
+			undocumented, unimplemented := parity(code, withoutPlanned(spec, planned[name]))
 			if len(undocumented) > 0 || len(unimplemented) > 0 {
 				t.Errorf("routes in code but not in the spec: %v\nin the spec but not in code: %v", undocumented, unimplemented)
 			}
@@ -359,13 +415,15 @@ func TestParityCheckDetectsDrift(t *testing.T) {
 	extra := chi.NewRouter()
 	extra.Get("/healthz", func(http.ResponseWriter, *http.Request) {})
 	extra.Get("/secret", func(http.ResponseWriter, *http.Request) {})
-	undocumented, unimplemented := parity(registered(t, extra), documented(s.doc))
+	accountRoutes(extra)
+	undocumented, unimplemented := parity(registered(t, extra), withoutPlanned(documented(s.doc), planned["core-public"]))
 	if !reflect.DeepEqual(undocumented, []string{"GET /secret"}) || len(unimplemented) != 0 {
 		t.Errorf("planted extra route: undocumented=%v unimplemented=%v", undocumented, unimplemented)
 	}
 
 	missing := chi.NewRouter()
-	undocumented, unimplemented = parity(registered(t, missing), documented(s.doc))
+	accountRoutes(missing)
+	undocumented, unimplemented = parity(registered(t, missing), withoutPlanned(documented(s.doc), planned["core-public"]))
 	if len(undocumented) != 0 || !reflect.DeepEqual(unimplemented, []string{"GET /healthz"}) {
 		t.Errorf("planted missing route: undocumented=%v unimplemented=%v", undocumented, unimplemented)
 	}
