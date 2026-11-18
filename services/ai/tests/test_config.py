@@ -57,7 +57,12 @@ def test_secrets_are_hidden_in_repr() -> None:
         ({"DATABASE_URL": "postgresql:///db"}, "DATABASE_URL: must include a host"),
         ({"DATABASE_URL": "postgresql://u:p@h:notaport/db"}, "DATABASE_URL: must be a valid URL"),
         ({"AI_SERVICE_TOKEN": "short"}, "AI_SERVICE_TOKEN: must be at least 32 characters"),
-        ({"AI_SERVICE_TOKEN": "a" * 20 + " " + "b" * 20}, "AI_SERVICE_TOKEN: must not contain whitespace"),
+        (
+            {"AI_SERVICE_TOKEN": "a" * 20 + " " + "b" * 20},
+            "AI_SERVICE_TOKEN: may only contain letters, digits, - and _",
+        ),
+        ({"AI_SERVICE_TOKEN": "a" * 32 + "@:/"}, "AI_SERVICE_TOKEN: may only contain letters, digits, - and _"),
+        ({"AI_SERVICE_TOKEN": "a" * 32 + "\u00e9"}, "AI_SERVICE_TOKEN: may only contain letters, digits, - and _"),
         ({"HTTP_PORT": "http"}, "HTTP_PORT:"),
         ({"HTTP_PORT": "70000"}, "HTTP_PORT:"),
         ({"HTTP_PORT": "0"}, "HTTP_PORT:"),

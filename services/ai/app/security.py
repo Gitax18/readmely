@@ -31,6 +31,9 @@ REQUEST_ID_HEADER = "x-request-id"
 MAX_BODY_BYTES = 1 << 20  # 1 MiB
 
 _VALID_REQUEST_ID = re.compile(r"^[A-Za-z0-9._-]{8,64}$")
+# Probed every few seconds by the container healthcheck: a successful probe is logged at debug
+# so it does not bury real traffic (audit F8); a failing one stays at info. Same rule as Go.
+LIVENESS_PATH = "/healthz"
 _ERROR_CODES = {
     401: "unauthorized",
     404: "not_found",
@@ -134,7 +137,9 @@ class RequestContextMiddleware:
                 await _send_error(send_with_headers, 413, request_id)
         finally:
             # In `finally` so a crashed request is still logged (as 500).
-            access_logger.info(
+            quiet = scope.get("path") == LIVENESS_PATH and status < 400
+            access_logger.log(
+                logging.DEBUG if quiet else logging.INFO,
                 "request",
                 extra={
                     "request_id": request_id,

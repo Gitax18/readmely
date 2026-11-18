@@ -257,3 +257,76 @@ func TestRequestIDIsForwardedToTheAIService(t *testing.T) {
 		t.Fatalf("AI service saw request id %q", v)
 	}
 }
+
+// countingChecker counts how often the API's own checks run, and can be slow.
+type countingChecker struct {
+	runs  atomic.Int64
+	delay time.Duration
+}
+
+func (c *countingChecker) RunChecks(context.Context) (coreinternal.CheckMap, bool) {
+	c.runs.Add(1)
+	time.Sleep(c.delay)
+	return coreinternal.CheckMap{"postgres": "ok", "redis": "ok"}, true
+}
+
+// Audit F3: a burst of page views costs one round of probes, and the cache expires.
+func TestCachedReportIsSharedAndRefreshedOnce(t *testing.T) {
+	var aiCalls atomic.Int64
+	api := &countingChecker{delay: 50 * time.Millisecond}
+	var logs bytes.Buffer
+	ai := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		aiCalls.Add(1)
+		aiReply(http.StatusOK, `{"status":"ready","checks":{"postgres":"ok"}}`).ServeHTTP(w, r)
+	})
+	h, _ := newHandler(t, api, ai, testToken, &logs)
+	now := time.Unix(1_000_000, 0)
+	var clock atomic.Int64
+	clock.Store(now.UnixNano())
+	h.now = func() time.Time { return time.Unix(0, clock.Load()) }
+	h.Cached(5 * time.Second)
+
+	done := make(chan Report, 100)
+	for range 100 {
+		go func() { _, r, _ := get(t, h); done <- r }()
+	}
+	for range 100 {
+		if r := <-done; r.Status != Operational {
+			t.Fatalf("a waiting caller got %q", r.Status)
+		}
+	}
+	if api.runs.Load() != 1 || aiCalls.Load() != 1 {
+		t.Fatalf("100 concurrent views ran the checks %d times and called the AI service %d times, want 1 and 1", api.runs.Load(), aiCalls.Load())
+	}
+
+	clock.Add(int64(4 * time.Second))
+	get(t, h)
+	if api.runs.Load() != 1 {
+		t.Fatal("the report was rebuilt before the ttl ran out")
+	}
+	clock.Add(int64(2 * time.Second))
+	get(t, h)
+	if api.runs.Load() != 2 || aiCalls.Load() != 2 {
+		t.Fatalf("after the ttl the report must be rebuilt once: checks %d, ai %d", api.runs.Load(), aiCalls.Load())
+	}
+}
+
+// A caller that gives up does not cancel the refresh everyone else is waiting for.
+func TestCachedRefreshSurvivesTheFirstCallerLeaving(t *testing.T) {
+	api := &countingChecker{delay: 100 * time.Millisecond}
+	var logs bytes.Buffer
+	h, _ := newHandler(t, api, aiReply(http.StatusOK, `{"status":"ready","checks":{"postgres":"ok"}}`), testToken, &logs)
+	h.Cached(time.Minute)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	rec := httptest.NewRecorder()
+	h.Get(rec, httptest.NewRequest(http.MethodGet, "/api/v1/status", http.NoBody).WithContext(ctx))
+	var r Report
+	if err := json.Unmarshal(rec.Body.Bytes(), &r); err != nil {
+		t.Fatal(err)
+	}
+	if r.Services.Ai.Status != StateOK {
+		t.Fatalf("the AI check was cut short by the first caller's cancellation: %q", r.Services.Ai.Status)
+	}
+}

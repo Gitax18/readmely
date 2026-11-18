@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Gitax18/readmely/services/core/internal/contract/ai"
@@ -166,18 +167,69 @@ func (c *AIClient) fetch(ctx context.Context) (Service, error) {
 type Handler struct {
 	api Checker
 	ai  *AIClient
+
+	// Caching (audit F3): the web app's public home page calls this on every view, and each
+	// report pings Postgres, Redis and the AI service. With a ttl, one report is shared for
+	// that long, and concurrent callers wait for a single refresh instead of each starting one.
+	ttl      time.Duration
+	now      func() time.Time
+	mu       sync.Mutex
+	cached   Report
+	cachedAt time.Time
+	refresh  chan struct{} // non-nil while a refresh runs; closed when it ends
 }
 
-// NewHandler combines the API's own checks with the AI service's.
-func NewHandler(api Checker, ai *AIClient) *Handler { return &Handler{api: api, ai: ai} }
+// NewHandler combines the API's own checks with the AI service's. It does not cache.
+func NewHandler(api Checker, ai *AIClient) *Handler { return &Handler{api: api, ai: ai, now: time.Now} }
 
-// Get runs both sides in parallel and always answers 200: it is a report, and
-// "the AI service is down" is a normal thing for it to say.
+// Cached makes the handler reuse one report for ttl. It returns h.
+func (h *Handler) Cached(ttl time.Duration) *Handler {
+	h.ttl = ttl
+	return h
+}
+
+// Get always answers 200: it is a report, and "the AI service is down" is a
+// normal thing for it to say.
 func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
-	aiCh := make(chan Service, 1)
-	go func() { aiCh <- h.ai.Fetch(r.Context()) }()
+	httpx.WriteJSON(w, http.StatusOK, h.report(r.Context()))
+}
 
-	checks, allOK := h.api.RunChecks(r.Context())
+func (h *Handler) report(ctx context.Context) Report {
+	if h.ttl <= 0 {
+		return h.build(ctx)
+	}
+	h.mu.Lock()
+	if !h.cachedAt.IsZero() && h.now().Sub(h.cachedAt) < h.ttl {
+		defer h.mu.Unlock()
+		return h.cached
+	}
+	if wait := h.refresh; wait != nil {
+		h.mu.Unlock()
+		<-wait // bounded: every probe in build has its own timeout
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		return h.cached
+	}
+	done := make(chan struct{})
+	h.refresh = done
+	h.mu.Unlock()
+
+	// The shared refresh must not be cut short because the caller that started it went away.
+	rep := h.build(context.WithoutCancel(ctx))
+
+	h.mu.Lock()
+	h.cached, h.cachedAt, h.refresh = rep, h.now(), nil
+	h.mu.Unlock()
+	close(done)
+	return rep
+}
+
+// build runs both sides in parallel.
+func (h *Handler) build(ctx context.Context) Report {
+	aiCh := make(chan Service, 1)
+	go func() { aiCh <- h.ai.Fetch(ctx) }()
+
+	checks, allOK := h.api.RunChecks(ctx)
 	apiSvc := Service{Status: StateOK, Checks: checks}
 	if !allOK {
 		apiSvc.Status = StateDown
@@ -187,7 +239,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	report := Report{Status: overall(apiSvc, aiSvc)}
 	report.Services.Api = apiSvc
 	report.Services.Ai = aiSvc
-	httpx.WriteJSON(w, http.StatusOK, report)
+	return report
 }
 
 // overall: unavailable when the API cannot reach its own database (it cannot

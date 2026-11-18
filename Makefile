@@ -176,16 +176,16 @@ db-up: env-check ## Apply database migrations and set the service roles' passwor
 	@$(LOCAL_ENV) cd $(GO_DIR) && go run ./cmd/migrate up && go run ./cmd/migrate roles
 
 db-down: env-check ## Revert the latest migration (development only)
-	@$(LOCAL_ENV) cd $(GO_DIR) && go run ./cmd/migrate down
+	@$(LOCAL_ENV) cd $(GO_DIR) && APP_ENV="$${APP_ENV:-development}" go run ./cmd/migrate down
 
 db-reset: env-check ## Revert every migration and apply them again (development only; DELETES local data)
-	@$(LOCAL_ENV) cd $(GO_DIR) && go run ./cmd/migrate reset && go run ./cmd/migrate up && go run ./cmd/migrate roles
+	@$(LOCAL_ENV) cd $(GO_DIR) && APP_ENV="$${APP_ENV:-development}" go run ./cmd/migrate reset && go run ./cmd/migrate up && go run ./cmd/migrate roles
 
 db-status: env-check ## List migrations and whether they are applied
 	@$(LOCAL_ENV) cd $(GO_DIR) && go run ./cmd/migrate status
 
 db-seed: env-check ## Load fake development data: users, projects, jobs, credits (safe to repeat; development only)
-	@$(LOCAL_ENV) cd $(GO_DIR) && go run ./cmd/migrate seed
+	@$(LOCAL_ENV) cd $(GO_DIR) && APP_ENV="$${APP_ENV:-development}" go run ./cmd/migrate seed
 
 db-new: ## Create an empty migration file: make db-new NAME=add_thing
 	@test -n "$(NAME)" || { echo "usage: make db-new NAME=add_thing"; exit 1; }

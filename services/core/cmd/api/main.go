@@ -22,7 +22,11 @@ import (
 	"github.com/Gitax18/readmely/services/core/internal/status"
 )
 
-const readinessTimeout = 2 * time.Second
+const (
+	readinessTimeout = 2 * time.Second
+	// The status report is shared for this long (audit F3); /readyz is never cached.
+	statusCacheTTL = 5 * time.Second
+)
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -68,7 +72,7 @@ func run(ctx context.Context, args []string, getenv func(string) string, stdout,
 		health.Check{Name: "postgres", Pinger: pool},
 		health.Check{Name: "redis", Pinger: redisPinger{rdb}},
 	)
-	statusHandler := status.NewHandler(checks, status.NewAIClient(logger, cfg.AIServiceURL, cfg.AIServiceToken))
+	statusHandler := status.NewHandler(checks, status.NewAIClient(logger, cfg.AIServiceURL, cfg.AIServiceToken)).Cached(statusCacheTTL)
 
 	var lc net.ListenConfig
 	publicLn, err := lc.Listen(ctx, "tcp", cfg.HTTPAddr)

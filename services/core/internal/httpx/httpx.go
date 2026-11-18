@@ -81,6 +81,10 @@ func Recover(logger *slog.Logger) func(http.Handler) http.Handler {
 	}
 }
 
+// LivenessPath is probed every few seconds by container healthchecks. A successful probe is
+// logged at debug level so it does not bury real traffic (audit F8); a failing one stays at info.
+const LivenessPath = "/healthz"
+
 // AccessLog logs one line per request. The query string is left out on
 // purpose, because it can carry tokens.
 func AccessLog(logger *slog.Logger) func(http.Handler) http.Handler {
@@ -93,7 +97,11 @@ func AccessLog(logger *slog.Logger) func(http.Handler) http.Handler {
 			if status == 0 {
 				status = http.StatusOK
 			}
-			logger.LogAttrs(r.Context(), slog.LevelInfo, "request",
+			level := slog.LevelInfo
+			if r.URL.Path == LivenessPath && status < http.StatusBadRequest {
+				level = slog.LevelDebug
+			}
+			logger.LogAttrs(r.Context(), level, "request",
 				slog.String("request_id", RequestIDFrom(r.Context())),
 				slog.String("method", r.Method),
 				slog.String("path", r.URL.Path),

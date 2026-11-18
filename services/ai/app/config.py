@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, f
 MIN_TOKEN_LENGTH = 32
 MAX_SHUTDOWN_SECONDS = 60.0
 
+_TOKEN_CHARS = re.compile(r"[A-Za-z0-9_-]+")
 _DURATION = re.compile(r"^(\d+(?:\.\d+)?)(ms|s|m)$")
 _UNIT_SECONDS = {"ms": 0.001, "s": 1.0, "m": 60.0}
 
@@ -97,8 +98,9 @@ class ServiceSettings(BaseSettings):
         token = value.get_secret_value()
         if len(token) < MIN_TOKEN_LENGTH:
             raise ValueError(f"must be at least {MIN_TOKEN_LENGTH} characters")
-        if any(ch.isspace() for ch in token):
-            raise ValueError("must not contain whitespace")
+        # Same rule as the Go API (config.validateToken), so one value starts both or neither (audit F11).
+        if not _TOKEN_CHARS.fullmatch(token):
+            raise ValueError("may only contain letters, digits, - and _")
         return value
 
 
