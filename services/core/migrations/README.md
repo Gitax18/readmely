@@ -17,7 +17,7 @@ are in [plans/phase-1-database.md](../../../plans/phase-1-database.md).
 | `make db-reset` | revert everything and apply again; **deletes local data** (development only) |
 | `make db-seed` | load fictional users, projects, jobs and credits (development only, safe to repeat) |
 
-`down`, `reset` and `seed` refuse to run when `APP_ENV` is `production` (`seed` also refuses staging).
+`down`, `reset` and `seed` run only when `APP_ENV` is explicitly `development` (the `make` targets set it unless your `.env` says otherwise). Unset, `production`, `staging` or anything else is refused, so a forgotten variable can never wipe a real database. `make db-up` refuses the placeholder passwords from `.env.example` and two roles sharing one password.
 
 ## Adding a migration
 

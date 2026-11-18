@@ -96,10 +96,33 @@ type RolePassword struct {
 	Password string
 }
 
-// ValidatePassword rejects passwords that are too short to be a credential.
+// placeholderMarker is in every example password in .env.example. A role must never log in
+// with a value that is published in the repository (audit F10).
+const placeholderMarker = "change-me"
+
+// ValidatePassword rejects passwords that are too short or are the published placeholder.
 func ValidatePassword(role, password string) error {
 	if len(password) < MinPasswordLength {
 		return fmt.Errorf("the password for %s must be at least %d characters", role, MinPasswordLength)
+	}
+	if strings.Contains(strings.ToLower(password), placeholderMarker) {
+		return fmt.Errorf("the password for %s is still the placeholder from .env.example", role)
+	}
+	return nil
+}
+
+// ValidatePasswords checks each password and that no two roles share one, so one leaked
+// credential never opens both roles.
+func ValidatePasswords(roles []RolePassword) error {
+	seen := map[string]string{}
+	for _, r := range roles {
+		if err := ValidatePassword(r.Role, r.Password); err != nil {
+			return err
+		}
+		if other, dup := seen[r.Password]; dup {
+			return fmt.Errorf("%s and %s must have different passwords", other, r.Role)
+		}
+		seen[r.Password] = r.Role
 	}
 	return nil
 }
@@ -108,10 +131,8 @@ func ValidatePassword(role, password string) error {
 // server with format(%I, %L), so neither the role name nor the password can alter it.
 // Passwords are never logged or returned in errors.
 func SetPasswords(ctx context.Context, db *sql.DB, roles []RolePassword) error {
-	for _, r := range roles {
-		if err := ValidatePassword(r.Role, r.Password); err != nil {
-			return err
-		}
+	if err := ValidatePasswords(roles); err != nil {
+		return err
 	}
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {

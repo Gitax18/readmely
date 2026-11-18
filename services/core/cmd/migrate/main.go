@@ -3,9 +3,9 @@
 //	migrate up        apply pending migrations
 //	migrate roles     set the passwords of the service roles from the environment
 //	migrate status    list migrations
-//	migrate down      revert the latest migration   (refused in production)
-//	migrate reset     revert everything             (refused in production)
-//	migrate seed      load fake development data    (development and test only)
+//	migrate down      revert the latest migration   (only with APP_ENV=development)
+//	migrate reset     revert everything             (only with APP_ENV=development)
+//	migrate seed      load fake development data    (only with APP_ENV=development)
 package main
 
 import (

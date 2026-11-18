@@ -9,9 +9,10 @@ import (
 
 const usage = "usage: migrate up | roles | status | down | reset | seed"
 
-// seedEnvironments are the only places fake data may be loaded. An unset APP_ENV is a developer's
-// machine. Anything else, production and staging included, is refused.
-var seedEnvironments = map[string]bool{"": true, "development": true, "test": true}
+// devOnly are the commands that delete data or load fake data. They run only when APP_ENV says
+// development explicitly: an unset or misspelled APP_ENV is refused, because a missing variable is
+// the most likely mistake in a production deployment (audit F1).
+var devOnly = map[string]bool{"down": true, "reset": true, "seed": true}
 
 // Main runs the migrate command. Exit codes: 0 success, 1 failure, 2 bad usage or configuration.
 func Main(ctx context.Context, args []string, getenv func(string) string, stdout, stderr io.Writer) int {
@@ -26,12 +27,12 @@ func Main(ctx context.Context, args []string, getenv func(string) string, stdout
 		_, _ = fmt.Fprintf(stderr, "unknown command %q\n%s\n", cmd, usage)
 		return 2
 	}
-	if (cmd == "down" || cmd == "reset") && strings.EqualFold(strings.TrimSpace(getenv("APP_ENV")), "production") {
-		_, _ = fmt.Fprintf(stderr, "refusing to run %q when APP_ENV=production: migrations only go forward there\n", cmd)
-		return 2
-	}
-	if env := strings.ToLower(strings.TrimSpace(getenv("APP_ENV"))); cmd == "seed" && !seedEnvironments[env] {
-		_, _ = fmt.Fprintf(stderr, "refusing to load seed data when APP_ENV=%s: it is for development only\n", env)
+	if env := strings.ToLower(strings.TrimSpace(getenv("APP_ENV"))); devOnly[cmd] && env != "development" {
+		shown := env
+		if shown == "" {
+			shown = "(unset)"
+		}
+		_, _ = fmt.Fprintf(stderr, "refusing to run %q when APP_ENV=%s: it deletes or fakes data, so it needs APP_ENV=development\n", cmd, shown)
 		return 2
 	}
 	url := strings.TrimSpace(getenv("MIGRATE_DATABASE_URL"))
@@ -45,11 +46,9 @@ func Main(ctx context.Context, args []string, getenv func(string) string, stdout
 			{RoleApp, getenv("APP_DB_PASSWORD")},
 			{RoleAI, getenv("AI_DB_PASSWORD")},
 		}
-		for _, r := range roles {
-			if err := ValidatePassword(r.Role, r.Password); err != nil {
-				_, _ = fmt.Fprintf(stderr, "configuration error: %v (set APP_DB_PASSWORD and AI_DB_PASSWORD)\n", err)
-				return 2
-			}
+		if err := ValidatePasswords(roles); err != nil {
+			_, _ = fmt.Fprintf(stderr, "configuration error: %v (set APP_DB_PASSWORD and AI_DB_PASSWORD; openssl rand -hex 24)\n", err)
+			return 2
 		}
 	}
 
