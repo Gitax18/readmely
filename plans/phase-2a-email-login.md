@@ -1,6 +1,6 @@
 # Phase 2a · Sessions and passwordless email login
 
-**Status:** Approved (2026-11-18), amended after the 2026-11-18 audit (F13–F16, marked **[audit]**; awaiting review) · **Last updated:** 2026-11-18
+**Status:** Approved (2026-11-18), amended after the 2026-11-18 audit (F13–F16, marked **[audit]**; approved 2026-11-18) · **Last updated:** 2026-11-18
 
 Phase 2 is split into three slices, each with its own plan, branch and sign-off: **2a** (this one) sessions and email-code login with account basics, **2b** Google and GitHub login with safe account linking, **2c** TOTP, recovery codes, account deletion and the settings UI.
 
