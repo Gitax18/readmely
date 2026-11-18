@@ -16,7 +16,7 @@ LOCAL_ENV = set -a; . $(ENV_FILE); set +a; \
 	export MIGRATE_DATABASE_URL="$$DATABASE_URL";
 
 .DEFAULT_GOAL := help
-.PHONY: help db-up db-down db-reset db-status db-new hooks check secrets test-scripts lint-go lint-ai lint-web lint-tools test-go test-ai test-web audit-go audit-ai audit-web env-check up up-app down reset ps logs verify verify-env fmt lint test contracts-check gen gen-check test-e2e test-integration audit run-api run-ai run-web docker-build
+.PHONY: help db-up db-down db-reset db-status db-seed db-new hooks check secrets test-scripts lint-go lint-ai lint-web lint-tools test-go test-ai test-web audit-go audit-ai audit-web env-check up up-app down reset ps logs verify verify-env fmt lint test contracts-check gen gen-check test-e2e test-integration audit run-api run-ai run-web docker-build
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  %-18s %s\n", $$1, $$2}'
@@ -183,6 +183,9 @@ db-reset: env-check ## Revert every migration and apply them again (development 
 
 db-status: env-check ## List migrations and whether they are applied
 	@$(LOCAL_ENV) cd $(GO_DIR) && go run ./cmd/migrate status
+
+db-seed: env-check ## Load fake development data: users, projects, jobs, credits (safe to repeat; development only)
+	@$(LOCAL_ENV) cd $(GO_DIR) && go run ./cmd/migrate seed
 
 db-new: ## Create an empty migration file: make db-new NAME=add_thing
 	@test -n "$(NAME)" || { echo "usage: make db-new NAME=add_thing"; exit 1; }

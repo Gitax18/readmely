@@ -41,6 +41,26 @@ func TestMainRejectsBadUsage(t *testing.T) {
 	}
 }
 
+func TestSeedOnlyRunsInDevelopmentOrTest(t *testing.T) {
+	const url = "postgres://owner:pw@127.0.0.1:1/db?sslmode=disable&connect_timeout=1"
+	refused := []string{"production", "Production", " PRODUCTION ", "staging", "prod", "live"}
+	for _, env := range refused {
+		var out, errOut bytes.Buffer
+		code := Main(context.Background(), []string{"seed"}, envOf(map[string]string{"APP_ENV": env, "MIGRATE_DATABASE_URL": url}), &out, &errOut)
+		if code != 2 || !strings.Contains(errOut.String(), "refusing to load seed data") {
+			t.Errorf("APP_ENV=%q: exit %d, stderr %q; want a refusal", env, code, errOut.String())
+		}
+	}
+	// Allowed environments get past the guard and fail only because nothing listens on the port.
+	for _, env := range []string{"", "development", "Development", "test"} {
+		var out, errOut bytes.Buffer
+		code := Main(context.Background(), []string{"seed"}, envOf(map[string]string{"APP_ENV": env, "MIGRATE_DATABASE_URL": url}), &out, &errOut)
+		if code != 1 {
+			t.Errorf("APP_ENV=%q: exit %d, want 1 (cannot connect); stderr %q", env, code, errOut.String())
+		}
+	}
+}
+
 func TestMainNeverEchoesTheConnectionString(t *testing.T) {
 	var out, errOut bytes.Buffer
 	secret := "s3cr3t-owner-password"

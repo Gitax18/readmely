@@ -15,6 +15,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/Gitax18/readmely/services/core/migrations"
+	"github.com/Gitax18/readmely/services/core/seed"
 )
 
 // Roles the services connect as. Created by the first migration without a password.
@@ -132,6 +133,19 @@ func SetPasswords(ctx context.Context, db *sql.DB, roles []RolePassword) error {
 		if _, err := tx.ExecContext(ctx, stmt); err != nil {
 			return fmt.Errorf("setting the password of %s failed", r.Role)
 		}
+	}
+	return tx.Commit()
+}
+
+// Seed loads the development seed data in one transaction. It is idempotent.
+func Seed(ctx context.Context, db *sql.DB) error {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, seed.Dev); err != nil {
+		return fmt.Errorf("the seed data was rejected (are the migrations applied?): %w", err)
 	}
 	return tx.Commit()
 }

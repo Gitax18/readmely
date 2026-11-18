@@ -29,6 +29,12 @@ func run(ctx context.Context, cmd string, db *sql.DB, roles []RolePassword, stdo
 		return err
 	case "status":
 		return Status(ctx, db, stdout)
+	case "seed":
+		if err := Seed(ctx, db); err != nil {
+			return err
+		}
+		_, err := fmt.Fprintln(stdout, "ok   development seed data loaded")
+		return err
 	case "roles":
 		if err := SetPasswords(ctx, db, roles); err != nil {
 			return err

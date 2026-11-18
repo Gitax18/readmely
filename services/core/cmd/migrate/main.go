@@ -5,6 +5,7 @@
 //	migrate status    list migrations
 //	migrate down      revert the latest migration   (refused in production)
 //	migrate reset     revert everything             (refused in production)
+//	migrate seed      load fake development data    (development and test only)
 package main
 
 import (
