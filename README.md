@@ -30,6 +30,8 @@ make run-web             # and the web app on the host (dev mode)
 
 Run `make hooks` once after cloning: it enables the git hooks in `.githooks/`, which reject commit messages that break the convention below and check the staged files (format, lint, contracts, secrets) before each commit.
 
+The database schema is versioned in `services/core/migrations/` (goose, plain SQL). `make up` starts the data stores and applies the migrations; `make db-status`, `make db-new NAME=...`, `make db-down` and `make db-reset` manage them. The services log in as two limited roles (`readmely_app`, `readmely_ai`) that cannot change the schema; their passwords are `APP_DB_PASSWORD` and `AI_DB_PASSWORD` in `.env` (see `.env.example`, at least 16 characters, letters, digits, `-` and `_` only).
+
 API shapes live in [`contracts/`](contracts/README.md) as OpenAPI specs. `make gen` regenerates the Go, Python and TypeScript types from them (output is committed), `make gen-check` fails if generated code is out of date, and `make contracts-check` validates the specs.
 
 `make help` lists every target, including `lint`, `test`, `test-e2e` (browser tests), `test-integration` and `audit`.

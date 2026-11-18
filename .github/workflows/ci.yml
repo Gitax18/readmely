@@ -186,7 +186,7 @@ jobs:
         run: |
           set -euo pipefail
           cp .env.example .env
-          for v in POSTGRES_PASSWORD REDIS_PASSWORD RUSTFS_SECRET_KEY; do
+          for v in POSTGRES_PASSWORD REDIS_PASSWORD RUSTFS_SECRET_KEY APP_DB_PASSWORD AI_DB_PASSWORD; do
             sed -i "s|^${v}=.*|${v}=$(openssl rand -hex 24)|" .env
           done
           sed -i "s|^AI_SERVICE_TOKEN=.*|AI_SERVICE_TOKEN=$(openssl rand -hex 32)|" .env
@@ -226,7 +226,7 @@ jobs:
       - name: Scan the images for fixed high and critical vulnerabilities
         run: |
           set -euo pipefail
-          for image in api ingest render ai web; do
+          for image in api ingest render migrate ai web; do
             docker run -v /var/run/docker.sock:/var/run/docker.sock \
               aquasec/trivy@sha256:8f6bb947dbc528902e11f2f5be52f7b519f6a39d5d148f41166f2040499768fb \
               image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --no-progress "readmely/${image}:dev"

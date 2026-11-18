@@ -1,6 +1,6 @@
 # Phase 1 · Database
 
-**Status:** Draft, awaiting review (agreed 2026-11-18: design the whole MVP model, build only the core tables now; **goose** migrations; **sqlc** for Go and **psycopg + Pydantic** for Python; **UUIDv7** keys).
+**Status:** Approved 2026-11-18 (agreed: design the whole MVP model, build only the core tables now; **goose** migrations; **sqlc** for Go and **psycopg + Pydantic** for Python; **UUIDv7** keys).
 
 **Goal:** one reviewed entity model for the whole MVP, and the tables that Phases 2 to 5 need first, built with migrations you can trust: repeatable from an empty database, least-privilege access, generated type-checked Go queries, and tests that attack the parts that can go wrong (the job queue and the credit ledger).
 
