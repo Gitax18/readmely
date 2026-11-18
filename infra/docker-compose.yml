@@ -85,7 +85,8 @@ services:
       # Without a token the report says "unconfigured" and no request is made.
       AI_SERVICE_URL: http://ai:8000
       AI_SERVICE_TOKEN: ${AI_SERVICE_TOKEN:-}
-      DATABASE_URL: postgres://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@postgres:5432/${POSTGRES_DB:?}?sslmode=disable
+      # The API logs in as a limited role that can change data but never the schema.
+      DATABASE_URL: postgres://readmely_app:${APP_DB_PASSWORD:?APP_DB_PASSWORD is not set in .env}@postgres:5432/${POSTGRES_DB:?}?sslmode=disable
       REDIS_URL: redis://:${REDIS_PASSWORD:?}@redis:6379/0
     depends_on:
       postgres:
@@ -120,7 +121,8 @@ services:
       APP_ENV: development
       HTTP_HOST: "0.0.0.0"
       HTTP_PORT: "8000"
-      DATABASE_URL: postgresql://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@postgres:5432/${POSTGRES_DB:?}?sslmode=disable
+      # The AI service logs in as its own role, which can read only what its features are granted.
+      DATABASE_URL: postgresql://readmely_ai:${AI_DB_PASSWORD:?AI_DB_PASSWORD is not set in .env}@postgres:5432/${POSTGRES_DB:?}?sslmode=disable
       # Left empty when unset, so `make up` still works; the service itself then
       # refuses to start and says AI_SERVICE_TOKEN is required.
       AI_SERVICE_TOKEN: ${AI_SERVICE_TOKEN:-}

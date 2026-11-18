@@ -17,7 +17,7 @@ go_files=$(pick '^services/core/.*\.go$')
 if [ -n "$go_files" ]; then
 	step "gofmt"
 	bad=$(gofmt -l $go_files) && [ -z "$bad" ] || { echo "FAIL gofmt: run 'make fmt'. Files: $bad"; fail=1; }
-	if have golangci-lint; then step "golangci-lint"; (cd services/core && golangci-lint run ./...) || fail=1; else skip golangci-lint; fi
+	if have golangci-lint; then step "golangci-lint"; (cd services/core && golangci-lint run ./... && golangci-lint run --build-tags=integration ./...) || fail=1; else skip golangci-lint; fi
 fi
 
 # Python (the AI service uses its own config; scripts and contracts share another)
@@ -43,7 +43,7 @@ if [ -n "$web_files" ]; then
 fi
 
 # Contracts and generated code
-if [ -n "$(pick '^(contracts/|services/core/internal/contract/|services/ai/app/contract/|apps/web/src/contract/)')" ]; then
+if [ -n "$(pick '^(contracts/|services/core/migrations/|services/core/sqlc.yaml|services/core/internal/db/|services/core/internal/contract/|services/ai/app/contract/|apps/web/src/contract/)')" ]; then
 	step "contracts-check and gen-check"
 	make --no-print-directory contracts-check gen-check || fail=1
 fi

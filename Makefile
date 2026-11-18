@@ -12,10 +12,11 @@ WEB_DIR := apps/web
 LOCAL_ENV = set -a; . $(ENV_FILE); set +a; \
 	export DATABASE_URL="postgres://$$POSTGRES_USER:$$POSTGRES_PASSWORD@127.0.0.1:$$POSTGRES_PORT/$$POSTGRES_DB?sslmode=disable"; \
 	export REDIS_URL="redis://:$$REDIS_PASSWORD@127.0.0.1:$$REDIS_PORT/0"; \
-	export AI_SERVICE_URL="http://127.0.0.1:$${AI_PORT:-8000}";
+	export AI_SERVICE_URL="http://127.0.0.1:$${AI_PORT:-8000}"; \
+	export MIGRATE_DATABASE_URL="$$DATABASE_URL";
 
 .DEFAULT_GOAL := help
-.PHONY: help hooks check secrets test-scripts lint-go lint-ai lint-web lint-tools test-go test-ai test-web audit-go audit-ai audit-web env-check up up-app down reset ps logs verify verify-env fmt lint test contracts-check gen gen-check test-e2e test-integration audit run-api run-ai run-web docker-build
+.PHONY: help db-up db-down db-reset db-status db-seed db-new hooks check secrets test-scripts lint-go lint-ai lint-web lint-tools test-go test-ai test-web audit-go audit-ai audit-web env-check up up-app down reset ps logs verify verify-env fmt lint test contracts-check gen gen-check test-e2e test-integration audit run-api run-ai run-web docker-build
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  %-18s %s\n", $$1, $$2}'
@@ -25,7 +26,7 @@ env-check:
 
 # Credentials are pasted into connection URLs, so characters such as @ : / ? # % break
 # them in confusing ways (audit A2). Prints variable names only, never values.
-URL_SAFE_VARS := POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB REDIS_PASSWORD RUSTFS_ACCESS_KEY RUSTFS_SECRET_KEY AI_SERVICE_TOKEN
+URL_SAFE_VARS := POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB REDIS_PASSWORD RUSTFS_ACCESS_KEY RUSTFS_SECRET_KEY AI_SERVICE_TOKEN APP_DB_PASSWORD AI_DB_PASSWORD
 
 hooks: ## Enable the git hooks in .githooks/ (commit message check, staged-file checks)
 	@git config core.hooksPath .githooks && echo "ok   git hooks enabled (core.hooksPath=.githooks)"
@@ -42,10 +43,12 @@ verify-env: env-check ## Check that credentials in the env file only use URL-saf
 	if [ -n "$$bad" ]; then echo "FAIL unsafe characters in:$$bad (use only letters, digits, - and _)"; exit 1; \
 	else echo "ok   credentials use URL-safe characters"; fi
 
-up: env-check ## Start the local data stores and wait until they are healthy
+up: env-check ## Start the local data stores, wait until they are healthy, and migrate the database
 	@$(COMPOSE) up -d --wait
+	@$(MAKE) --no-print-directory db-up
 
-up-app: env-check ## Build and start the API container together with the data stores
+up-app: env-check ## Build and start the API, AI and web containers together with the data stores
+	@$(MAKE) --no-print-directory up
 	@$(COMPOSE) --profile app up -d --build --wait
 
 down: env-check ## Stop the local stack (data is kept)
@@ -116,14 +119,15 @@ contracts-check: ## Validate the OpenAPI specs in contracts/ (valid, shared sche
 	@uv run --frozen --project $(AI_DIR) pytest contracts/tests -q -o addopts='' -p no:cacheprovider -p no:asyncio
 
 # Directories that hold only generated code. Never edit them by hand.
-GEN_DIRS := services/core/internal/contract services/ai/app/contract apps/web/src/contract
+GEN_DIRS := services/core/internal/contract services/core/internal/db/store services/ai/app/contract apps/web/src/contract
 
-gen: ## Regenerate the Go, Python and TypeScript types and test examples from contracts/ (output is committed)
+gen: ## Regenerate the API types (contracts/) and the Go database queries (migrations + SQL); output is committed
 	@for pair in core-public:corepublic core-internal:coreinternal ai:ai; do \
 		spec=$${pair%%:*}; pkg=$${pair##*:}; \
 		mkdir -p $(GO_DIR)/internal/contract/$$pkg; \
 		(cd $(GO_DIR) && go tool oapi-codegen -config ../../contracts/gen/$$spec.oapi-codegen.yaml ../../contracts/$$spec.yaml) || exit 1; \
 	done
+	@cd $(GO_DIR) && CGO_ENABLED=0 go tool sqlc generate
 	@mkdir -p $(AI_DIR)/app/contract && touch $(AI_DIR)/app/contract/__init__.py
 	@PYTHONWARNINGS='ignore:Black/isort will become optional:FutureWarning' uv run --frozen --project $(AI_DIR) datamodel-codegen --input contracts/ai.yaml --input-file-type openapi \
 		--output $(AI_DIR)/app/contract/models.py --output-model-type pydantic_v2.BaseModel \
@@ -149,7 +153,7 @@ test-e2e: ## Run the web browser tests against a production build and a fake API
 	@cd $(WEB_DIR) && pnpm install --frozen-lockfile --silent && pnpm run test:e2e
 
 test-integration: env-check ## Run the integration tests against the running local stack
-	@$(LOCAL_ENV) cd $(GO_DIR) && go test -race -count=1 -tags=integration ./internal/health/...
+	@$(LOCAL_ENV) cd $(GO_DIR) && go test -race -count=1 -tags=integration ./...
 	@$(LOCAL_ENV) cd $(AI_DIR) && uv run --frozen pytest -q -m integration -o addopts=''
 
 GOVULNCHECK_VERSION := v1.10.0
@@ -166,6 +170,28 @@ audit-ai:
 	@cd $(AI_DIR) && uv export --frozen --all-groups --no-emit-project --no-hashes --format requirements-txt -q \
 		| uv run --frozen pip-audit --strict -r /dev/stdin
 
+# Database migrations run as the owner role. The services never get that connection:
+# they log in as readmely_app and readmely_ai, whose passwords `db-up` sets from .env.
+db-up: env-check ## Apply database migrations and set the service roles' passwords (needs the stack: make up)
+	@$(LOCAL_ENV) cd $(GO_DIR) && go run ./cmd/migrate up && go run ./cmd/migrate roles
+
+db-down: env-check ## Revert the latest migration (development only)
+	@$(LOCAL_ENV) cd $(GO_DIR) && go run ./cmd/migrate down
+
+db-reset: env-check ## Revert every migration and apply them again (development only; DELETES local data)
+	@$(LOCAL_ENV) cd $(GO_DIR) && go run ./cmd/migrate reset && go run ./cmd/migrate up && go run ./cmd/migrate roles
+
+db-status: env-check ## List migrations and whether they are applied
+	@$(LOCAL_ENV) cd $(GO_DIR) && go run ./cmd/migrate status
+
+db-seed: env-check ## Load fake development data: users, projects, jobs, credits (safe to repeat; development only)
+	@$(LOCAL_ENV) cd $(GO_DIR) && go run ./cmd/migrate seed
+
+db-new: ## Create an empty migration file: make db-new NAME=add_thing
+	@test -n "$(NAME)" || { echo "usage: make db-new NAME=add_thing"; exit 1; }
+	@case "$(NAME)" in *[!abcdefghijklmnopqrstuvwxyz0123456789_]*) echo "NAME may only contain lowercase letters, digits and _"; exit 1;; esac
+	@f=$(GO_DIR)/migrations/$$(date -u +%Y%m%d%H%M%S)_$(NAME).sql; printf -- '-- +goose Up\n\n-- +goose Down\n' > $$f && echo "created $$f"
+
 # Scans committed history only ("git" mode). It never reads untracked files, so a local .env is never touched.
 # SECRETS_LOG_OPTS picks the commits: the whole history of the current branch by default; CI
 # narrows it to the commits a pull request adds (BASE..HEAD). Never --all: that includes every
@@ -180,16 +206,16 @@ check: lint test gen-check audit secrets ## Everything CI runs that needs no con
 	@echo "ok   all checks passed"
 
 run-api: env-check ## Run the API on the host against the local stack (stop the API container first)
-	@$(LOCAL_ENV) export HTTP_ADDR="127.0.0.1:$${API_PORT:-8080}"; cd $(GO_DIR) && go run ./cmd/api
+	@$(LOCAL_ENV) export DATABASE_URL="postgres://readmely_app:$$APP_DB_PASSWORD@127.0.0.1:$$POSTGRES_PORT/$$POSTGRES_DB?sslmode=disable"; export HTTP_ADDR="127.0.0.1:$${API_PORT:-8080}"; cd $(GO_DIR) && go run ./cmd/api
 
 run-ai: env-check ## Run the AI service on the host against the local stack (bound to 127.0.0.1)
-	@$(LOCAL_ENV) export HTTP_HOST=127.0.0.1 HTTP_PORT="$${AI_PORT:-8000}"; cd $(AI_DIR) && uv run --frozen python -m app.server
+	@$(LOCAL_ENV) export DATABASE_URL="postgresql://readmely_ai:$$AI_DB_PASSWORD@127.0.0.1:$$POSTGRES_PORT/$$POSTGRES_DB?sslmode=disable"; export HTTP_HOST=127.0.0.1 HTTP_PORT="$${AI_PORT:-8000}"; cd $(AI_DIR) && uv run --frozen python -m app.server
 
 run-web: env-check ## Run the web app in dev mode on the host (stop the web container first). Needs the API: `make run-api`
 	@$(LOCAL_ENV) export API_INTERNAL_URL="http://127.0.0.1:8081"; cd $(WEB_DIR) && pnpm install --frozen-lockfile --silent && pnpm exec next dev --hostname 127.0.0.1 --port "$${WEB_PORT:-3000}"
 
-docker-build: ## Build the api, ingest, render, ai and web images
-	@for c in api ingest render; do \
+docker-build: ## Build the api, ingest, render, migrate, ai and web images
+	@for c in api ingest render migrate; do \
 		docker build -q -f infra/docker/core.Dockerfile --build-arg CMD=$$c -t readmely/$$c:dev . || exit 1; \
 	done
 	@docker build -q -f infra/docker/ai.Dockerfile -t readmely/ai:dev .
