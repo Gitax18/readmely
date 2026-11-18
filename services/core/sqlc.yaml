@@ -29,6 +29,14 @@ sql:
               import: time
               type: Time
               pointer: true
+          - db_type: inet
+            go_type: net/netip.Addr
+          - db_type: inet
+            nullable: true
+            go_type:
+              import: net/netip
+              type: Addr
+              pointer: true
           - db_type: text
             nullable: true
             go_type:

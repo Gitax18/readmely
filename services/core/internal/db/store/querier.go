@@ -11,18 +11,35 @@ import (
 )
 
 type Querier interface {
+	// One guess at the open, unexpired, not-yet-exhausted code for an address. Every guess counts;
+	// the right one also closes the challenge, so it works once. Returns no row when there is no
+	// usable code; closed_at is set when the guess was right. Concurrent guesses are serialised by
+	// the row lock, and the conditions are re-checked after waiting, so one code signs in once.
+	AttemptLoginChallenge(ctx context.Context, arg AttemptLoginChallengeParams) (AttemptLoginChallengeRow, error)
 	// Only the owner, and only while the job has not started.
 	CancelJob(ctx context.Context, arg CancelJobParams) (Job, error)
 	// Takes the oldest runnable job, optionally only of the given kinds. SKIP LOCKED lets any number
 	// of workers claim at the same time without waiting for or duplicating each other.
 	ClaimJob(ctx context.Context, arg ClaimJobParams) (Job, error)
 	CompleteJob(ctx context.Context, arg CompleteJobParams) (Job, error)
+	// Sign-in and sessions (plans/phase-2a-email-login.md). Codes and session tokens are never
+	// stored or passed here in clear: only their HMAC (codes) or SHA-256 (tokens).
+	// Closes any open code for the address and issues a new one, atomically.
+	CreateLoginChallenge(ctx context.Context, arg CreateLoginChallengeParams) (LoginChallenge, error)
 	// Every project query is scoped to its owner (@user_id): asking for someone else's project
 	// finds nothing, the same as asking for one that does not exist.
 	CreateProject(ctx context.Context, arg CreateProjectParams) (Project, error)
+	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	DeleteAllUserSessions(ctx context.Context, userID uuid.UUID) (int64, error)
+	DeleteEndedSessions(ctx context.Context) (int64, error)
+	// Challenges are kept for @retention_days for abuse review (requested_ip), then removed.
+	DeleteOldLoginChallenges(ctx context.Context, retentionDays int32) (int64, error)
 	DeleteProject(ctx context.Context, arg DeleteProjectParams) (int64, error)
+	DeleteSessionByTokenHash(ctx context.Context, tokenHash []byte) (int64, error)
 	DeleteUser(ctx context.Context, id uuid.UUID) (int64, error)
+	// Revoke: scoped to the owner, so another user's session id finds nothing.
+	DeleteUserSession(ctx context.Context, arg DeleteUserSessionParams) (int64, error)
 	// The job queue. Lifecycle: EnqueueJob -> ClaimJob -> (ExtendJobLease)* -> CompleteJob | ReleaseJob.
 	// A worker that disappears is handled by RequeueExpiredJobs, which any worker may call.
 	// Every statement that changes a claimed job names the worker, so a worker that lost its job
@@ -34,12 +51,15 @@ type Querier interface {
 	GetCreditBalance(ctx context.Context, userID uuid.UUID) (int64, error)
 	GetJob(ctx context.Context, arg GetJobParams) (Job, error)
 	GetProject(ctx context.Context, arg GetProjectParams) (Project, error)
+	// The live session for a cookie, with its user. Ended sessions and suspended users find nothing.
+	GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (GetSessionByTokenHashRow, error)
 	GetUser(ctx context.Context, id uuid.UUID) (User, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GrantCredits(ctx context.Context, arg GrantCreditsParams) (CreditLedger, error)
 	ListCreditEntries(ctx context.Context, arg ListCreditEntriesParams) ([]CreditLedger, error)
 	ListProjectJobs(ctx context.Context, arg ListProjectJobsParams) ([]Job, error)
 	ListProjects(ctx context.Context, arg ListProjectsParams) ([]Project, error)
+	ListUserSessions(ctx context.Context, userID uuid.UUID) ([]Session, error)
 	MarkUserEmailVerified(ctx context.Context, id uuid.UUID) (User, error)
 	// Gives a job back after a failure: queued again after the backoff, or failed for good when the
 	// attempts are used up. error_code is a short machine code, never provider or stack text.
@@ -52,7 +72,12 @@ type Querier interface {
 	ReserveCredits(ctx context.Context, arg ReserveCreditsParams) (CreditLedger, error)
 	SetProjectStatus(ctx context.Context, arg SetProjectStatusParams) (Project, error)
 	SetUserStatus(ctx context.Context, arg SetUserStatusParams) (User, error)
+	// Slides the idle expiry, at most once per @min_interval_seconds, never past the absolute expiry.
+	TouchSession(ctx context.Context, arg TouchSessionParams) (int64, error)
 	UpdateUserDisplayName(ctx context.Context, arg UpdateUserDisplayNameParams) (User, error)
+	// The account for an address that just proved it receives mail: created on first sign-in,
+	// and marked verified either way.
+	UpsertVerifiedUser(ctx context.Context, email string) (User, error)
 }
 
 var _ Querier = (*Queries)(nil)
