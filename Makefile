@@ -161,9 +161,12 @@ gen-check: ## Fail if the generated code is out of date with contracts/
 test-e2e: ## Run the web browser tests against a production build and a fake API (first time: cd apps/web && pnpm exec playwright install chromium)
 	@cd $(WEB_DIR) && pnpm install --frozen-lockfile --silent && pnpm run test:e2e
 
+# Narrow the Go run while working: make test-integration PKGS=./internal/auth/... (Python is skipped then).
+PKGS ?= ./...
+
 test-integration: env-check ## Run the integration tests against the running local stack
-	@$(LOCAL_ENV) cd $(GO_DIR) && go test -race -count=1 -tags=integration ./...
-	@$(LOCAL_ENV) cd $(AI_DIR) && uv run --frozen pytest -q -m integration -o addopts=''
+	@$(LOCAL_ENV) cd $(GO_DIR) && go test -race -count=1 -tags=integration $(PKGS)
+	@if [ "$(PKGS)" = "./..." ]; then $(LOCAL_ENV) cd $(AI_DIR) && uv run --frozen pytest -q -m integration -o addopts=''; fi
 
 GOVULNCHECK_VERSION := v1.10.0
 

@@ -21,10 +21,14 @@ const maxBodyBytes = 1 << 20 // 1 MiB
 
 // NewPublicRouter is the internet-facing router. It exposes liveness only:
 // readiness reveals which dependency is down and costs a database round trip
-// per call, so it lives on the internal router (audit item A1).
-func NewPublicRouter(logger *slog.Logger, h *health.Handler) http.Handler {
+// per call, so it lives on the internal router (audit item A1). Each mount adds a feature's
+// routes (the account endpoints under /v1).
+func NewPublicRouter(logger *slog.Logger, h *health.Handler, mounts ...func(chi.Router)) http.Handler {
 	r := newBaseRouter(logger)
 	r.Get("/healthz", h.Healthz)
+	for _, mount := range mounts {
+		mount(r)
+	}
 	return r
 }
 

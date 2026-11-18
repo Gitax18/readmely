@@ -24,6 +24,8 @@ import (
 	"github.com/getkin/kin-openapi/routers/legacy"
 	"github.com/go-chi/chi/v5"
 
+	"github.com/Gitax18/readmely/services/core/internal/auth"
+	"github.com/Gitax18/readmely/services/core/internal/clientip"
 	"github.com/Gitax18/readmely/services/core/internal/contract/coreinternal"
 	"github.com/Gitax18/readmely/services/core/internal/health"
 	"github.com/Gitax18/readmely/services/core/internal/httpx"
@@ -197,7 +199,7 @@ var errDown = errors.New("down")
 
 func TestPublicListenerConformsToItsSpec(t *testing.T) {
 	s := loadSpec(t, "core-public")
-	h := server.NewPublicRouter(logger(), apiChecks(nil, nil))
+	h := publicRouter(apiChecks(nil, nil))
 
 	rec := s.conforms(t, h, http.MethodGet, "/healthz", http.StatusOK)
 	if got, want := decode(t, rec.Body.Bytes()), s.example(t, "/healthz", 200, ""); !reflect.DeepEqual(got, want) {
@@ -259,7 +261,7 @@ func TestStatusEveryDocumentedStateMatchesItsExample(t *testing.T) {
 
 func TestErrorBodiesMatchTheErrorSchema(t *testing.T) {
 	s := loadSpec(t, "core-public")
-	h := server.NewPublicRouter(logger(), apiChecks(nil, nil))
+	h := publicRouter(apiChecks(nil, nil))
 
 	// An unknown route cannot be a path in the spec, so check it against the schema directly.
 	rec := httptest.NewRecorder()
@@ -356,12 +358,20 @@ func parity(code, spec []string) (undocumented, unimplemented []string) {
 
 // planned lists operations that are in a spec (contracts come first) before their handler exists.
 // Implementing one means deleting it from this list; the test below fails until you do, and fails
-// if an entry is not in the spec, so the list cannot rot. Phase 2a step 4 empties it.
-var planned = map[string][]string{
-	"core-public": {
-		"POST /v1/auth/email/start", "POST /v1/auth/email/verify", "POST /v1/auth/logout",
-		"GET /v1/me", "PATCH /v1/me", "GET /v1/me/sessions", "DELETE /v1/me/sessions/{id}",
-	},
+// if an entry is not in the spec, so the list cannot rot. It is empty now that the account
+// endpoints exist (Phase 2a step 4); the next feature to add a contract first uses it again.
+var planned = map[string][]string{}
+
+// publicRouter is the public listener as main wires it. The account routes only need to be
+// registered here: nothing in these tests reaches a handler that touches a database.
+func publicRouter(checks *health.Handler) http.Handler {
+	return server.NewPublicRouter(logger(), checks, accountRoutes)
+}
+
+// accountRoutes registers the /v1 account endpoints on a router.
+func accountRoutes(r chi.Router) {
+	svc := auth.NewService(nil, nil, nil, auth.NewKeys(testToken), logger())
+	auth.NewHandler(svc, clientip.New(nil), "http://127.0.0.1:3000", logger()).Mount(r)
 }
 
 func withoutPlanned(spec, skip []string) []string {
@@ -377,7 +387,7 @@ func withoutPlanned(spec, skip []string) []string {
 func TestRoutesMatchTheSpecs(t *testing.T) {
 	checks := apiChecks(nil, nil)
 	for name, h := range map[string]http.Handler{
-		"core-public":   server.NewPublicRouter(logger(), checks),
+		"core-public":   publicRouter(checks),
 		"core-internal": internalRouter(checks, aiUnconfigured(t)),
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -405,12 +415,14 @@ func TestParityCheckDetectsDrift(t *testing.T) {
 	extra := chi.NewRouter()
 	extra.Get("/healthz", func(http.ResponseWriter, *http.Request) {})
 	extra.Get("/secret", func(http.ResponseWriter, *http.Request) {})
+	accountRoutes(extra)
 	undocumented, unimplemented := parity(registered(t, extra), withoutPlanned(documented(s.doc), planned["core-public"]))
 	if !reflect.DeepEqual(undocumented, []string{"GET /secret"}) || len(unimplemented) != 0 {
 		t.Errorf("planted extra route: undocumented=%v unimplemented=%v", undocumented, unimplemented)
 	}
 
 	missing := chi.NewRouter()
+	accountRoutes(missing)
 	undocumented, unimplemented = parity(registered(t, missing), withoutPlanned(documented(s.doc), planned["core-public"]))
 	if len(undocumented) != 0 || !reflect.DeepEqual(unimplemented, []string{"GET /healthz"}) {
 		t.Errorf("planted missing route: undocumented=%v unimplemented=%v", undocumented, unimplemented)
