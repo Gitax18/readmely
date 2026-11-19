@@ -1,6 +1,6 @@
 # Phase 2a · Sessions and passwordless email login
 
-**Status:** Built, awaiting sign-off · approved 2026-11-18, amended after the 2026-11-18 audit (F13–F16, marked **[audit]**; approved 2026-11-18) · **Last updated:** 2026-11-19
+**Status:** Done (signed off and merged 2026-11-19, PR #13) · approved 2026-11-18, amended after the 2026-11-18 audit (F13–F16, marked **[audit]**; approved 2026-11-18) · **Last updated:** 2026-11-19
 
 Phase 2 is split into three slices, each with its own plan, branch and sign-off: **2a** (this one) sessions and email-code login with account basics, **2b** Google and GitHub login with safe account linking, **2c** TOTP, recovery codes, account deletion and the settings UI.
 
@@ -121,7 +121,7 @@ Each step is one reviewed commit (or a few) on branch `feat/auth-email`.
 
 ## Outcome (2026-11-19)
 
-Steps 1 to 6 are built on `feat/auth-email`. This section records what differs from the plan above, and the decisions taken while the developer was away (steps 4 to 6 were built in one unattended session, so nothing below has been reviewed yet).
+Steps 1 to 6 were built on `feat/auth-email` and merged in PR #13 after a security review of the branch (no findings), clean dependency audits and a green CI run including the new browser tests. This section records what differs from the plan above, and the decisions taken while the developer was away (steps 4 to 6 were built in one unattended session, so nothing below has been reviewed yet).
 
 ### Decisions taken without review (reverse any of them by saying so)
 
