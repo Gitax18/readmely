@@ -20,6 +20,7 @@ Every feature is built human-in-the-loop. Nothing is implemented without an appr
 | [phase-0-foundations.md](phase-0-foundations.md) | Done · Steps 1–6 |
 | [phase-1-database.md](phase-1-database.md) | Done |
 | [phase-2a-email-login.md](phase-2a-email-login.md) | Done · PR #13 |
+| [phase-2b-oauth-login.md](phase-2b-oauth-login.md) | Draft |
 | [audit-2026-11-18.md](audit-2026-11-18.md) | Fix-now done (PR #10) · 2a amendments in the 2a plan · rest deferred |
 | [audit-2026-11-17.md](audit-2026-11-17.md) | Done · fixes merged (fix-audit-items.md) |
 
