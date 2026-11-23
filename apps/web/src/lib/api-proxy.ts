@@ -32,6 +32,7 @@ const ALLOWED_PATHS = [
   new RegExp(`^v1/projects/${UUID}/analyse$`),
   new RegExp(`^v1/projects/${UUID}/analysis$`),
   new RegExp(`^v1/projects/${UUID}/context-pack$`),
+  new RegExp(`^v1/projects/${UUID}/diagram$`),
   new RegExp(`^v1/projects/${UUID}/readme$`),
   new RegExp(`^v1/projects/${UUID}/readme/sections$`),
   new RegExp(`^v1/projects/${UUID}/readme/versions$`),

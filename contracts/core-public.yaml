@@ -652,6 +652,77 @@ paths:
           $ref: '#/components/responses/NotFound'
         default:
           $ref: '#/components/responses/UnexpectedError'
+  /v1/projects/{id}/diagram:
+    get:
+      operationId: getDiagram
+      summary: The project's architecture diagram and the state of any job drawing it
+      description: >-
+        The diagram is null until one has been generated. The job is the newest diagram job, so the page
+        can show progress or why one failed.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: The state.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiagramState'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/UnexpectedError'
+    post:
+      operationId: generateDiagram
+      summary: Draw an architecture diagram from the analysis
+      description: >-
+        Holds 15 credits and queues the job; it is charged what the model calls cost and the rest is
+        returned, or refunded in full if it fails. 409 not_analysed before a first analysis, 409
+        diagram_running while one is being drawn, 402 insufficient_credits.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateDiagramRequest'
+      responses:
+        '202':
+          description: The job is queued.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectJob'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        default:
+          $ref: '#/components/responses/UnexpectedError'
   /v1/projects/{id}/readme:
     get:
       operationId: getReadme
@@ -1592,6 +1663,46 @@ components:
         content:
           type: string
           maxLength: 200000
+    GenerateDiagramRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        focus:
+          type: string
+          maxLength: 200
+          description: Optional note on what to emphasise, for example "the background worker". May be empty.
+    Diagram:
+      type: object
+      required: [title, svg, node_count, created_at]
+      additionalProperties: false
+      properties:
+        title:
+          type: string
+        svg:
+          type: string
+          description: >-
+            An SVG drawn by our own renderer. Show it as an image (an img element), never inline in the page.
+        node_count:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+    DiagramState:
+      type: object
+      required: [diagram, job]
+      additionalProperties: false
+      properties:
+        diagram:
+          allOf:
+            - $ref: '#/components/schemas/Diagram'
+          nullable: true
+        job:
+          allOf:
+            - $ref: '#/components/schemas/ProjectJob'
+          nullable: true
+          description: >-
+            The newest diagram job. A failed one carries why (insufficient_credits, spend_cap_reached,
+            llm_not_configured, diagram_unusable and so on); its credits are refunded.
     GenerateReadmeRequest:
       type: object
       required: [template]
@@ -1615,7 +1726,7 @@ components:
           description: The version this edit was made on; 0 when there was none.
     RegenerateSectionRequest:
       type: object
-      required: [heading, instruction]
+      required: [heading]
       additionalProperties: false
       properties:
         heading:
@@ -1625,7 +1736,7 @@ components:
         instruction:
           type: string
           maxLength: 300
-          description: Optional, for example "shorter" or "add Docker steps". May be empty.
+          description: Optional, for example "shorter" or "add Docker steps".
     Readme:
       type: object
       required: [version, content, source, template, created_at]

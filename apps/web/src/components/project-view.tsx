@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AnalysisPanel } from "@/components/analysis-panel";
 import { ContextPackPanel } from "@/components/context-pack-panel";
+import { DiagramPanel } from "@/components/diagram-panel";
 import { ReadmePanel } from "@/components/readme-panel";
 import { usePolling } from "@/components/projects-view";
 import { Badge } from "@/components/ui/badge";
@@ -171,6 +172,25 @@ export function ProjectView({
               projectId={project.id}
               csrf={csrf}
               repoName={project.name}
+            />
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {project.status === "ready" ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Architecture diagram</CardTitle>
+            <p className="text-muted-foreground text-sm">
+              A picture of the main parts and how they talk to each other, drawn from the analysis.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <DiagramPanel
+              key={project.job?.finished_at ?? project.updated_at}
+              api={client}
+              projectId={project.id}
+              csrf={csrf}
             />
           </CardContent>
         </Card>

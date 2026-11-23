@@ -19,13 +19,19 @@ from typing import IO, Any
 from app import logs, meter, queue
 from app.config import ConfigError, WorkerSettings
 from app.db import Database
+from app.diagram import generate_diagram
 from app.llm import LlmClient, LlmError
 from app.readme import generate_readme, regenerate_section
 from app.summarise import summarise
 
 logger = logging.getLogger("app.worker")
 
-HANDLERS = {"summarise": summarise, "generate_readme": generate_readme, "readme_section": regenerate_section}
+HANDLERS = {
+    "summarise": summarise,
+    "generate_readme": generate_readme,
+    "readme_section": regenerate_section,
+    "generate_diagram": generate_diagram,
+}
 KINDS = list(HANDLERS)
 LEASE_SECONDS = 60.0
 POLL_SECONDS = 1.0
