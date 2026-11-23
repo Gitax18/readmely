@@ -65,19 +65,26 @@ type Limiter struct {
 // environments sharing one Redis cannot collide.
 func New(rdb redis.Scripter, prefix string) *Limiter { return &Limiter{rdb: rdb, prefix: prefix} }
 
-// The counter and its expiry change together. A key that somehow lost its expiry is repaired,
-// so it can never block a subject forever.
+// Every counter a request touches changes in one script, so the whole request is counted as one
+// step. Counting rules in separate calls let other requests raise the slower counters before the
+// first request reached them, and a burst could then refuse everyone, the first request included.
+// A key that somehow lost its expiry is repaired, so it can never block a subject forever.
 var incr = redis.NewScript(`
-local n = redis.call('INCR', KEYS[1])
-if n == 1 then
-  redis.call('PEXPIRE', KEYS[1], ARGV[1])
+local out = {}
+for i = 1, #KEYS do
+  local n = redis.call('INCR', KEYS[i])
+  if n == 1 then
+    redis.call('PEXPIRE', KEYS[i], ARGV[i])
+  end
+  local ttl = redis.call('PTTL', KEYS[i])
+  if ttl < 0 then
+    redis.call('PEXPIRE', KEYS[i], ARGV[i])
+    ttl = tonumber(ARGV[i])
+  end
+  out[#out + 1] = n
+  out[#out + 1] = ttl
 end
-local ttl = redis.call('PTTL', KEYS[1])
-if ttl < 0 then
-  redis.call('PEXPIRE', KEYS[1], ARGV[1])
-  ttl = tonumber(ARGV[1])
-end
-return {n, ttl}
+return out
 `)
 
 func (l *Limiter) key(r Rule, subject string) string {
@@ -85,28 +92,34 @@ func (l *Limiter) key(r Rule, subject string) string {
 	return l.prefix + r.Name + ":" + hex.EncodeToString(sum[:16])
 }
 
-// Allow counts one request against every check and allows it only if all of them have room.
-// Every check is counted even when an earlier one refuses, so hammering one limit cannot be
-// used to probe another. RetryAfter is the longest wait among the refusing checks.
+// Allow counts one request against every check, all in one step, and allows it only if all of
+// them have room. Every check is counted even when another refuses, so hammering one limit
+// cannot be used to probe another. RetryAfter is the longest wait among the refusing checks.
 func (l *Limiter) Allow(ctx context.Context, checks ...Check) (Decision, error) {
 	if len(checks) == 0 {
 		return Decision{}, errors.New("ratelimit: no checks")
 	}
-	d := Decision{Allowed: true}
-	for _, c := range checks {
+	keys := make([]string, len(checks))
+	windows := make([]any, len(checks))
+	for i, c := range checks {
 		if err := c.Rule.Validate(); err != nil {
 			return Decision{}, err
 		}
-		res, err := incr.Run(ctx, l.rdb, []string{l.key(c.Rule, c.Subject)}, c.Rule.Window.Milliseconds()).Int64Slice()
-		if err != nil {
-			return Decision{}, fmt.Errorf("ratelimit %s: %w", c.Rule.Name, err)
-		}
-		if len(res) != 2 {
-			return Decision{}, fmt.Errorf("ratelimit %s: unexpected reply", c.Rule.Name)
-		}
-		if res[0] > c.Rule.Max {
+		keys[i] = l.key(c.Rule, c.Subject)
+		windows[i] = c.Rule.Window.Milliseconds()
+	}
+	res, err := incr.Run(ctx, l.rdb, keys, windows...).Int64Slice()
+	if err != nil {
+		return Decision{}, fmt.Errorf("ratelimit: %w", err)
+	}
+	if len(res) != 2*len(checks) {
+		return Decision{}, errors.New("ratelimit: unexpected reply")
+	}
+	d := Decision{Allowed: true}
+	for i, c := range checks {
+		if res[2*i] > c.Rule.Max {
 			d.Allowed = false
-			if wait := roundUpToSecond(time.Duration(res[1]) * time.Millisecond); wait > d.RetryAfter {
+			if wait := roundUpToSecond(time.Duration(res[2*i+1]) * time.Millisecond); wait > d.RetryAfter {
 				d.RetryAfter = wait
 			}
 		}
