@@ -1,6 +1,6 @@
 # Phase 2b · Google and GitHub sign-in, connected accounts, sign-in alerts
 
-**Status:** Draft · **Last updated:** 2026-11-19
+**Status:** Approved (2026-11-23) · **Last updated:** 2026-11-23
 
 Phase 2 slices: 2a email codes and sessions (done), **2b** (this one) Google and GitHub sign-in with safe account linking, 2c TOTP, recovery codes, account deletion and the full settings UI.
 
