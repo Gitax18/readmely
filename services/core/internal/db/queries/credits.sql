@@ -16,3 +16,10 @@ SELECT * FROM credit_ledger
 WHERE user_id = @user_id::uuid
 ORDER BY created_at DESC, id DESC
 LIMIT @row_limit;
+
+-- name: GrantWelcomeCredits :exec
+-- The one-time grant for a new account. The fixed key makes a second call a no-op, so a retried
+-- or raced sign-up never grants twice.
+INSERT INTO credit_ledger (user_id, delta, kind, idempotency_key, note)
+VALUES (@user_id::uuid, @amount, 'grant', 'welcome-grant', 'Welcome credits')
+ON CONFLICT (user_id, idempotency_key) DO NOTHING;

@@ -57,6 +57,24 @@ func (q *Queries) GrantCredits(ctx context.Context, arg GrantCreditsParams) (Cre
 	return i, err
 }
 
+const grantWelcomeCredits = `-- name: GrantWelcomeCredits :exec
+INSERT INTO credit_ledger (user_id, delta, kind, idempotency_key, note)
+VALUES ($1::uuid, $2, 'grant', 'welcome-grant', 'Welcome credits')
+ON CONFLICT (user_id, idempotency_key) DO NOTHING
+`
+
+type GrantWelcomeCreditsParams struct {
+	UserID uuid.UUID
+	Amount int64
+}
+
+// The one-time grant for a new account. The fixed key makes a second call a no-op, so a retried
+// or raced sign-up never grants twice.
+func (q *Queries) GrantWelcomeCredits(ctx context.Context, arg GrantWelcomeCreditsParams) error {
+	_, err := q.db.Exec(ctx, grantWelcomeCredits, arg.UserID, arg.Amount)
+	return err
+}
+
 const listCreditEntries = `-- name: ListCreditEntries :many
 SELECT id, user_id, delta, kind, job_id, reservation_id, idempotency_key, note, created_at FROM credit_ledger
 WHERE user_id = $1::uuid

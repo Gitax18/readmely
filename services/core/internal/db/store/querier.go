@@ -83,6 +83,9 @@ type Querier interface {
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserIdentity(ctx context.Context, arg GetUserIdentityParams) (OauthIdentity, error)
 	GrantCredits(ctx context.Context, arg GrantCreditsParams) (CreditLedger, error)
+	// The one-time grant for a new account. The fixed key makes a second call a no-op, so a retried
+	// or raced sign-up never grants twice.
+	GrantWelcomeCredits(ctx context.Context, arg GrantWelcomeCreditsParams) error
 	ListCreditEntries(ctx context.Context, arg ListCreditEntriesParams) ([]CreditLedger, error)
 	ListProjectFiles(ctx context.Context, arg ListProjectFilesParams) ([]ListProjectFilesRow, error)
 	// The nodes other files import most. Scoped to the owner through the project.
