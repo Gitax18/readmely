@@ -1,4 +1,5 @@
 import { failure, parsed, request, type Result } from "./browser-api";
+import { projectAnalysisSchema, type ProjectAnalysis } from "./analysis-schema";
 import {
   projectListSchema,
   projectSchema,
@@ -14,6 +15,7 @@ export interface ProjectsApi {
   list(): Promise<Result<{ projects: Project[] }>>;
   get(id: string): Promise<Result<{ project: Project }>>;
   analyse(csrf: string, id: string): Promise<Result<{ project: Project }>>;
+  analysis(id: string): Promise<Result<{ analysis: ProjectAnalysis }>>;
   remove(csrf: string, id: string): Promise<Result<object>>;
 }
 
@@ -52,6 +54,12 @@ export function createProjectsApi(
       if (res?.status !== 202) return failure(res);
       const project = await parsed(res, projectSchema);
       return project ? { ok: true, project } : { ok: false, kind: "unavailable" };
+    },
+    async analysis(id) {
+      const res = await request(fetchImpl, "GET", `/projects/${encodeURIComponent(id)}/analysis`);
+      if (res?.status !== 200) return failure(res);
+      const analysis = await parsed(res, projectAnalysisSchema);
+      return analysis ? { ok: true, analysis } : { ok: false, kind: "unavailable" };
     },
     async remove(csrf, id) {
       const res = await request(fetchImpl, "DELETE", `/projects/${encodeURIComponent(id)}`, {

@@ -34,6 +34,8 @@ const STEP_LABELS: Record<string, string> = {
   fetching: "Fetching the repository",
   scanning: "Scanning for secrets",
   parsing: "Reading the code",
+  mapping: "Mapping how the code fits together",
+  saving: "Saving what we found",
   summarising: "Summarising",
 };
 
@@ -46,6 +48,16 @@ export function jobFailureText(code: string | null): string {
   switch (code) {
     case "lease_expired":
       return "The analysis was interrupted before it finished.";
+    case "repository_not_found":
+      return "We could not find the repository any more. It may have been renamed, made private or deleted.";
+    case "repository_too_large":
+      return "This repository is too large to analyse.";
+    case "repository_empty":
+      return "The repository has no files to analyse.";
+    case "github_unavailable":
+      return "GitHub did not answer in time.";
+    case "archive_unreadable":
+      return "We could not read the repository's files.";
     default:
       return "The analysis hit a problem on our side.";
   }
@@ -79,4 +91,39 @@ export function repoUrl(p: Pick<Project, "owner" | "repo">): string | null {
 export function formatSize(kb: number): string {
   if (kb < 1024) return `${kb} KB`;
   return `${(kb / 1024).toFixed(kb < 10 * 1024 ? 1 : 0)} MB`;
+}
+
+/** Plain names for the kinds of secret the scanner removes. */
+const SECRET_RULES: Record<string, string> = {
+  private_key: "Private key",
+  aws_access_key: "AWS access key",
+  github_token: "GitHub token",
+  slack_token: "Slack token",
+  google_api_key: "Google API key",
+  stripe_key: "Stripe key",
+  api_key: "API key",
+  jwt: "Signed token (JWT)",
+  credential_url: "Password in an address",
+  assigned_secret: "Secret assigned in code",
+};
+
+export function secretRuleLabel(rule: string): string {
+  return SECRET_RULES[rule] ?? "Secret";
+}
+
+const SKIP_REASONS: Record<string, string> = {
+  binary: "images and other binary files",
+  too_large: "files over 256 KB",
+  sensitive: "files that usually hold credentials",
+  generated: "lock files and generated code",
+  vendored: "installed dependencies and build output",
+  budget: "files beyond the size budget",
+};
+
+export function skipReasonLabel(reason: string): string {
+  return SKIP_REASONS[reason] ?? "other files";
+}
+
+export function formatCount(n: number): string {
+  return new Intl.NumberFormat("en-US").format(n);
 }
