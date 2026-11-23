@@ -193,10 +193,14 @@ type hubBody struct {
 	ImportedBy int    `json:"imported_by"`
 }
 
+type jobView = corepublic.ProjectJob
+
 type analysisBody struct {
 	CommitSHA  string          `json:"commit_sha"`
 	AnalysedAt time.Time       `json:"analysed_at"`
 	Facts      json.RawMessage `json:"facts"`
+	Summary    json.RawMessage `json:"summary"`
+	SummaryJob *jobView        `json:"summary_job"`
 	Hubs       []hubBody       `json:"hubs"`
 }
 
@@ -215,5 +219,12 @@ func (h *Handler) analysis(w http.ResponseWriter, r *http.Request) {
 	for _, hub := range a.Hubs {
 		hubs = append(hubs, hubBody{Kind: hub.Kind, Key: hub.Key, ImportedBy: int(hub.ImportedBy)})
 	}
-	httpx.WriteJSON(w, http.StatusOK, analysisBody{CommitSHA: a.CommitSHA, AnalysedAt: a.AnalysedAt, Facts: a.Facts, Hubs: hubs})
+	body := analysisBody{CommitSHA: a.CommitSHA, AnalysedAt: a.AnalysedAt, Facts: a.Facts, Summary: a.Summary, Hubs: hubs}
+	if len(body.Summary) == 0 {
+		body.Summary = json.RawMessage("null")
+	}
+	if a.SummaryJob != nil {
+		body.SummaryJob = jobBody(*a.SummaryJob)
+	}
+	httpx.WriteJSON(w, http.StatusOK, body)
 }

@@ -30,9 +30,11 @@ const (
 	// MaxRepoKB is the largest repository we accept (GitHub reports size in KB).
 	MaxRepoKB = 200_000
 	// IngestKind is the job kind that analyses a project.
-	IngestKind  = "ingest"
-	maxAttempts = 3
-	listLimit   = 50
+	IngestKind = "ingest"
+	// SummariseKind is the job kind the AI worker runs after an analysis to write the summary.
+	SummariseKind = "summarise"
+	maxAttempts   = 3
+	listLimit     = 50
 )
 
 var (
@@ -276,6 +278,8 @@ type Analysis struct {
 	AnalysedAt time.Time
 	Facts      json.RawMessage
 	Hubs       []store.ListProjectHubsRow
+	Summary    json.RawMessage // nil until the summary is written
+	SummaryJob *store.Job      // nil when no summary was ever queued for this project
 }
 
 // Analysis returns the stored facts and the most imported files. Until an analysis has finished,
@@ -292,5 +296,18 @@ func (s *Service) Analysis(ctx context.Context, userID, id uuid.UUID) (Analysis,
 	if err != nil {
 		return Analysis{}, fmt.Errorf("get analysis: %w", err)
 	}
-	return Analysis{CommitSHA: f.CommitSha, AnalysedAt: f.AnalysedAt, Facts: f.Facts, Hubs: hubs}, nil
+	out := Analysis{CommitSHA: f.CommitSha, AnalysedAt: f.AnalysedAt, Facts: f.Facts, Hubs: hubs}
+	switch sum, err := s.q.GetProjectSummary(ctx, store.GetProjectSummaryParams{ProjectID: id, UserID: userID}); {
+	case err == nil:
+		out.Summary = sum.Summary
+	case !errors.Is(err, pgx.ErrNoRows):
+		return Analysis{}, fmt.Errorf("get analysis: %w", err)
+	}
+	switch j, err := s.q.GetLatestProjectJob(ctx, store.GetLatestProjectJobParams{ProjectID: &id, UserID: userID, Kind: SummariseKind}); {
+	case err == nil:
+		out.SummaryJob = &j
+	case !errors.Is(err, pgx.ErrNoRows):
+		return Analysis{}, fmt.Errorf("get analysis: %w", err)
+	}
+	return out, nil
 }
