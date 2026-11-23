@@ -82,6 +82,8 @@ type Querier interface {
 	// these are keyed by project.
 	GetLatestReadme(ctx context.Context, projectID uuid.UUID) (ReadmeVersion, error)
 	GetProject(ctx context.Context, arg GetProjectParams) (Project, error)
+	// A project's diagram. Callers check the project belongs to the user first (GetProject).
+	GetProjectDiagram(ctx context.Context, projectID uuid.UUID) (ProjectDiagram, error)
 	// What an analysis stores and the project page reads. Every read is scoped to the owner through
 	// the project, so someone else's project finds nothing.
 	GetProjectFacts(ctx context.Context, arg GetProjectFactsParams) (ProjectFact, error)

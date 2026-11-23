@@ -133,6 +133,16 @@ type Project struct {
 	CommitSha       *string
 }
 
+type ProjectDiagram struct {
+	ProjectID uuid.UUID
+	Title     string
+	Svg       string
+	NodeCount int32
+	CommitSha string
+	JobID     *uuid.UUID
+	CreatedAt time.Time
+}
+
 type ProjectFact struct {
 	ID         uuid.UUID
 	ProjectID  uuid.UUID
