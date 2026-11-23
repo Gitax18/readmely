@@ -40,6 +40,13 @@ Sizes are relative (S, M, L), not calendar estimates. Each phase ends with somet
 
 Dependencies are linear except that 6 and 7 could swap; the context pack goes first because the README writer reads from it. Phase 7 is the first demo you can show someone, so it is the milestone to protect.
 
+### Progress and changes from the plan
+
+| Phase | State | What differs from the text below |
+|---|---|---|
+| 2c-lite | Done (PR #18) | Deletion is two `POST` steps (`/v1/me/deletion/start`, then `/confirm`) instead of `DELETE /v1/me`, which avoids a body on `DELETE`. Moving the status panel to `/status` is deferred to Phase 9 with the landing page. |
+| 3 | Built, in review (PR #19) | Progress is polled every two seconds instead of streamed with server-sent events: the same-origin bridge buffers responses and caps their size, so a stream would need a second path out of the web server. A `POST /v1/projects/preview` endpoint checks a repository before anything is created. Signing in still lands on `/account`; the post-login destination moves to the dashboard with the landing page in Phase 9. The worker's analysis steps are a placeholder until Phase 4. |
+
 ## 4. The phases
 
 ### Phase 2c-lite · Account essentials
