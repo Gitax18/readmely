@@ -1058,7 +1058,7 @@ components:
           description: Null until the first analysis is requested.
     ProjectAnalysis:
       type: object
-      required: [commit_sha, analysed_at, facts, hubs]
+      required: [commit_sha, analysed_at, facts, summary, summary_job, hubs]
       additionalProperties: false
       properties:
         commit_sha:
@@ -1069,12 +1069,57 @@ components:
           format: date-time
         facts:
           $ref: '#/components/schemas/ProjectFacts'
+        summary:
+          allOf:
+            - $ref: '#/components/schemas/ProjectSummary'
+          nullable: true
+          description: Null until the summary has been written for this analysis.
+        summary_job:
+          allOf:
+            - $ref: '#/components/schemas/ProjectJob'
+          nullable: true
+          description: >-
+            The job that writes the summary. A failed one carries why (for example insufficient_credits,
+            spend_cap_reached or llm_not_configured); its credits are refunded.
         hubs:
           type: array
           maxItems: 10
           description: The files other files import most, with how many do.
           items:
             $ref: '#/components/schemas/Hub'
+    ProjectSummary:
+      type: object
+      required: [headline, overview, how_it_works, components]
+      additionalProperties: false
+      description: Written by a model from the analysis. Plain text; never render it as markup.
+      properties:
+        headline:
+          type: string
+          maxLength: 160
+        overview:
+          type: string
+          maxLength: 1000
+        how_it_works:
+          type: array
+          minItems: 2
+          maxItems: 6
+          items:
+            type: string
+            maxLength: 300
+        components:
+          type: array
+          maxItems: 8
+          items:
+            type: object
+            required: [path, role]
+            additionalProperties: false
+            properties:
+              path:
+                type: string
+                maxLength: 400
+              role:
+                type: string
+                maxLength: 200
     Hub:
       type: object
       required: [kind, key, imported_by]

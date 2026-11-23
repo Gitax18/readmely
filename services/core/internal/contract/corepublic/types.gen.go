@@ -283,6 +283,12 @@ type ProjectAnalysis struct {
 
 	// Hubs The files other files import most, with how many do.
 	Hubs []Hub `json:"hubs"`
+
+	// Summary Null until the summary has been written for this analysis.
+	Summary *ProjectSummary `json:"summary"`
+
+	// SummaryJob The job that writes the summary. A failed one carries why (for example insufficient_credits, spend_cap_reached or llm_not_configured); its credits are refunded.
+	SummaryJob *ProjectJob `json:"summary_job"`
 }
 
 // ProjectFacts defines model for ProjectFacts.
@@ -355,6 +361,17 @@ type ProjectJobStatus string
 // ProjectList defines model for ProjectList.
 type ProjectList struct {
 	Projects []Project `json:"projects"`
+}
+
+// ProjectSummary Written by a model from the analysis. Plain text; never render it as markup.
+type ProjectSummary struct {
+	Components []struct {
+		Path string `json:"path"`
+		Role string `json:"role"`
+	} `json:"components"`
+	Headline   string   `json:"headline"`
+	HowItWorks []string `json:"how_it_works"`
+	Overview   string   `json:"overview"`
 }
 
 // Provider defines model for Provider.
