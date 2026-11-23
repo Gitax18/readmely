@@ -229,6 +229,10 @@ type refusal struct{ code string }
 
 func (r *refusal) Error() string { return "refused: " + r.code }
 
+// errRaced means a concurrent sign-in for the same provider account got there first: run again and
+// the identity will be found.
+var errRaced = errors.New("concurrent first sign-in")
+
 func isUnique(err error, constraint string) bool {
 	var pg *pgconn.PgError
 	return errors.As(err, &pg) && pg.Code == "23505" && pg.ConstraintName == constraint
@@ -257,7 +261,7 @@ func (s *Service) finishLogin(ctx context.Context, c Callback, account, email, n
 			return CallbackResult{LoggedIn: out.in}, nil
 		case errors.As(err, &ref):
 			return refuse(ref.code)
-		case isUnique(err, "oauth_identities_provider_account_key"):
+		case errors.Is(err, errRaced), isUnique(err, "oauth_identities_provider_account_key"):
 			continue
 		case isUnique(err, "oauth_identities_user_provider_key"):
 			return refuse(ErrCodeProviderConflict)
@@ -288,15 +292,22 @@ func (s *Service) loginTx(ctx context.Context, c Callback, account, email, name 
 				return err
 			}
 		case errors.Is(err, pgx.ErrNoRows):
+			if s.onIdentityMiss != nil {
+				s.onIdentityMiss()
+			}
 			found, err := q.GetUserByEmail(ctx, email)
 			switch {
 			case err == nil:
 				if found.Status != "active" {
 					return &refusal{ErrCodeAccountUnavailable}
 				}
-				if _, err := q.GetUserIdentity(ctx, store.GetUserIdentityParams{UserID: found.ID, Provider: c.Provider}); err == nil {
+				have, err := q.GetUserIdentity(ctx, store.GetUserIdentityParams{UserID: found.ID, Provider: c.Provider})
+				switch {
+				case err == nil && have.ProviderUserID == account:
+					return errRaced // this very provider account was attached a moment ago by a concurrent sign-in
+				case err == nil:
 					return &refusal{ErrCodeProviderConflict} // a different account of this provider is already attached
-				} else if !errors.Is(err, pgx.ErrNoRows) {
+				case !errors.Is(err, pgx.ErrNoRows):
 					return err
 				}
 			case errors.Is(err, pgx.ErrNoRows):

@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -507,35 +508,41 @@ func TestConcurrentCallbacksAndFirstSignIns(t *testing.T) {
 		t.Fatalf("%d callbacks signed in, %d sessions; want 1 and 1", wins, e.count(`SELECT count(*) FROM sessions`))
 	}
 
-	// Two simultaneous first sign-ins for one provider account (different states): one user, one identity.
+	// Simultaneous first sign-ins for one provider account (different states): one user, one
+	// identity, every request signed in. Repeated, because the window is narrow.
 	e2 := newEnv(t, envOpts{oauth: true})
-	attempts := make([]attempt, 8)
-	cs := make([]string, 8)
-	for i := range attempts {
-		attempts[i], _ = e2.startOAuth("github")
-		cs[i] = e2.fake.grant("github", attempts[i], ada("583231"))
-		ips[i] = e2.freshIP()
-	}
-	results = make(chan result, 8)
-	for i := range attempts {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			results <- e2.outcome(e2.callback(attempts[i], cb{code: cs[i], ip: ips[i]}))
-		}()
-	}
-	wg.Wait()
-	close(results)
-	for r := range results {
-		if !r.ok() {
-			t.Errorf("a first sign-in failed: %q", r.location)
+	for round := range 12 {
+		account := "58" + itoa(round)
+		profile := fakeProfile{account: account, email: "round" + itoa(round) + "@example.com", verified: true}
+		provider := []string{"github", "google"}[round%2]
+		attempts := make([]attempt, 8)
+		cs := make([]string, 8)
+		for i := range attempts {
+			attempts[i], _ = e2.startOAuth(provider)
+			cs[i] = e2.fake.grant(provider, attempts[i], profile)
+			ips[i] = e2.freshIP()
 		}
-	}
-	if n := e2.count(`SELECT count(*) FROM users`); n != 1 {
-		t.Errorf("users = %d, want 1", n)
-	}
-	if n := e2.count(`SELECT count(*) FROM oauth_identities`); n != 1 {
-		t.Errorf("identities = %d, want 1", n)
+		results = make(chan result, 8)
+		for i := range attempts {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				results <- e2.outcome(e2.callback(attempts[i], cb{code: cs[i], ip: ips[i]}))
+			}()
+		}
+		wg.Wait()
+		close(results)
+		for r := range results {
+			if !r.ok() {
+				t.Errorf("round %d: a first sign-in failed: %q", round, r.location)
+			}
+		}
+		if n := e2.count(`SELECT count(*) FROM users WHERE email = $1`, profile.email); n != 1 {
+			t.Errorf("round %d: users = %d, want 1", round, n)
+		}
+		if n := e2.count(`SELECT count(*) FROM oauth_identities WHERE provider_user_id = $1`, account); n != 1 {
+			t.Errorf("round %d: identities = %d, want 1", round, n)
+		}
 	}
 }
 
@@ -640,5 +647,46 @@ func TestTheAttemptCookieIsLockedDown(t *testing.T) {
 	check("connect start", rec.Result().Cookies())
 	if cc := rec.Header().Get("Cache-Control"); cc != "no-store" {
 		t.Errorf("connect start Cache-Control = %q", cc)
+	}
+}
+
+// The race that random concurrency rarely hits, made certain: a second sign-in for the same
+// provider account finishes between the first one's "unknown account" lookup and its lookup by
+// address. The first must then sign in as the user the second created, not report a conflict.
+func TestFirstSignInRacedByTheSameAccount(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t, envOpts{oauth: true})
+	p := ada("g-race")
+
+	a, _ := e.startOAuth("google")
+	code := e.fake.grant("google", a, p)
+
+	var fired atomic.Bool
+	var inner result
+	e.svc.OnIdentityMiss(func() {
+		if fired.Swap(true) {
+			return // only the outer sign-in plays the race
+		}
+		inner = e.providerSignIn("google", p, safari)
+	})
+	outer := e.outcome(e.callback(a, cb{code: code, ua: chrome}))
+
+	if !fired.Load() {
+		t.Fatal("the seam never ran")
+	}
+	if !inner.ok() {
+		t.Fatalf("the sign-in that got there first = %q", inner.location)
+	}
+	if !outer.ok() {
+		t.Fatalf("the sign-in that lost the race = %q, want /account", outer.location)
+	}
+	if n := e.count(`SELECT count(*) FROM users`); n != 1 {
+		t.Errorf("users = %d, want 1", n)
+	}
+	if n := e.count(`SELECT count(*) FROM oauth_identities`); n != 1 {
+		t.Errorf("identities = %d, want 1", n)
+	}
+	if n := e.count(`SELECT count(*) FROM sessions`); n != 2 {
+		t.Errorf("sessions = %d, want 2", n)
 	}
 }

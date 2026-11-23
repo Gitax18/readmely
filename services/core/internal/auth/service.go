@@ -62,6 +62,10 @@ type Service struct {
 	keys    Keys
 	logger  *slog.Logger
 	oauth   *OAuthConfig // nil until EnableOAuth: no provider sign-in
+
+	// onIdentityMiss is a test seam: it runs between "this provider account is not known" and the
+	// lookup by address, the one moment a concurrent first sign-in can slip in. Nil in production.
+	onIdentityMiss func()
 }
 
 // NewService wires the service. The mail queue may be shared with other features.
