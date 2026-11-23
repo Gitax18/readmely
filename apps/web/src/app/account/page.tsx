@@ -46,7 +46,7 @@ export default async function AccountPage({
   ]);
   return (
     <main className="mx-auto flex max-w-2xl flex-col gap-6 p-6 sm:p-10">
-      <AppHeader active="account" email={session.me.user.email} />
+      <AppHeader active="account" />
       <h1 className="text-2xl font-semibold">Account</h1>
       <AccountView
         me={session.me}
