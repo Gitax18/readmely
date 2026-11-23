@@ -104,3 +104,11 @@ LIMIT 1;
 -- Jobs of a kind that are queued or running: at most one analysis per project at a time.
 SELECT count(*) FROM jobs
 WHERE project_id = @project_id AND user_id = @user_id AND kind = @kind AND status IN ('queued', 'running');
+
+-- name: FailJob :one
+-- Ends a job for good without further attempts, for an error that retrying cannot fix (a missing
+-- repository, one that is too large). Only the worker holding the job can.
+UPDATE jobs
+SET status = 'failed', finished_at = now(), error_code = @error_code::text, locked_by = NULL, lease_expires_at = NULL
+WHERE id = @id AND locked_by = @worker::text AND status = 'running'
+RETURNING *;

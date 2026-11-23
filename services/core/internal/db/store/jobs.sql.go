@@ -262,6 +262,47 @@ func (q *Queries) ExtendJobLease(ctx context.Context, arg ExtendJobLeaseParams) 
 	return i, err
 }
 
+const failJob = `-- name: FailJob :one
+UPDATE jobs
+SET status = 'failed', finished_at = now(), error_code = $1::text, locked_by = NULL, lease_expires_at = NULL
+WHERE id = $2 AND locked_by = $3::text AND status = 'running'
+RETURNING id, user_id, project_id, kind, payload, status, attempts, max_attempts, run_after, locked_by, lease_expires_at, idempotency_key, error_code, created_at, updated_at, finished_at, step, progress
+`
+
+type FailJobParams struct {
+	ErrorCode string
+	ID        uuid.UUID
+	Worker    string
+}
+
+// Ends a job for good without further attempts, for an error that retrying cannot fix (a missing
+// repository, one that is too large). Only the worker holding the job can.
+func (q *Queries) FailJob(ctx context.Context, arg FailJobParams) (Job, error) {
+	row := q.db.QueryRow(ctx, failJob, arg.ErrorCode, arg.ID, arg.Worker)
+	var i Job
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.ProjectID,
+		&i.Kind,
+		&i.Payload,
+		&i.Status,
+		&i.Attempts,
+		&i.MaxAttempts,
+		&i.RunAfter,
+		&i.LockedBy,
+		&i.LeaseExpiresAt,
+		&i.IdempotencyKey,
+		&i.ErrorCode,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.FinishedAt,
+		&i.Step,
+		&i.Progress,
+	)
+	return i, err
+}
+
 const getJob = `-- name: GetJob :one
 SELECT id, user_id, project_id, kind, payload, status, attempts, max_attempts, run_after, locked_by, lease_expires_at, idempotency_key, error_code, created_at, updated_at, finished_at, step, progress FROM jobs WHERE id = $1 AND user_id = $2
 `
