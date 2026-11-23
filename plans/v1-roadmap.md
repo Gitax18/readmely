@@ -1,6 +1,6 @@
 # Version 1 roadmap (fast-forward build)
 
-**Status:** Draft · **Last updated:** 2026-11-24
+**Status:** Approved (2026-11-24) · **Last updated:** 2026-11-24
 
 The shortest safe path from today (sign-in is done) to a first release of Readmely: import a public GitHub repository, analyse it, and get a README, a context pack and an overview diagram. What a user sees in version 1 is described in [v1-brief.md](v1-brief.md). The long-term shape stays in [00-architecture.md](00-architecture.md); this plan only compresses the order and the scope.
 

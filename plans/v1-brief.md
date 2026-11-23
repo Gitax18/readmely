@@ -1,6 +1,6 @@
 # Version 1 brief: what you can expect
 
-**Status:** Draft · **Last updated:** 2026-11-24 · Build order and scope rules: [v1-roadmap.md](v1-roadmap.md)
+**Status:** Approved (2026-11-24) · **Last updated:** 2026-11-24 · Build order and scope rules: [v1-roadmap.md](v1-roadmap.md)
 
 ## 1. The product in one paragraph
 

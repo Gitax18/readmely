@@ -23,8 +23,8 @@ Every feature is built human-in-the-loop. Nothing is implemented without an appr
 | [phase-1-database.md](phase-1-database.md) | Done |
 | [phase-2a-email-login.md](phase-2a-email-login.md) | Done · PR #13 |
 | [phase-2b-oauth-login.md](phase-2b-oauth-login.md) | Done · PR #15 |
-| [v1-roadmap.md](v1-roadmap.md) | Draft · fast-forward build to version 1 |
-| [v1-brief.md](v1-brief.md) | Draft · what version 1 looks like |
+| [v1-roadmap.md](v1-roadmap.md) | Approved · fast-forward build to version 1 |
+| [v1-brief.md](v1-brief.md) | Approved · what version 1 looks like |
 | [audit-2026-11-18.md](audit-2026-11-18.md) | Fix-now done (PR #10) · 2a amendments in the 2a plan · rest deferred |
 | [audit-2026-11-17.md](audit-2026-11-17.md) | Done · fixes merged (fix-audit-items.md) |
 
