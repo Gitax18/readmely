@@ -652,6 +652,223 @@ paths:
           $ref: '#/components/responses/NotFound'
         default:
           $ref: '#/components/responses/UnexpectedError'
+  /v1/projects/{id}/readme:
+    get:
+      operationId: getReadme
+      summary: The current README, its health score and the state of any job writing it
+      description: >-
+        The readme and score are null until a README has been generated or saved. The job is the newest
+        generate or section job, so the page can show progress or why one failed.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: The state.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadmeState'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/UnexpectedError'
+    post:
+      operationId: generateReadme
+      summary: Write a README from the analysis
+      description: >-
+        Holds 15 credits and queues the job; it is charged what the model calls cost and the rest is
+        returned, or refunded in full if it fails. 409 not_analysed before a first analysis, 409
+        readme_running while one is being written, 402 insufficient_credits.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateReadmeRequest'
+      responses:
+        '202':
+          description: The job is queued.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectJob'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        default:
+          $ref: '#/components/responses/UnexpectedError'
+    put:
+      operationId: saveReadme
+      summary: Save an edit as a new version
+      description: >-
+        Adds a version. base_version is the version the edit was made on; if a newer one exists the
+        answer is 409 stale_version and nothing is overwritten.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveReadmeRequest'
+      responses:
+        '200':
+          description: The saved version.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Readme'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        default:
+          $ref: '#/components/responses/UnexpectedError'
+  /v1/projects/{id}/readme/sections:
+    post:
+      operationId: regenerateReadmeSection
+      summary: Rewrite one section of the README
+      description: >-
+        Holds 2 credits and queues a job that rewrites the section under the given heading, following the
+        optional instruction, and saves the result as a new version. 404 when the heading is not in the
+        current README.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegenerateSectionRequest'
+      responses:
+        '202':
+          description: The job is queued.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectJob'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        default:
+          $ref: '#/components/responses/UnexpectedError'
+  /v1/projects/{id}/readme/versions:
+    get:
+      operationId: listReadmeVersions
+      summary: The README's history, newest first
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: Up to 50 versions.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadmeVersions'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/UnexpectedError'
+  /v1/projects/{id}/readme/versions/{version}/restore:
+    post:
+      operationId: restoreReadmeVersion
+      summary: Make an older version current again
+      description: Adds a new version with the older one's text; nothing is removed.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - name: version
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '200':
+          description: The new current version.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Readme'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        default:
+          $ref: '#/components/responses/UnexpectedError'
 
   /v1/auth/providers:
     get:
@@ -1375,6 +1592,135 @@ components:
         content:
           type: string
           maxLength: 200000
+    GenerateReadmeRequest:
+      type: object
+      required: [template]
+      additionalProperties: false
+      properties:
+        template:
+          type: string
+          enum: [standard, minimal, detailed]
+    SaveReadmeRequest:
+      type: object
+      required: [content, base_version]
+      additionalProperties: false
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 102400
+        base_version:
+          type: integer
+          minimum: 0
+          description: The version this edit was made on; 0 when there was none.
+    RegenerateSectionRequest:
+      type: object
+      required: [heading, instruction]
+      additionalProperties: false
+      properties:
+        heading:
+          type: string
+          minLength: 1
+          maxLength: 80
+        instruction:
+          type: string
+          maxLength: 300
+          description: Optional, for example "shorter" or "add Docker steps". May be empty.
+    Readme:
+      type: object
+      required: [version, content, source, template, created_at]
+      additionalProperties: false
+      properties:
+        version:
+          type: integer
+        content:
+          type: string
+          description: Markdown. Render it without raw HTML.
+        source:
+          type: string
+          enum: [generated, edited, regenerated, restored]
+        template:
+          type: string
+          nullable: true
+          enum: [standard, minimal, detailed]
+        created_at:
+          type: string
+          format: date-time
+    ReadmeScoreItem:
+      type: object
+      required: [key, label, ok, hint]
+      additionalProperties: false
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        ok:
+          type: boolean
+        hint:
+          type: string
+          description: What to add when it is missing.
+    ReadmeScore:
+      type: object
+      required: [score, items]
+      additionalProperties: false
+      properties:
+        score:
+          type: integer
+          minimum: 0
+          maximum: 100
+        items:
+          type: array
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/ReadmeScoreItem'
+    ReadmeState:
+      type: object
+      required: [readme, score, job]
+      additionalProperties: false
+      properties:
+        readme:
+          allOf:
+            - $ref: '#/components/schemas/Readme'
+          nullable: true
+        score:
+          allOf:
+            - $ref: '#/components/schemas/ReadmeScore'
+          nullable: true
+        job:
+          allOf:
+            - $ref: '#/components/schemas/ProjectJob'
+          nullable: true
+          description: >-
+            The newest job that writes the README. A failed one carries why (insufficient_credits,
+            spend_cap_reached, llm_not_configured, section_missing and so on); its credits are refunded.
+    ReadmeVersionInfo:
+      type: object
+      required: [version, source, template, created_at]
+      additionalProperties: false
+      properties:
+        version:
+          type: integer
+        source:
+          type: string
+          enum: [generated, edited, regenerated, restored]
+        template:
+          type: string
+          nullable: true
+          enum: [standard, minimal, detailed]
+        created_at:
+          type: string
+          format: date-time
+    ReadmeVersions:
+      type: object
+      required: [versions]
+      additionalProperties: false
+      properties:
+        versions:
+          type: array
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/ReadmeVersionInfo'
     ProjectList:
       type: object
       required: [projects]
@@ -1530,6 +1876,18 @@ components:
             $ref: '#/components/schemas/Error'
           example:
             error: forbidden
+            request_id: 6P5E3ETHKJKOTOXXMXCEJGDW6I
+    PaymentRequired:
+      description: Not enough credits for this (insufficient_credits).
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: insufficient_credits
             request_id: 6P5E3ETHKJKOTOXXMXCEJGDW6I
     Conflict:
       description: The request conflicts with the current state, such as a provider that is already connected (conflict).
