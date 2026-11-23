@@ -36,6 +36,7 @@ type Handler struct {
 	addr      *clientip.Resolver
 	webOrigin string
 	logger    *slog.Logger
+	extras    []func(chi.Router)
 }
 
 // NewHandler builds the HTTP layer. webOrigin is the one origin allowed to make
@@ -43,6 +44,11 @@ type Handler struct {
 func NewHandler(svc *Service, addr *clientip.Resolver, webOrigin string, logger *slog.Logger) *Handler {
 	return &Handler{svc: svc, addr: addr, webOrigin: webOrigin, logger: logger}
 }
+
+// AddRoutes lets another feature register routes that need a signed-in user. They are mounted under
+// /v1 inside the session group, so the Origin, content type, session and CSRF checks apply to them
+// exactly as to the account routes. Call it before Mount.
+func (h *Handler) AddRoutes(f func(chi.Router)) { h.extras = append(h.extras, f) }
 
 // Mount registers the routes.
 func (h *Handler) Mount(r chi.Router) {
@@ -66,6 +72,9 @@ func (h *Handler) Mount(r chi.Router) {
 			r.Get("/me/identities", h.listIdentities)
 			r.Post("/me/identities/{provider}/start", h.startConnect)
 			r.Delete("/me/identities/{provider}", h.disconnect)
+			for _, extra := range h.extras {
+				extra(r)
+			}
 		})
 	})
 }
@@ -124,6 +133,9 @@ func principal(r *http.Request) *Principal {
 	p, _ := r.Context().Value(principalKey{}).(*Principal)
 	return p
 }
+
+// PrincipalFrom is who a request made inside the session group is acting as.
+func PrincipalFrom(r *http.Request) *Principal { return principal(r) }
 
 // fail turns a service error into the documented response. Anything unexpected is logged
 // (without request content) and answered with a generic 500.

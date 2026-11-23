@@ -49,6 +49,8 @@ type Config struct {
 	LogLevel        slog.Level
 	ShutdownTimeout time.Duration
 
+	GitHubAPIToken string // optional; never logged
+
 	// Sign-in (Phase 2a).
 	AuthCodeKey    string         // HMAC key for login codes and CSRF tokens; never logged
 	WebOrigin      string         // the only origin allowed to make state-changing requests
@@ -109,6 +111,14 @@ func Load(getenv func(string) string) (Config, error) {
 
 	c.loadAuth(getenv, &errs)
 	c.loadOAuth(getenv, &errs)
+
+	// Optional: lets the API read public repository details at GitHub's higher rate limit.
+	c.GitHubAPIToken = value(getenv, "GITHUB_API_TOKEN", "")
+	if c.GitHubAPIToken != "" {
+		if err := validateToken(c.GitHubAPIToken); err != nil {
+			errs = append(errs, fieldError("GITHUB_API_TOKEN", err))
+		}
+	}
 
 	if len(errs) > 0 {
 		return Config{}, errors.Join(errs...)
@@ -361,4 +371,21 @@ func validateToken(v string) error {
 		}
 	}
 	return nil
+}
+
+// LoadWorker reads what a background worker needs: the base settings and the database it works on.
+func LoadWorker(getenv func(string) string) (Config, error) {
+	var c Config
+	var errs []error
+	c.loadBase(getenv, &errs)
+	c.DatabaseURL = value(getenv, "DATABASE_URL", "")
+	if c.DatabaseURL == "" {
+		errs = append(errs, fieldError("DATABASE_URL", errors.New("is required")))
+	} else if err := validateURL(c.DatabaseURL, "postgres", "postgresql"); err != nil {
+		errs = append(errs, fieldError("DATABASE_URL", err))
+	}
+	if len(errs) > 0 {
+		return Config{}, errors.Join(errs...)
+	}
+	return c, nil
 }
