@@ -39,6 +39,24 @@ func (e LivenessStatus) Valid() bool {
 	}
 }
 
+// Defines values for Provider.
+const (
+	ProviderGithub Provider = "github"
+	ProviderGoogle Provider = "google"
+)
+
+// Valid indicates whether the value is a known member of the Provider enum.
+func (e Provider) Valid() bool {
+	switch e {
+	case ProviderGithub:
+		return true
+	case ProviderGoogle:
+		return true
+	default:
+		return false
+	}
+}
+
 // Accepted defines model for Accepted.
 type Accepted struct {
 	Status AcceptedStatus `json:"status"`
@@ -46,6 +64,16 @@ type Accepted struct {
 
 // AcceptedStatus defines model for Accepted.Status.
 type AcceptedStatus string
+
+// AuthProviders defines model for AuthProviders.
+type AuthProviders struct {
+	Providers []Provider `json:"providers"`
+}
+
+// AuthorizationUrl defines model for AuthorizationUrl.
+type AuthorizationUrl struct {
+	AuthorizationUrl string `json:"authorization_url"`
+}
 
 // Error The generic error body. Details never appear here; they go to the log only. The Go API sends not_found, method_not_allowed and internal_error. The AI service also sends unauthorized, payload_too_large and invalid_request.
 type Error struct {
@@ -56,6 +84,20 @@ type Error struct {
 
 	// RequestId Example: 6P5E3ETHKJKOTOXXMXCEJGDW6I
 	RequestId string `json:"request_id"`
+}
+
+// Identity defines model for Identity.
+type Identity struct {
+	CreatedAt time.Time `json:"created_at"`
+
+	// Email The address the provider reported when the account was connected.
+	Email    string   `json:"email"`
+	Provider Provider `json:"provider"`
+}
+
+// IdentityList defines model for IdentityList.
+type IdentityList struct {
+	Identities []Identity `json:"identities"`
 }
 
 // Liveness defines model for Liveness.
@@ -71,6 +113,9 @@ type Me struct {
 	CsrfToken string `json:"csrf_token"`
 	User      User   `json:"user"`
 }
+
+// Provider defines model for Provider.
+type Provider string
 
 // Session defines model for Session.
 type Session struct {
@@ -124,6 +169,9 @@ type CsrfToken = string
 // BadRequest The generic error body. Details never appear here; they go to the log only. The Go API sends not_found, method_not_allowed and internal_error. The AI service also sends unauthorized, payload_too_large and invalid_request.
 type BadRequest = Error
 
+// Conflict The generic error body. Details never appear here; they go to the log only. The Go API sends not_found, method_not_allowed and internal_error. The AI service also sends unauthorized, payload_too_large and invalid_request.
+type Conflict = Error
+
 // Forbidden The generic error body. Details never appear here; they go to the log only. The Go API sends not_found, method_not_allowed and internal_error. The AI service also sends unauthorized, payload_too_large and invalid_request.
 type Forbidden = Error
 
@@ -148,8 +196,27 @@ type LogoutParams struct {
 	XCSRFToken CsrfToken `json:"X-CSRF-Token"`
 }
 
+// FinishOAuthLoginParams defines parameters for FinishOAuthLogin.
+type FinishOAuthLoginParams struct {
+	Code  *string `form:"code,omitempty" json:"code,omitempty"`
+	State *string `form:"state,omitempty" json:"state,omitempty"`
+	Error *string `form:"error,omitempty" json:"error,omitempty"`
+}
+
 // UpdateMeParams defines parameters for UpdateMe.
 type UpdateMeParams struct {
+	// XCSRFToken The csrf_token from GET /v1/me, bound to the current session. Required on every state-changing request that has a session.
+	XCSRFToken CsrfToken `json:"X-CSRF-Token"`
+}
+
+// DisconnectIdentityParams defines parameters for DisconnectIdentity.
+type DisconnectIdentityParams struct {
+	// XCSRFToken The csrf_token from GET /v1/me, bound to the current session. Required on every state-changing request that has a session.
+	XCSRFToken CsrfToken `json:"X-CSRF-Token"`
+}
+
+// StartConnectIdentityParams defines parameters for StartConnectIdentity.
+type StartConnectIdentityParams struct {
 	// XCSRFToken The csrf_token from GET /v1/me, bound to the current session. Required on every state-changing request that has a session.
 	XCSRFToken CsrfToken `json:"X-CSRF-Token"`
 }

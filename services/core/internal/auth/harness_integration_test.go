@@ -31,6 +31,7 @@ import (
 	"github.com/Gitax18/readmely/services/core/internal/dbtest"
 	"github.com/Gitax18/readmely/services/core/internal/health"
 	"github.com/Gitax18/readmely/services/core/internal/mail"
+	"github.com/Gitax18/readmely/services/core/internal/oauth"
 	"github.com/Gitax18/readmely/services/core/internal/ratelimit"
 	"github.com/Gitax18/readmely/services/core/internal/server"
 )
@@ -108,6 +109,7 @@ type envOpts struct {
 	queueCapacity int
 	senders       int
 	mailer        *capture
+	oauth         bool // enable Google and GitHub against a fake provider
 }
 
 type env struct {
@@ -124,6 +126,7 @@ type env struct {
 	router routers.Router
 	keys   auth.Keys
 	nextIP int
+	fake   *fakeProvider
 }
 
 func newEnv(t *testing.T, o envOpts) *env {
@@ -169,6 +172,11 @@ func newEnv(t *testing.T, o envOpts) *env {
 
 	keys := auth.NewKeys(secret)
 	svc := auth.NewService(db.Pool, ratelimit.New(rdb, prefix), queue, keys, logger)
+	var fake *fakeProvider
+	if o.oauth {
+		fake = newFakeProvider(t)
+		svc.EnableOAuth(auth.OAuthConfig{Providers: fake.providers(), Store: oauth.NewStore(rdb, prefix), WebOrigin: webOrigin})
+	}
 	handler := auth.NewHandler(svc, clientip.New(o.trusted), webOrigin, logger)
 	router := server.NewPublicRouter(logger, health.New(logger, time.Second), handler.Mount)
 
@@ -181,7 +189,7 @@ func newEnv(t *testing.T, o envOpts) *env {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &env{t: t, db: db, svc: svc, h: router, mail: cap, queue: queue, rdb: rdb, prefix: prefix, logs: logs, spec: doc, router: rt, keys: keys}
+	return &env{t: t, db: db, svc: svc, h: router, mail: cap, queue: queue, rdb: rdb, prefix: prefix, logs: logs, spec: doc, router: rt, keys: keys, fake: fake}
 }
 
 // req describes one request. The zero value is a well-formed browser request from a fresh client.
@@ -195,6 +203,7 @@ type req struct {
 	ip           string  // socket address; "" means a fresh one
 	xff          string
 	ua           string
+	oauthCookie  string // the sign-in attempt cookie
 }
 
 func str(s string) *string { return &s }
@@ -237,6 +246,9 @@ func (e *env) do(r req) *httptest.ResponseRecorder {
 	}
 	if r.cookie != "" {
 		hr.AddCookie(&http.Cookie{Name: auth.CookieName, Value: r.cookie, Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode}) //nolint:gosec // G124 wants the attributes on a request cookie, which carries only name and value
+	}
+	if r.oauthCookie != "" {
+		hr.AddCookie(&http.Cookie{Name: auth.OAuthCookieName, Value: r.oauthCookie, Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode}) //nolint:gosec // G124 wants the attributes on a request cookie, which carries only name and value
 	}
 	if r.csrf != "" {
 		hr.Header.Set("X-CSRF-Token", r.csrf)

@@ -240,3 +240,51 @@ func TestLoadNeverPrintsTheToken(t *testing.T) {
 		t.Fatalf("error must exist and not contain the value: %v", err)
 	}
 }
+
+func TestOAuthCredentials(t *testing.T) {
+	c, err := Load(env(validEnv()))
+	if err != nil || c.GoogleClientID != "" || c.GitHubClientID != "" {
+		t.Fatalf("providers must default to off: %+v %v", c, err)
+	}
+
+	m := validEnv()
+	m["GOOGLE_CLIENT_ID"] = "1234-abc.apps.googleusercontent.com"
+	m["GOOGLE_CLIENT_SECRET"] = "GOCSPX-abc_DEF-123456"
+	m["GITHUB_CLIENT_ID"] = "Iv1.0123456789abcdef"
+	m["GITHUB_CLIENT_SECRET"] = strings.Repeat("a1", 20)
+	c, err = Load(env(m))
+	if err != nil || c.GoogleClientID == "" || c.GoogleClientSecret == "" || c.GitHubClientID == "" || c.GitHubClientSecret == "" {
+		t.Fatalf("both pairs: %+v %v", c, err)
+	}
+
+	for _, tt := range []struct {
+		name string
+		set  map[string]string
+		want string
+	}{
+		{"google id only", map[string]string{"GOOGLE_CLIENT_ID": "abcdefgh12345"}, "GOOGLE_CLIENT_SECRET: is required when GOOGLE_CLIENT_ID is set"},
+		{"google secret only", map[string]string{"GOOGLE_CLIENT_SECRET": "abcdefgh12345"}, "GOOGLE_CLIENT_ID: is required when GOOGLE_CLIENT_SECRET is set"},
+		{"github id only", map[string]string{"GITHUB_CLIENT_ID": "abcdefgh12345"}, "GITHUB_CLIENT_SECRET: is required when GITHUB_CLIENT_ID is set"},
+		{"github secret only", map[string]string{"GITHUB_CLIENT_SECRET": "abcdefgh12345"}, "GITHUB_CLIENT_ID: is required when GITHUB_CLIENT_SECRET is set"},
+		{"short secret", map[string]string{"GITHUB_CLIENT_ID": "abcdefgh12345", "GITHUB_CLIENT_SECRET": "short"}, "GITHUB_CLIENT_SECRET: must be 8 to 256"},
+		{"placeholder", map[string]string{"GITHUB_CLIENT_ID": "abcdefgh12345", "GITHUB_CLIENT_SECRET": "change-me-change-me"}, "GITHUB_CLIENT_SECRET: is still the placeholder"},
+		{"quote in id", map[string]string{"GOOGLE_CLIENT_ID": `"abcdefgh12345"`, "GOOGLE_CLIENT_SECRET": "abcdefgh12345"}, "GOOGLE_CLIENT_ID: contains a character"},
+		{"space in secret", map[string]string{"GOOGLE_CLIENT_ID": "abcdefgh12345", "GOOGLE_CLIENT_SECRET": "abcd efgh 12345"}, "GOOGLE_CLIENT_SECRET: contains a character"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			m := validEnv()
+			for k, v := range tt.set {
+				m[k] = v
+			}
+			_, err := Load(env(m))
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("got %v, want an error containing %q", err, tt.want)
+			}
+			for _, v := range tt.set {
+				if len(v) >= 8 && strings.Contains(err.Error(), v) {
+					t.Fatalf("the error contains a configured value: %v", err)
+				}
+			}
+		})
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/rand"
 	"os"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -152,5 +153,44 @@ func TestRedisDownIsAnError(t *testing.T) {
 	d, err := ratelimit.New(rdb, "x:").Allow(context.Background(), ratelimit.Check{Rule: ratelimit.Rule{Name: "x", Max: 1, Window: time.Second}, Subject: "s"})
 	if err == nil || d.Allowed {
 		t.Fatalf("got %+v %v, want an error and no permission", d, err)
+	}
+}
+
+// A burst against several rules must still let the first request through. When each rule was
+// counted in a separate call, other requests could raise the slower counters before the first one
+// reached them, and every request in the burst, the first included, was refused. Repeated, because
+// the interleaving is up to the scheduler.
+func TestABurstAcrossRulesStillAllowsExactlyOne(t *testing.T) {
+	t.Parallel()
+	l, _, _ := newLimiter(t)
+	ctx := context.Background()
+	minute := ratelimit.Rule{Name: "burst_minute", Max: 1, Window: time.Minute}
+	hour := ratelimit.Rule{Name: "burst_hour", Max: 5, Window: time.Hour}
+	for round := range 150 {
+		subject := "burst-" + strconv.Itoa(round)
+		var allowed atomic.Int32
+		var wg sync.WaitGroup
+		for i := range 20 {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				d, err := l.Allow(ctx,
+					ratelimit.Check{Rule: minute, Subject: subject},
+					ratelimit.Check{Rule: hour, Subject: subject},
+					ratelimit.Check{Rule: ratelimit.Rule{Name: "burst_ip", Max: 20, Window: time.Hour}, Subject: "ip-" + subject + "-" + strconv.Itoa(i)},
+				)
+				if err != nil {
+					t.Error(err)
+					return
+				}
+				if d.Allowed {
+					allowed.Add(1)
+				}
+			}()
+		}
+		wg.Wait()
+		if got := allowed.Load(); got != 1 {
+			t.Fatalf("round %d: %d of 20 simultaneous requests were allowed, want exactly 1", round, got)
+		}
 	}
 }

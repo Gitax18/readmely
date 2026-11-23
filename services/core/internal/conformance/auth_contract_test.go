@@ -33,7 +33,12 @@ func TestAccountAPIDocumentsItsSecurityRules(t *testing.T) {
 		}
 		for method, op := range item.Operations() {
 			seen = append(seen, method+" "+path)
-			public := strings.HasPrefix(path, "/v1/auth/email/")
+			emailStep := strings.HasPrefix(path, "/v1/auth/email/")
+			// Provider sign-in steps are browser navigations (GET, redirects), protected by the
+			// attempt cookie and state rather than Origin or CSRF; they are rate limited.
+			providerStep := strings.HasPrefix(path, "/v1/auth/{provider}/")
+			providerList := path == "/v1/auth/providers"
+			public := emailStep || providerStep || providerList
 			signedIn := op.Security != nil && len(*op.Security) == 1 && (*op.Security)[0]["sessionCookie"] != nil
 
 			if public == signedIn {
@@ -43,7 +48,21 @@ func TestAccountAPIDocumentsItsSecurityRules(t *testing.T) {
 				t.Errorf("%s %s takes a body and must document 400", method, path)
 			}
 			switch {
-			case public:
+			case providerList:
+				if method != http.MethodGet {
+					t.Errorf("%s %s must be a GET", method, path)
+				}
+			case providerStep:
+				if method != http.MethodGet || !has(op, "302") || !has(op, "404") || !has(op, "429") {
+					t.Errorf("%s %s must be a GET that documents 302, 404 and 429", method, path)
+				}
+				if has(op, "302") && (op.Responses.Status(302).Value.Headers["Location"] == nil || op.Responses.Status(302).Value.Headers["Set-Cookie"] == nil) {
+					t.Errorf("%s %s: 302 must document Location and Set-Cookie", method, path)
+				}
+				if op.Responses.Status(429).Value.Headers["Retry-After"] == nil {
+					t.Errorf("%s %s: 429 must carry Retry-After", method, path)
+				}
+			case emailStep:
 				for _, code := range []string{"403", "429"} {
 					if !has(op, code) {
 						t.Errorf("%s %s must document %s", method, path, code)
@@ -74,8 +93,11 @@ func TestAccountAPIDocumentsItsSecurityRules(t *testing.T) {
 	}
 	sort.Strings(seen)
 	want := []string{
-		"DELETE /v1/me/sessions/{id}", "GET /v1/me", "GET /v1/me/sessions", "PATCH /v1/me",
+		"DELETE /v1/me/identities/{provider}", "DELETE /v1/me/sessions/{id}", "GET /v1/auth/providers",
+		"GET /v1/auth/{provider}/callback", "GET /v1/auth/{provider}/start", "GET /v1/me",
+		"GET /v1/me/identities", "GET /v1/me/sessions", "PATCH /v1/me",
 		"POST /v1/auth/email/start", "POST /v1/auth/email/verify", "POST /v1/auth/logout",
+		"POST /v1/me/identities/{provider}/start",
 	}
 	if strings.Join(seen, ",") != strings.Join(want, ",") {
 		t.Errorf("operations under /v1 = %v, want %v", seen, want)

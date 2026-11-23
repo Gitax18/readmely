@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import { MAX_REQUEST_BYTES, MAX_RESPONSE_BYTES, proxyToApi, type ProxyOptions } from "./api-proxy";
+import {
+  callbackQuery,
+  MAX_REQUEST_BYTES,
+  MAX_RESPONSE_BYTES,
+  proxyToApi,
+  safeLocation,
+  type ProxyOptions,
+} from "./api-proxy";
 
 const SESSION_ID = "01900000-0000-7000-8000-000000000401";
 
@@ -37,6 +44,12 @@ describe("proxyToApi: which paths are forwarded", () => {
     ["PATCH", ["v1", "me"]],
     ["GET", ["v1", "me", "sessions"]],
     ["DELETE", ["v1", "me", "sessions", SESSION_ID]],
+    ["GET", ["v1", "auth", "providers"]],
+    ["GET", ["v1", "me", "identities"]],
+    ["POST", ["v1", "me", "identities", "google", "start"]],
+    ["POST", ["v1", "me", "identities", "github", "start"]],
+    ["DELETE", ["v1", "me", "identities", "google"]],
+    ["DELETE", ["v1", "me", "identities", "github"]],
   ])("forwards %s /%s", async (method, path) => {
     const { fetchImpl, options } = setup();
     const res = await proxyToApi(
@@ -67,6 +80,14 @@ describe("proxyToApi: which paths are forwarded", () => {
     ["a session id with a newline", ["v1", "me", "sessions", `${SESSION_ID}\n`]],
     ["a different case of a known path", ["V1", "me"]],
     ["an empty segment", ["v1", "", "me"]],
+    ["an unknown provider's start", ["v1", "auth", "facebook", "start"]],
+    ["an unknown provider's callback", ["v1", "auth", "facebook", "callback"]],
+    ["the email routes read as a provider", ["v1", "auth", "email", "callback"]],
+    ["a provider route with a suffix", ["v1", "auth", "google", "start", "x"]],
+    ["an identity of an unknown provider", ["v1", "me", "identities", "facebook"]],
+    ["connect for an unknown provider", ["v1", "me", "identities", "facebook", "start"]],
+    ["a provider in another case", ["v1", "auth", "Google", "start"]],
+    ["an identity path with a suffix", ["v1", "me", "identities", "google", "start", "x"]],
   ])("refuses %s without calling the API", async (_name, path) => {
     const { fetchImpl, options } = setup();
     const res = await proxyToApi(call(path.length ? path : ["x"]), path, options);
@@ -227,14 +248,19 @@ describe("proxyToApi: what comes back", () => {
     expect(await res.text()).toBe("");
   });
 
-  it("does not follow or expose a redirect", async () => {
-    const { options } = setup(
-      new Response(null, { status: 302, headers: { location: "http://internal/" } }),
-    );
-    const path = ["v1", "me"];
-    const res = await proxyToApi(call(path), path, options);
-    expect(res.status).toBe(302);
-    expect(res.headers.has("location")).toBe(false);
+  it("never exposes a redirect from a route that should not redirect", async () => {
+    for (const path of [
+      ["v1", "me"],
+      ["v1", "auth", "providers"],
+      ["v1", "me", "identities"],
+    ]) {
+      const { options } = setup(
+        new Response(null, { status: 302, headers: { location: "/account" } }),
+      );
+      const res = await proxyToApi(call(path), path, options);
+      expect(res.status).toBe(502);
+      expect(res.headers.has("location")).toBe(false);
+    }
   });
 
   it("turns an unreachable API into a generic 502", async () => {
@@ -269,5 +295,140 @@ describe("proxyToApi: what comes back", () => {
       timeoutMs: 20,
     });
     expect(res.status).toBe(502);
+  });
+});
+
+describe("proxyToApi: the callback query", () => {
+  const callback = ["v1", "auth", "google", "callback"];
+
+  it("forwards code, state and error, and nothing else", async () => {
+    const { fetchImpl, options } = setup(
+      new Response(null, { status: 302, headers: { location: "/account" } }),
+    );
+    const url =
+      "http://web.test/api/v1/auth/google/callback?code=c0de&state=st4te&error=access_denied&next=https://evil.example&x=1";
+    await proxyToApi(new Request(url), callback, options);
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe(
+      "http://api:8080/v1/auth/google/callback?code=c0de&state=st4te&error=access_denied",
+    );
+  });
+
+  it("forwards no query to any other route", async () => {
+    for (const path of [
+      ["v1", "auth", "google", "start"],
+      ["v1", "auth", "providers"],
+      ["v1", "me"],
+    ]) {
+      const { fetchImpl, options } = setup(
+        path[2] === "google"
+          ? new Response(null, { status: 302, headers: { location: "/account" } })
+          : upstream("{}"),
+      );
+      await proxyToApi(
+        new Request(`http://web.test/api/${path.join("/")}?code=c&state=s&next=x`),
+        path,
+        options,
+      );
+      expect(fetchImpl.mock.calls[0]?.[0]).toBe(`http://api:8080/${path.join("/")}`);
+    }
+  });
+
+  it("drops a value that is too long, has spaces or control characters, or is not ASCII", () => {
+    const q = (o: Record<string, string>) => callbackQuery(new URLSearchParams(o));
+    expect(q({ code: "a".repeat(2048) })).toBe(`?code=${"a".repeat(2048)}`);
+    expect(q({ code: "a".repeat(2049) })).toBe("");
+    expect(q({ state: "s".repeat(257) })).toBe("");
+    expect(q({ error: "e".repeat(129) })).toBe("");
+    expect(q({ code: "has space" })).toBe("");
+    expect(q({ code: "line\nbreak" })).toBe("");
+    expect(q({ code: "tab\t" })).toBe("");
+    expect(q({ code: "caf\u00e9" })).toBe("");
+    expect(q({ code: "" })).toBe("");
+    expect(q({})).toBe("");
+  });
+
+  it("takes the first value when a parameter is repeated", () => {
+    expect(callbackQuery(new URLSearchParams("code=first&code=second"))).toBe("?code=first");
+  });
+});
+
+describe("proxyToApi: redirects from the provider routes", () => {
+  const start = ["v1", "auth", "google", "start"];
+  const callback = ["v1", "auth", "github", "callback"];
+  const googleUrl = "https://accounts.google.com/o/oauth2/v2/auth?client_id=x&state=y";
+  const githubUrl = "https://github.com/login/oauth/authorize?client_id=x&state=y";
+
+  function redirectOf(location: string | null, status = 302) {
+    const headers = new Headers();
+    if (location !== null) headers.set("location", location);
+    headers.append(
+      "set-cookie",
+      "__Host-rm_oauth=b; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=600",
+    );
+    headers.append("set-cookie", "__Host-rm_session=t; Path=/; Secure; HttpOnly; SameSite=Lax");
+    return new Response(null, { status, headers });
+  }
+
+  it.each([
+    ["a provider's authorization URL (Google)", start, googleUrl],
+    ["a provider's authorization URL (GitHub)", ["v1", "auth", "github", "start"], githubUrl],
+    ["the account page", callback, "/account"],
+    ["the login page with an error code", callback, "/login?error=access_denied"],
+  ])("passes %s, with every cookie", async (_name, path, location) => {
+    const { options } = setup(redirectOf(location));
+    const res = await proxyToApi(call(path), path, options);
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe(location);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(res.headers.getSetCookie()).toEqual([
+      "__Host-rm_oauth=b; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=600",
+      "__Host-rm_session=t; Path=/; Secure; HttpOnly; SameSite=Lax",
+    ]);
+  });
+
+  it.each([
+    ["a missing Location", null],
+    ["another site", "https://evil.example/"],
+    ["a scheme-relative URL", "//evil.example/account"],
+    ["a backslash trick", "/\\evil.example"],
+    ["a dot-dot path", "/account/../../x"],
+    ["a javascript URL", "javascript:alert(1)"],
+    ["a data URL", "data:text/html,x"],
+    ["the internal listener", "http://api:8081/readyz"],
+    ["a lookalike host", "https://accounts.google.com.evil.example/o/oauth2/v2/auth?x=1"],
+    ["a userinfo trick", "https://accounts.google.com@evil.example/o/oauth2/v2/auth"],
+    ["Google over http", "http://accounts.google.com/o/oauth2/v2/auth?x=1"],
+    ["Google on another path", "https://accounts.google.com/signin?x=1"],
+    ["GitHub on another path", "https://github.com/login?x=1"],
+    ["a provider URL with a fragment", `${googleUrl}#x`],
+    ["a path with a space", "/account here"],
+    ["an enormous path", `/${"a".repeat(3000)}`],
+  ])("refuses %s", async (_name, location) => {
+    for (const path of [start, callback]) {
+      const { options } = setup(redirectOf(location));
+      const res = await proxyToApi(call(path), path, options);
+      expect(res.status).toBe(502);
+      expect(res.headers.has("location")).toBe(false);
+      expect(res.headers.getSetCookie()).toEqual([]);
+    }
+  });
+
+  it("passes only a 302", async () => {
+    for (const status of [301, 303, 307, 308]) {
+      const { options } = setup(redirectOf("/account", status));
+      const res = await proxyToApi(call(callback), callback, options);
+      expect(res.status).toBe(502);
+    }
+  });
+
+  it("safeLocation agrees", () => {
+    expect(safeLocation("/account")).toBe("/account");
+    expect(safeLocation(googleUrl)).toBe(googleUrl);
+    expect(safeLocation(null)).toBeNull();
+    // Headers refuses these itself, but the rule must not depend on that.
+    expect(safeLocation("/account\nSet-Cookie: x=1")).toBeNull();
+    expect(safeLocation("/account\r\nX: y")).toBeNull();
+    expect(safeLocation("/account\u0000")).toBeNull();
+    expect(safeLocation("https://evil.example/")).toBeNull();
   });
 });

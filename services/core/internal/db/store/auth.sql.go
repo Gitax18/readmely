@@ -45,6 +45,41 @@ func (q *Queries) AttemptLoginChallenge(ctx context.Context, arg AttemptLoginCha
 	return i, err
 }
 
+const createIdentity = `-- name: CreateIdentity :one
+INSERT INTO oauth_identities (user_id, provider, provider_user_id, email)
+VALUES ($1, $2::text, $3::text, $4::text)
+RETURNING id, user_id, provider, provider_user_id, email, created_at, last_login_at
+`
+
+type CreateIdentityParams struct {
+	UserID         uuid.UUID
+	Provider       string
+	ProviderUserID string
+	Email          string
+}
+
+// Fails with a unique violation when the provider account is connected elsewhere or the user
+// already has one for this provider; the caller turns that into the right refusal.
+func (q *Queries) CreateIdentity(ctx context.Context, arg CreateIdentityParams) (OauthIdentity, error) {
+	row := q.db.QueryRow(ctx, createIdentity,
+		arg.UserID,
+		arg.Provider,
+		arg.ProviderUserID,
+		arg.Email,
+	)
+	var i OauthIdentity
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Provider,
+		&i.ProviderUserID,
+		&i.Email,
+		&i.CreatedAt,
+		&i.LastLoginAt,
+	)
+	return i, err
+}
+
 const createLoginChallenge = `-- name: CreateLoginChallenge :one
 
 SELECT id, email, code_hash, attempts, max_attempts, expires_at, closed_at, requested_ip, created_at FROM login_challenge_create($1::text, $2::bytea, $3::integer, $4::integer, $5::inet)
@@ -177,6 +212,24 @@ func (q *Queries) DeleteSessionByTokenHash(ctx context.Context, tokenHash []byte
 	return result.RowsAffected(), nil
 }
 
+const deleteUserIdentity = `-- name: DeleteUserIdentity :execrows
+DELETE FROM oauth_identities WHERE user_id = $1 AND provider = $2::text
+`
+
+type DeleteUserIdentityParams struct {
+	UserID   uuid.UUID
+	Provider string
+}
+
+// Disconnect: scoped to the owner.
+func (q *Queries) DeleteUserIdentity(ctx context.Context, arg DeleteUserIdentityParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteUserIdentity, arg.UserID, arg.Provider)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteUserSession = `-- name: DeleteUserSession :execrows
 DELETE FROM sessions WHERE id = $1 AND user_id = $2
 `
@@ -193,6 +246,49 @@ func (q *Queries) DeleteUserSession(ctx context.Context, arg DeleteUserSessionPa
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const getIdentityByProviderAccount = `-- name: GetIdentityByProviderAccount :one
+
+SELECT oauth_identities.id, oauth_identities.user_id, oauth_identities.provider, oauth_identities.provider_user_id, oauth_identities.email, oauth_identities.created_at, oauth_identities.last_login_at, users.id, users.email, users.email_verified_at, users.display_name, users.status, users.created_at, users.updated_at
+FROM oauth_identities
+JOIN users ON users.id = oauth_identities.user_id
+WHERE oauth_identities.provider = $1::text
+  AND oauth_identities.provider_user_id = $2::text
+`
+
+type GetIdentityByProviderAccountParams struct {
+	Provider       string
+	ProviderUserID string
+}
+
+type GetIdentityByProviderAccountRow struct {
+	OauthIdentity OauthIdentity
+	User          User
+}
+
+// Provider sign-in (plans/phase-2b-oauth-login.md). Identities are keyed by the provider's own id.
+// The connected account for a provider's stable id, with its user (the caller checks the status).
+func (q *Queries) GetIdentityByProviderAccount(ctx context.Context, arg GetIdentityByProviderAccountParams) (GetIdentityByProviderAccountRow, error) {
+	row := q.db.QueryRow(ctx, getIdentityByProviderAccount, arg.Provider, arg.ProviderUserID)
+	var i GetIdentityByProviderAccountRow
+	err := row.Scan(
+		&i.OauthIdentity.ID,
+		&i.OauthIdentity.UserID,
+		&i.OauthIdentity.Provider,
+		&i.OauthIdentity.ProviderUserID,
+		&i.OauthIdentity.Email,
+		&i.OauthIdentity.CreatedAt,
+		&i.OauthIdentity.LastLoginAt,
+		&i.User.ID,
+		&i.User.Email,
+		&i.User.EmailVerifiedAt,
+		&i.User.DisplayName,
+		&i.User.Status,
+		&i.User.CreatedAt,
+		&i.User.UpdatedAt,
+	)
+	return i, err
 }
 
 const getSessionByTokenHash = `-- name: GetSessionByTokenHash :one
@@ -234,6 +330,62 @@ func (q *Queries) GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (
 	return i, err
 }
 
+const getUserIdentity = `-- name: GetUserIdentity :one
+SELECT id, user_id, provider, provider_user_id, email, created_at, last_login_at FROM oauth_identities WHERE user_id = $1 AND provider = $2::text
+`
+
+type GetUserIdentityParams struct {
+	UserID   uuid.UUID
+	Provider string
+}
+
+func (q *Queries) GetUserIdentity(ctx context.Context, arg GetUserIdentityParams) (OauthIdentity, error) {
+	row := q.db.QueryRow(ctx, getUserIdentity, arg.UserID, arg.Provider)
+	var i OauthIdentity
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Provider,
+		&i.ProviderUserID,
+		&i.Email,
+		&i.CreatedAt,
+		&i.LastLoginAt,
+	)
+	return i, err
+}
+
+const listUserIdentities = `-- name: ListUserIdentities :many
+SELECT id, user_id, provider, provider_user_id, email, created_at, last_login_at FROM oauth_identities WHERE user_id = $1 ORDER BY provider
+`
+
+func (q *Queries) ListUserIdentities(ctx context.Context, userID uuid.UUID) ([]OauthIdentity, error) {
+	rows, err := q.db.Query(ctx, listUserIdentities, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []OauthIdentity{}
+	for rows.Next() {
+		var i OauthIdentity
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Provider,
+			&i.ProviderUserID,
+			&i.Email,
+			&i.CreatedAt,
+			&i.LastLoginAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUserSessions = `-- name: ListUserSessions :many
 SELECT id, user_id, token_hash, created_at, last_seen_at, expires_at, idle_expires_at, user_agent, ip FROM sessions
 WHERE user_id = $1 AND idle_expires_at > now()
@@ -271,6 +423,20 @@ func (q *Queries) ListUserSessions(ctx context.Context, userID uuid.UUID) ([]Ses
 	return items, nil
 }
 
+const touchIdentityLogin = `-- name: TouchIdentityLogin :exec
+UPDATE oauth_identities SET last_login_at = now(), email = $1::text WHERE id = $2
+`
+
+type TouchIdentityLoginParams struct {
+	Email string
+	ID    uuid.UUID
+}
+
+func (q *Queries) TouchIdentityLogin(ctx context.Context, arg TouchIdentityLoginParams) error {
+	_, err := q.db.Exec(ctx, touchIdentityLogin, arg.Email, arg.ID)
+	return err
+}
+
 const touchSession = `-- name: TouchSession :execrows
 UPDATE sessions
 SET last_seen_at = now(),
@@ -305,6 +471,37 @@ RETURNING id, email, email_verified_at, display_name, status, created_at, update
 // and marked verified either way.
 func (q *Queries) UpsertVerifiedUser(ctx context.Context, email string) (User, error) {
 	row := q.db.QueryRow(ctx, upsertVerifiedUser, email)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.EmailVerifiedAt,
+		&i.DisplayName,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertVerifiedUserWithName = `-- name: UpsertVerifiedUserWithName :one
+INSERT INTO users (email, email_verified_at, display_name)
+VALUES ($1::text, now(), $2::text)
+ON CONFLICT ((lower(email))) DO UPDATE SET
+    email_verified_at = COALESCE(users.email_verified_at, now()),
+    display_name = CASE WHEN users.display_name = '' THEN EXCLUDED.display_name ELSE users.display_name END
+RETURNING id, email, email_verified_at, display_name, status, created_at, updated_at
+`
+
+type UpsertVerifiedUserWithNameParams struct {
+	Email       string
+	DisplayName string
+}
+
+// Like UpsertVerifiedUser, for a provider sign-in that also knows a name: a new account gets it,
+// an existing one keeps what it has unless that is empty.
+func (q *Queries) UpsertVerifiedUserWithName(ctx context.Context, arg UpsertVerifiedUserWithNameParams) (User, error) {
+	row := q.db.QueryRow(ctx, upsertVerifiedUserWithName, arg.Email, arg.DisplayName)
 	var i User
 	err := row.Scan(
 		&i.ID,

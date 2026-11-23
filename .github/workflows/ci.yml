@@ -195,6 +195,10 @@ jobs:
           done
           sed -i "s|^AI_SERVICE_TOKEN=.*|AI_SERVICE_TOKEN=$(openssl rand -hex 32)|" .env
           sed -i "s|^AUTH_CODE_KEY=.*|AUTH_CODE_KEY=$(openssl rand -hex 32)|" .env
+          # A throwaway Google client so the browser tests exercise the provider routes. Nothing
+          # can sign in with it: there is no real client behind it.
+          sed -i "s|^GOOGLE_CLIENT_ID=.*|GOOGLE_CLIENT_ID=ci-$(openssl rand -hex 8).apps.example|" .env
+          sed -i "s|^GOOGLE_CLIENT_SECRET=.*|GOOGLE_CLIENT_SECRET=$(openssl rand -hex 16)|" .env
       - run: make up
       - run: make verify
       - run: make test-integration
@@ -212,7 +216,7 @@ jobs:
           echo "the status page never reported all systems operational" >&2
           curl -sS http://127.0.0.1:3000/ | head -c 2000 >&2 || true
           exit 1
-      - name: Sign-in works in a real browser against the running stack
+      - name: Sign-in and provider routes work in a real browser against the running stack
         run: |
           set -euo pipefail
           (cd apps/web && pnpm install --frozen-lockfile && pnpm exec playwright install --with-deps chromium)

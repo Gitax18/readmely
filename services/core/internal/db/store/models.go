@@ -59,6 +59,16 @@ type LoginChallenge struct {
 	CreatedAt   time.Time
 }
 
+type OauthIdentity struct {
+	ID             uuid.UUID
+	UserID         uuid.UUID
+	Provider       string
+	ProviderUserID string
+	Email          string
+	CreatedAt      time.Time
+	LastLoginAt    time.Time
+}
+
 type Project struct {
 	ID        uuid.UUID
 	UserID    uuid.UUID

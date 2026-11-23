@@ -1,4 +1,4 @@
-import type { Me, Session } from "@/lib/account-schema";
+import type { Identity, Me, Session } from "@/lib/account-schema";
 
 export const CSRF = "ab".repeat(32);
 
@@ -22,6 +22,15 @@ export function session(overrides: Partial<Session> = {}): Session {
     last_seen_at: "2026-11-18T10:02:00Z",
     device: "Safari on macOS",
     current: true,
+    ...overrides,
+  };
+}
+
+export function identity(overrides: Partial<Identity> = {}): Identity {
+  return {
+    provider: "google",
+    email: "ada@example.com",
+    created_at: "2026-11-23T09:30:00Z",
     ...overrides,
   };
 }

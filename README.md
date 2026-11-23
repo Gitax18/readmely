@@ -45,6 +45,17 @@ Go to <http://127.0.0.1:3000/login>, enter any email address, and read the six-d
 
 `make test-e2e-stack` signs in through a real browser against the running stack (`make up-app` first; once, `cd apps/web && pnpm exec playwright install chromium`).
 
+#### Sign in with Google or GitHub (optional)
+
+`/login` shows a "Continue with Google" or "Continue with GitHub" link only for a provider whose credentials are set; with none set, only emailed codes appear. To try one for real, register an OAuth client with the provider and put its id and secret in `.env` (each pair is all or nothing, and a half pair stops the API from starting):
+
+- **Google:** Google Cloud Console, Credentials, OAuth client ID (Web application). Authorized redirect URI: `http://127.0.0.1:3000/api/v1/auth/google/callback`. Variables: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`.
+- **GitHub:** Settings, Developer settings, OAuth Apps. Authorization callback URL: `http://127.0.0.1:3000/api/v1/auth/github/callback`. Variables: `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`. This is a separate app from the GitHub App Phase 3 will use to import repositories.
+
+Then `make up-app` again. The redirect URI is always `WEB_ORIGIN` plus that path, so it must match what you registered. A provider sign-in links to an existing account only when the provider itself says the email is verified; "Account" lists connected accounts and can disconnect them (email codes always still work). The owner gets an email when a provider is connected or disconnected and when a sign-in comes from a device they have not used recently. Nothing a provider sends is stored: its tokens live for one profile request.
+
+The tests cannot approve a sign-in at a real provider. The whole round trip runs in Go against a fake provider (`make test-integration PKGS=./internal/auth/...`), and the browser tests cover everything around it; CI starts the stack with a throwaway Google client so those run too.
+
 Settings (see `.env.example` and the compose file): `AUTH_CODE_KEY` (required), `WEB_ORIGIN` (the one origin allowed to change state), `MAILER` (`log` or `file`, development only), `TRUSTED_PROXIES` (addresses whose `X-Forwarded-For` the API believes, set it to the web server's network when the web server sits behind a load balancer), and for the web server `API_PUBLIC_URL` and `WEB_BEHIND_PROXY` (`true` only when a trusted proxy in front sets `X-Forwarded-For`; otherwise the header is dropped and every visitor shares one rate-limit address).
 
 ## Security

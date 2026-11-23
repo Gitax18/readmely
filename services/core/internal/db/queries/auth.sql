@@ -76,3 +76,43 @@ DELETE FROM sessions WHERE idle_expires_at <= now();
 -- name: DeleteOldLoginChallenges :execrows
 -- Challenges are kept for @retention_days for abuse review (requested_ip), then removed.
 DELETE FROM login_challenges WHERE created_at < now() - make_interval(days => @retention_days::integer);
+
+-- Provider sign-in (plans/phase-2b-oauth-login.md). Identities are keyed by the provider's own id.
+
+-- name: GetIdentityByProviderAccount :one
+-- The connected account for a provider's stable id, with its user (the caller checks the status).
+SELECT sqlc.embed(oauth_identities), sqlc.embed(users)
+FROM oauth_identities
+JOIN users ON users.id = oauth_identities.user_id
+WHERE oauth_identities.provider = @provider::text
+  AND oauth_identities.provider_user_id = @provider_user_id::text;
+
+-- name: GetUserIdentity :one
+SELECT * FROM oauth_identities WHERE user_id = @user_id AND provider = @provider::text;
+
+-- name: ListUserIdentities :many
+SELECT * FROM oauth_identities WHERE user_id = @user_id ORDER BY provider;
+
+-- name: CreateIdentity :one
+-- Fails with a unique violation when the provider account is connected elsewhere or the user
+-- already has one for this provider; the caller turns that into the right refusal.
+INSERT INTO oauth_identities (user_id, provider, provider_user_id, email)
+VALUES (@user_id, @provider::text, @provider_user_id::text, @email::text)
+RETURNING *;
+
+-- name: TouchIdentityLogin :exec
+UPDATE oauth_identities SET last_login_at = now(), email = @email::text WHERE id = @id;
+
+-- name: DeleteUserIdentity :execrows
+-- Disconnect: scoped to the owner.
+DELETE FROM oauth_identities WHERE user_id = @user_id AND provider = @provider::text;
+
+-- name: UpsertVerifiedUserWithName :one
+-- Like UpsertVerifiedUser, for a provider sign-in that also knows a name: a new account gets it,
+-- an existing one keeps what it has unless that is empty.
+INSERT INTO users (email, email_verified_at, display_name)
+VALUES (@email::text, now(), @display_name::text)
+ON CONFLICT ((lower(email))) DO UPDATE SET
+    email_verified_at = COALESCE(users.email_verified_at, now()),
+    display_name = CASE WHEN users.display_name = '' THEN EXCLUDED.display_name ELSE users.display_name END
+RETURNING *;

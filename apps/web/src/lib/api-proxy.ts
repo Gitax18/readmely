@@ -1,4 +1,5 @@
 import "server-only";
+import { isProviderAuthorizationUrl, isSiteRelativePath } from "./providers";
 import { readLimited } from "./read-limited";
 
 /**
@@ -21,7 +22,22 @@ const ALLOWED_PATHS = [
   /^v1\/me$/,
   /^v1\/me\/sessions$/,
   new RegExp(`^v1/me/sessions/${UUID}$`),
+  /^v1\/auth\/providers$/,
+  /^v1\/auth\/(google|github)\/(start|callback)$/,
+  /^v1\/me\/identities$/,
+  /^v1\/me\/identities\/(google|github)$/,
+  /^v1\/me\/identities\/(google|github)\/start$/,
 ];
+
+// Only these two answer with a redirect, and only the callback takes a query.
+const REDIRECTING_PATH = /^v1\/auth\/(google|github)\/(start|callback)$/;
+const CALLBACK_PATH = /^v1\/auth\/(google|github)\/callback$/;
+const CALLBACK_QUERY_LIMITS: Readonly<Record<string, number>> = {
+  code: 2048,
+  state: 256,
+  error: 128,
+};
+const PRINTABLE_ASCII = /^[\x21-\x7e]+$/;
 
 const FORWARD_REQUEST_HEADERS = [
   "accept",
@@ -48,6 +64,28 @@ function problem(status: number, error: string): Response {
       headers: { "content-type": "application/json", "cache-control": "no-store" },
     },
   );
+}
+
+/**
+ * The query the callback forwards: code, state and error, each bounded and printable ASCII, and
+ * nothing else. Whatever else a request carries is dropped before the API sees it.
+ */
+export function callbackQuery(params: URLSearchParams): string {
+  const out = new URLSearchParams();
+  for (const [name, limit] of Object.entries(CALLBACK_QUERY_LIMITS)) {
+    const value = params.get(name);
+    if (value !== null && value.length <= limit && PRINTABLE_ASCII.test(value)) {
+      out.set(name, value);
+    }
+  }
+  const text = out.toString();
+  return text === "" ? "" : `?${text}`;
+}
+
+/** A redirect target the browser may be given: a same-site path or a provider's authorization URL. */
+export function safeLocation(value: string | null): string | null {
+  if (value === null) return null;
+  return isSiteRelativePath(value) || isProviderAuthorizationUrl(value) ? value : null;
 }
 
 /** Forwards one browser request to the API and returns its answer. Never throws. */
@@ -80,7 +118,8 @@ export async function proxyToApi(
   const doFetch = options.fetchImpl ?? fetch;
   let upstream: Response;
   try {
-    upstream = await doFetch(`${options.apiPublicUrl}/${path}`, {
+    const query = CALLBACK_PATH.test(path) ? callbackQuery(new URL(request.url).searchParams) : "";
+    upstream = await doFetch(`${options.apiPublicUrl}/${path}${query}`, {
       method: request.method,
       headers,
       ...(body !== undefined && body.byteLength > 0 ? { body } : {}),
@@ -90,6 +129,18 @@ export async function proxyToApi(
     });
   } catch {
     return problem(502, "bad_gateway");
+  }
+
+  // A redirect is passed on only from the two provider routes, only as a 302, and only to a place
+  // the API is supposed to send people. Anything else is a confused or compromised upstream.
+  if (upstream.status >= 300 && upstream.status < 400) {
+    const location = safeLocation(upstream.headers.get("location"));
+    if (!REDIRECTING_PATH.test(path) || upstream.status !== 302 || location === null) {
+      return problem(502, "bad_gateway");
+    }
+    const headers302 = new Headers({ "cache-control": "no-store", location });
+    for (const cookie of upstream.headers.getSetCookie()) headers302.append("set-cookie", cookie);
+    return new Response(null, { status: 302, headers: headers302 });
   }
 
   let text: string;

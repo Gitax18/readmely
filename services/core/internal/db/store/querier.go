@@ -22,6 +22,9 @@ type Querier interface {
 	// of workers claim at the same time without waiting for or duplicating each other.
 	ClaimJob(ctx context.Context, arg ClaimJobParams) (Job, error)
 	CompleteJob(ctx context.Context, arg CompleteJobParams) (Job, error)
+	// Fails with a unique violation when the provider account is connected elsewhere or the user
+	// already has one for this provider; the caller turns that into the right refusal.
+	CreateIdentity(ctx context.Context, arg CreateIdentityParams) (OauthIdentity, error)
 	// Sign-in and sessions (plans/phase-2a-email-login.md). Codes and session tokens are never
 	// stored or passed here in clear: only their HMAC (codes) or SHA-256 (tokens).
 	// Closes any open code for the address and issues a new one, atomically.
@@ -38,6 +41,8 @@ type Querier interface {
 	DeleteProject(ctx context.Context, arg DeleteProjectParams) (int64, error)
 	DeleteSessionByTokenHash(ctx context.Context, tokenHash []byte) (int64, error)
 	DeleteUser(ctx context.Context, id uuid.UUID) (int64, error)
+	// Disconnect: scoped to the owner.
+	DeleteUserIdentity(ctx context.Context, arg DeleteUserIdentityParams) (int64, error)
 	// Revoke: scoped to the owner, so another user's session id finds nothing.
 	DeleteUserSession(ctx context.Context, arg DeleteUserSessionParams) (int64, error)
 	// The job queue. Lifecycle: EnqueueJob -> ClaimJob -> (ExtendJobLease)* -> CompleteJob | ReleaseJob.
@@ -49,16 +54,21 @@ type Querier interface {
 	EnqueueJob(ctx context.Context, arg EnqueueJobParams) (Job, error)
 	ExtendJobLease(ctx context.Context, arg ExtendJobLeaseParams) (Job, error)
 	GetCreditBalance(ctx context.Context, userID uuid.UUID) (int64, error)
+	// Provider sign-in (plans/phase-2b-oauth-login.md). Identities are keyed by the provider's own id.
+	// The connected account for a provider's stable id, with its user (the caller checks the status).
+	GetIdentityByProviderAccount(ctx context.Context, arg GetIdentityByProviderAccountParams) (GetIdentityByProviderAccountRow, error)
 	GetJob(ctx context.Context, arg GetJobParams) (Job, error)
 	GetProject(ctx context.Context, arg GetProjectParams) (Project, error)
 	// The live session for a cookie, with its user. Ended sessions and suspended users find nothing.
 	GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (GetSessionByTokenHashRow, error)
 	GetUser(ctx context.Context, id uuid.UUID) (User, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
+	GetUserIdentity(ctx context.Context, arg GetUserIdentityParams) (OauthIdentity, error)
 	GrantCredits(ctx context.Context, arg GrantCreditsParams) (CreditLedger, error)
 	ListCreditEntries(ctx context.Context, arg ListCreditEntriesParams) ([]CreditLedger, error)
 	ListProjectJobs(ctx context.Context, arg ListProjectJobsParams) ([]Job, error)
 	ListProjects(ctx context.Context, arg ListProjectsParams) ([]Project, error)
+	ListUserIdentities(ctx context.Context, userID uuid.UUID) ([]OauthIdentity, error)
 	ListUserSessions(ctx context.Context, userID uuid.UUID) ([]Session, error)
 	MarkUserEmailVerified(ctx context.Context, id uuid.UUID) (User, error)
 	// Gives a job back after a failure: queued again after the backoff, or failed for good when the
@@ -72,12 +82,16 @@ type Querier interface {
 	ReserveCredits(ctx context.Context, arg ReserveCreditsParams) (CreditLedger, error)
 	SetProjectStatus(ctx context.Context, arg SetProjectStatusParams) (Project, error)
 	SetUserStatus(ctx context.Context, arg SetUserStatusParams) (User, error)
+	TouchIdentityLogin(ctx context.Context, arg TouchIdentityLoginParams) error
 	// Slides the idle expiry, at most once per @min_interval_seconds, never past the absolute expiry.
 	TouchSession(ctx context.Context, arg TouchSessionParams) (int64, error)
 	UpdateUserDisplayName(ctx context.Context, arg UpdateUserDisplayNameParams) (User, error)
 	// The account for an address that just proved it receives mail: created on first sign-in,
 	// and marked verified either way.
 	UpsertVerifiedUser(ctx context.Context, email string) (User, error)
+	// Like UpsertVerifiedUser, for a provider sign-in that also knows a name: a new account gets it,
+	// an existing one keeps what it has unless that is empty.
+	UpsertVerifiedUserWithName(ctx context.Context, arg UpsertVerifiedUserWithNameParams) (User, error)
 }
 
 var _ Querier = (*Queries)(nil)

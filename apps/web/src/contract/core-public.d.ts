@@ -133,10 +133,146 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/auth/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Which sign-in providers are configured
+         * @description Providers without credentials are off and never listed. The login page shows a button for each one listed.
+         */
+        get: operations["listAuthProviders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/{provider}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Begin signing in with a provider
+         * @description Redirects the browser to the provider's authorization page and sets a short-lived cookie that binds the attempt to this browser. 404 when the provider is unknown or not configured.
+         */
+        get: operations["startOAuthLogin"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/{provider}/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The provider sends the browser back here
+         * @description Always answers with a redirect. Success goes to /account with the session cookie set; every failure goes to /login?error=CODE, where CODE is one of access_denied, invalid_state, no_verified_email, provider_conflict, identity_in_use, unsupported_email, provider_error, account_unavailable. Nothing the provider sends is ever shown or logged.
+         */
+        get: operations["finishOAuthLogin"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/identities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The signed-in user's connected provider accounts */
+        get: operations["listIdentities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/identities/{provider}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Begin connecting a provider account to this user
+         * @description A POST with the CSRF token, never a GET, so another site cannot make a victim attach the attacker's provider account. Returns the provider's authorization URL; the page navigates to it.
+         */
+        post: operations["startConnectIdentity"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/identities/{provider}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Disconnect a provider account from this user
+         * @description Always allowed, because email codes keep working. 404 when that provider is not connected.
+         */
+        delete: operations["disconnectIdentity"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @enum {string} */
+        Provider: "google" | "github";
+        AuthProviders: {
+            providers: components["schemas"]["Provider"][];
+        };
+        Identity: {
+            provider: components["schemas"]["Provider"];
+            /** @description The address the provider reported when the account was connected. */
+            email: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        IdentityList: {
+            identities: components["schemas"]["Identity"][];
+        };
+        AuthorizationUrl: {
+            /** Format: uri */
+            authorization_url: string;
+        };
         /** @description The generic error body. Details never appear here; they go to the log only. The Go API sends not_found, method_not_allowed and internal_error. The AI service also sends unauthorized, payload_too_large and invalid_request. */
         Error: {
             /**
@@ -274,6 +410,22 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /** @description The request conflicts with the current state, such as a provider that is already connected (conflict). */
+        Conflict: {
+            headers: {
+                "X-Request-ID": components["headers"]["RequestId"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": "conflict",
+                 *       "request_id": "6P5E3ETHKJKOTOXXMXCEJGDW6I"
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
         /** @description No such resource for this user (not_found). */
         NotFound: {
             headers: {
@@ -326,6 +478,7 @@ export interface components {
         };
     };
     parameters: {
+        Provider: components["schemas"]["Provider"];
         /** @description The csrf_token from GET /v1/me, bound to the current session. Required on every state-changing request that has a session. */
         CsrfToken: string;
     };
@@ -335,6 +488,10 @@ export interface components {
         RequestId: string;
         /** @description The session cookie: set on sign-in, cleared (Max-Age=0) on sign-out. Always __Host-rm_session=...; Path=/; Secure; HttpOnly; SameSite=Lax. */
         SessionCookie: string;
+        /** @description Where the browser is sent next. */
+        Location: string;
+        /** @description The sign-in attempt cookie: set at the start (Max-Age=600), cleared by the callback. Always __Host-rm_oauth=...; Path=/; Secure; HttpOnly; SameSite=Lax. The callback may also set the session cookie. */
+        OAuthCookie: string;
     };
     pathItems: never;
 }
@@ -628,6 +785,192 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description The session is gone. */
+            204: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    listAuthProviders: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The configured providers, possibly none. */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "providers": [
+                     *         "google",
+                     *         "github"
+                     *       ]
+                     *     }
+                     */
+                    "application/json": components["schemas"]["AuthProviders"];
+                };
+            };
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    startOAuthLogin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: components["parameters"]["Provider"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Redirect to the provider. */
+            302: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    Location: components["headers"]["Location"];
+                    "Set-Cookie": components["headers"]["OAuthCookie"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    finishOAuthLogin: {
+        parameters: {
+            query?: {
+                code?: string;
+                state?: string;
+                error?: string;
+            };
+            header?: never;
+            path: {
+                provider: components["parameters"]["Provider"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Redirect to /account or /login?error=CODE. Clears the attempt cookie; on success also sets the session cookie. */
+            302: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    Location: components["headers"]["Location"];
+                    "Set-Cookie": components["headers"]["OAuthCookie"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    listIdentities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Connected accounts, at most one per provider. */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "identities": [
+                     *         {
+                     *           "provider": "google",
+                     *           "email": "ada@example.com",
+                     *           "created_at": "2026-11-23T09:30:00Z"
+                     *         }
+                     *       ]
+                     *     }
+                     */
+                    "application/json": components["schemas"]["IdentityList"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    startConnectIdentity: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The csrf_token from GET /v1/me, bound to the current session. Required on every state-changing request that has a session. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                provider: components["parameters"]["Provider"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Where to send the browser. Also sets the attempt cookie. */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    "Set-Cookie": components["headers"]["OAuthCookie"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "authorization_url": "https://accounts.google.com/o/oauth2/v2/auth?client_id=example"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["AuthorizationUrl"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["RateLimited"];
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    disconnectIdentity: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The csrf_token from GET /v1/me, bound to the current session. Required on every state-changing request that has a session. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                provider: components["parameters"]["Provider"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Disconnected. */
             204: {
                 headers: {
                     "X-Request-ID": components["headers"]["RequestId"];

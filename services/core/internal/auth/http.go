@@ -50,6 +50,9 @@ func (h *Handler) Mount(r chi.Router) {
 		r.Use(h.guard)
 		r.Post("/auth/email/start", h.start)
 		r.Post("/auth/email/verify", h.verify)
+		r.Get("/auth/providers", h.providers)
+		r.Get("/auth/{provider}/start", h.oauthStart)
+		r.Get("/auth/{provider}/callback", h.oauthCallback)
 		r.Group(func(r chi.Router) {
 			r.Use(h.session)
 			r.Post("/auth/logout", h.logout)
@@ -57,6 +60,9 @@ func (h *Handler) Mount(r chi.Router) {
 			r.Patch("/me", h.updateMe)
 			r.Get("/me/sessions", h.listSessions)
 			r.Delete("/me/sessions/{id}", h.revoke)
+			r.Get("/me/identities", h.listIdentities)
+			r.Post("/me/identities/{provider}/start", h.startConnect)
+			r.Delete("/me/identities/{provider}", h.disconnect)
 		})
 	})
 }
@@ -133,6 +139,8 @@ func (h *Handler) fail(w http.ResponseWriter, r *http.Request, err error) {
 		httpx.WriteError(w, r, http.StatusUnauthorized, "unauthenticated")
 	case errors.Is(err, ErrNotFound):
 		httpx.WriteError(w, r, http.StatusNotFound, "not_found")
+	case errors.Is(err, ErrConflict):
+		httpx.WriteError(w, r, http.StatusConflict, "conflict")
 	default:
 		h.logger.ErrorContext(r.Context(), "request failed",
 			"request_id", httpx.RequestIDFrom(r.Context()), "path", r.URL.Path, "error", err)

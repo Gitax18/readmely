@@ -1,5 +1,14 @@
 import "server-only";
-import { meSchema, sessionListSchema, type Me, type Session } from "./account-schema";
+import {
+  identityListSchema,
+  meSchema,
+  providersSchema,
+  sessionListSchema,
+  type Identity,
+  type Me,
+  type Session,
+} from "./account-schema";
+import type { Provider } from "./providers";
 import { readLimited } from "./read-limited";
 
 export const FETCH_TIMEOUT_MS = 3000;
@@ -68,4 +77,39 @@ export async function fetchSessions(
   if (res === null || res.status === 401) return null;
   const parsed = sessionListSchema.safeParse(res.json);
   return parsed.success ? parsed.data.sessions : null;
+}
+
+/**
+ * Which providers are configured. The login page shows a button for each. When the API cannot be
+ * asked, no buttons appear and email codes still work, so this never throws and never blocks.
+ */
+export async function fetchProviders(baseUrl: string, options: Options = {}): Promise<Provider[]> {
+  const doFetch = options.fetchImpl ?? fetch;
+  try {
+    const response = await doFetch(`${baseUrl}/v1/auth/providers`, {
+      cache: "no-store",
+      redirect: "error",
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(options.timeoutMs ?? FETCH_TIMEOUT_MS),
+    });
+    if (!response.ok) return [];
+    const parsed = providersSchema.safeParse(
+      JSON.parse(await readLimited(response, MAX_BODY_BYTES)),
+    );
+    return parsed.success ? parsed.data.providers : [];
+  } catch {
+    return [];
+  }
+}
+
+/** The signed-in user's connected provider accounts, or null when they cannot be loaded. */
+export async function fetchIdentities(
+  baseUrl: string,
+  sessionToken: string,
+  options: Options = {},
+): Promise<Identity[] | null> {
+  const res = await getJson(baseUrl, "/v1/me/identities", sessionToken, options);
+  if (res === null || res.status === 401) return null;
+  const parsed = identityListSchema.safeParse(res.json);
+  return parsed.success ? parsed.data.identities : null;
 }

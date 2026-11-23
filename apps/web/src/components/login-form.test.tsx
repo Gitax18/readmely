@@ -15,6 +15,9 @@ function fakeApi(overrides: Partial<AccountApi> = {}): AccountApi {
     rename: vi.fn(),
     listSessions: vi.fn(),
     revokeSession: vi.fn(),
+    listIdentities: vi.fn(),
+    startConnect: vi.fn(),
+    disconnect: vi.fn(),
     ...overrides,
   };
 }
@@ -52,7 +55,8 @@ describe("LoginForm: email step", () => {
     await reachCodeStep(api);
     expect(api.startLogin).toHaveBeenCalledWith("ada@example.com");
     expect(screen.getByText("ada@example.com")).toBeInTheDocument();
-    expect(screen.getByLabelText(/6-digit code/i)).toHaveFocus();
+    // Focus is set in an effect that runs just after the input appears, so wait for it.
+    await waitFor(() => expect(screen.getByLabelText(/6-digit code/i)).toHaveFocus());
     expect(screen.getByLabelText(/6-digit code/i)).toHaveAttribute("autocomplete", "one-time-code");
     expect(screen.getByRole("status")).toHaveTextContent(/code sent/i);
   });
@@ -151,7 +155,7 @@ describe("LoginForm: code step", () => {
     fireEvent.click(screen.getByRole("button", { name: /^sign in$/i }));
     expect(await screen.findByRole("alert")).toHaveTextContent(/wrong or has expired/i);
     expect(onSignedIn).not.toHaveBeenCalled();
-    expect(screen.getByLabelText(/6-digit code/i)).toHaveFocus();
+    await waitFor(() => expect(screen.getByLabelText(/6-digit code/i)).toHaveFocus());
     expect(screen.getByLabelText(/6-digit code/i)).toHaveAttribute("aria-invalid", "true");
   });
 
@@ -225,5 +229,58 @@ describe("messageFor", () => {
     [{ ok: false, kind: "not_found" }, "email", "went wrong"],
   ] as [Failure, "email" | "code", string][])("%j on the %s step contains %s", (f, step, text) => {
     expect(messageFor(f, step)).toContain(text);
+  });
+});
+
+describe("LoginForm: provider sign-in", () => {
+  it("shows no provider buttons unless a provider is configured", () => {
+    render(<LoginForm api={fakeApi()} />);
+    expect(screen.queryByRole("link", { name: /continue with/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/or use an emailed code/i)).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/email address/i)).toBeInTheDocument();
+  });
+
+  it("shows one plain link per configured provider, to the bridge's start route", () => {
+    render(<LoginForm api={fakeApi()} providers={["google", "github"]} />);
+    expect(screen.getByRole("link", { name: "Continue with Google" })).toHaveAttribute(
+      "href",
+      "/api/v1/auth/google/start",
+    );
+    expect(screen.getByRole("link", { name: "Continue with GitHub" })).toHaveAttribute(
+      "href",
+      "/api/v1/auth/github/start",
+    );
+  });
+
+  it("shows only the providers it is given", () => {
+    render(<LoginForm api={fakeApi()} providers={["github"]} />);
+    expect(screen.queryByRole("link", { name: /google/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /github/i })).toBeInTheDocument();
+  });
+
+  it("keeps the email form beside the buttons, and hides the buttons on the code step", async () => {
+    const api = fakeApi();
+    render(<LoginForm api={api} providers={["google"]} />);
+    typeInto(/email address/i, "ada@example.com");
+    fireEvent.click(screen.getByRole("button", { name: /send code/i }));
+    await screen.findByLabelText(/6-digit code/i);
+    expect(screen.queryByRole("link", { name: /continue with/i })).not.toBeInTheDocument();
+  });
+
+  it("announces why a provider sign-in failed, as text", () => {
+    render(
+      <LoginForm
+        api={fakeApi()}
+        providerError="Sign-in was cancelled. <b>x</b>"
+        providers={["google"]}
+      />,
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent("Sign-in was cancelled. <b>x</b>");
+    expect(document.querySelector("b")).toBeNull();
+  });
+
+  it("shows no alert when nothing failed", () => {
+    render(<LoginForm api={fakeApi()} providers={["google"]} />);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });

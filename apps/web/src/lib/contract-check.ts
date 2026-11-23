@@ -1,6 +1,13 @@
 import type { components } from "@/contract/core-internal";
 import type { components as publicComponents } from "@/contract/core-public";
-import type { Me, Session, User } from "./account-schema";
+import type {
+  AuthorizationUrl,
+  AuthProviders,
+  Identity,
+  Me,
+  Session,
+  User,
+} from "./account-schema";
 import type { Report } from "./status-schema";
 
 /**
@@ -25,3 +32,14 @@ export const userMatchesContract: SameShape<User, publicComponents["schemas"]["U
 export const meMatchesContract: SameShape<Me, publicComponents["schemas"]["Me"]> = true;
 export const sessionMatchesContract: SameShape<Session, publicComponents["schemas"]["Session"]> =
   true;
+
+export const identityMatchesContract: SameShape<Identity, publicComponents["schemas"]["Identity"]> =
+  true;
+export const providersMatchContract: SameShape<
+  AuthProviders,
+  publicComponents["schemas"]["AuthProviders"]
+> = true;
+export const authorizationUrlMatchesContract: SameShape<
+  AuthorizationUrl,
+  publicComponents["schemas"]["AuthorizationUrl"]
+> = true;

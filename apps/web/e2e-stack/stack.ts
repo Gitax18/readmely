@@ -79,3 +79,39 @@ export function resetRateLimits(): void {
   if (keys.length === 0) return;
   compose(["exec", "-T", "-e", "REDISCLI_AUTH", "redis", "redis-cli", "DEL", ...keys], env);
 }
+
+/** Runs one SQL statement in the stack's Postgres as its owner and returns its output. */
+function sql(statement: string): string {
+  if (/["$`\\]/.test(statement))
+    throw new Error("test SQL must not contain quotes, $ or backslashes");
+  return compose([
+    "exec",
+    "-T",
+    "postgres",
+    "sh",
+    "-c",
+    `psql -v ON_ERROR_STOP=1 -tA -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "${statement}"`,
+  ]).trim();
+}
+
+/**
+ * Connects a provider account to an existing user directly in the database. The real provider
+ * round trip cannot run in a test (there is no provider to approve it), so the screens that
+ * depend on a connected account are tested against one created here.
+ */
+export function seedIdentity(email: string, provider: "google" | "github", account: string): void {
+  const out = sql(
+    `WITH ins AS (INSERT INTO oauth_identities (user_id, provider, provider_user_id, email) ` +
+      `SELECT id, '${provider}', '${account}', lower(email) FROM users WHERE lower(email) = lower('${email}') ` +
+      `RETURNING 1) SELECT count(*) FROM ins`,
+  );
+  if (out !== "1") throw new Error(`expected to connect one account, connected ${out}`);
+}
+
+export function identityCount(email: string): number {
+  return Number(
+    sql(
+      `SELECT count(*) FROM oauth_identities i JOIN users u ON u.id = i.user_id WHERE lower(u.email) = lower('${email}')`,
+    ),
+  );
+}

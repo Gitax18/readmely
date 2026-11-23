@@ -4,3 +4,15 @@ title = "readmely"
 
 [extend]
 useDefault = true
+
+# Test fixtures for the provider client-secret handling (Phase 2b). Every value is a made-up
+# literal such as "gsecret-12345": the tests need one to prove it is sent to the provider's token
+# endpoint and never logged, and a fake provider checks it. Scoped to these two files and this one
+# rule, so a real key anywhere else, or any other rule, still fails the scan.
+[[allowlists]]
+description = "fake client secrets in the provider tests"
+targetRules = ["generic-api-key"]
+paths = [
+  '''services/core/internal/config/config_test\.go''',
+  '''services/core/internal/oauth/provider_test\.go''',
+]

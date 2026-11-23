@@ -788,8 +788,12 @@ func TestMalformedInput(t *testing.T) {
 	if rec := e.do(req{method: "GET", path: "/v1/nope"}); rec.Code != 404 || errCode(t, rec) != "not_found" {
 		t.Errorf("unknown route = %d %s", rec.Code, rec.Body.String())
 	}
-	if rec := e.do(req{method: "GET", path: "/v1/auth/email/start"}); rec.Code != 405 || errCode(t, rec) != "method_not_allowed" {
+	if rec := e.do(req{method: "GET", path: "/v1/auth/email/verify"}); rec.Code != 405 || errCode(t, rec) != "method_not_allowed" {
 		t.Errorf("GET on a POST route = %d %s", rec.Code, rec.Body.String())
+	}
+	// "email" is not a provider, so a GET to the start route is simply not found.
+	if rec := e.do(req{method: "GET", path: "/v1/auth/email/start"}); rec.Code != 404 || errCode(t, rec) != "not_found" {
+		t.Errorf("GET /v1/auth/email/start = %d %s", rec.Code, rec.Body.String())
 	}
 }
 

@@ -4,8 +4,10 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ProviderButtons } from "@/components/provider-buttons";
 import { Input } from "@/components/ui/input";
 import { createAccountApi, type AccountApi, type Failure } from "@/lib/browser-api";
+import type { Provider } from "@/lib/providers";
 
 /** Seconds before "send a new code" is offered; the API enforces one code per address per minute. */
 export const RESEND_AFTER_SECONDS = 60;
@@ -30,7 +32,19 @@ export function messageFor(failure: Failure, step: "email" | "code"): string {
   }
 }
 
-export function LoginForm({ api, onSignedIn }: { api?: AccountApi; onSignedIn?: () => void }) {
+export function LoginForm({
+  api,
+  onSignedIn,
+  providers = [],
+  providerError = null,
+}: {
+  api?: AccountApi;
+  onSignedIn?: () => void;
+  /** Providers the API has credentials for; none means no provider buttons. */
+  providers?: Provider[];
+  /** Plain-language reason a provider sign-in failed, from /login?error=. */
+  providerError?: string | null;
+}) {
   const router = useRouter();
   const [client] = useState(() => api ?? createAccountApi());
   const [step, setStep] = useState<"email" | "code">("email");
@@ -108,6 +122,17 @@ export function LoginForm({ api, onSignedIn }: { api?: AccountApi; onSignedIn?: 
         </p>
       </CardHeader>
       <CardContent>
+        {providerError ? (
+          <p role="alert" className="text-bad mb-4 text-sm">
+            {providerError}
+          </p>
+        ) : null}
+        {step === "email" && providers.length > 0 ? (
+          <div className="mb-4 flex flex-col gap-4">
+            <ProviderButtons providers={providers} />
+            <p className="text-muted-foreground text-center text-xs">or use an emailed code</p>
+          </div>
+        ) : null}
         {step === "email" ? (
           <form onSubmit={sendCode} className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">

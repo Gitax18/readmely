@@ -61,6 +61,11 @@ type Service struct {
 	mail    *mail.Queue
 	keys    Keys
 	logger  *slog.Logger
+	oauth   *OAuthConfig // nil until EnableOAuth: no provider sign-in
+
+	// onIdentityMiss is a test seam: it runs between "this provider account is not known" and the
+	// lookup by address, the one moment a concurrent first sign-in can slip in. Nil in production.
+	onIdentityMiss func()
 }
 
 // NewService wires the service. The mail queue may be shared with other features.
@@ -175,13 +180,15 @@ func (s *Service) VerifyLogin(ctx context.Context, rawEmail, code string, ip net
 		return nil, ErrInvalidCode
 	}
 
-	token, hash, err := NewSessionToken()
-	if err != nil {
-		return nil, err
-	}
 	var out *LoggedIn
+	newDevice := false
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
+		_, lookup := q.GetUserByEmail(ctx, email)
+		if lookup != nil && !errors.Is(lookup, pgx.ErrNoRows) {
+			return lookup
+		}
+		existed := lookup == nil
 		user, err := q.UpsertVerifiedUser(ctx, email)
 		if err != nil {
 			return err
@@ -189,25 +196,17 @@ func (s *Service) VerifyLogin(ctx context.Context, rawEmail, code string, ip net
 		if user.Status != "active" {
 			return ErrInvalidCode
 		}
-		sess, err := q.CreateSession(ctx, store.CreateSessionParams{
-			UserID:          user.ID,
-			TokenHash:       hash,
-			AbsoluteSeconds: int32(SessionAbsolute / time.Second),
-			IdleSeconds:     int32(SessionIdle / time.Second),
-			UserAgent:       truncateUserAgent(userAgent),
-			Ip:              addrPtr(ip),
-		})
-		if err != nil {
-			return err
-		}
-		out = &LoggedIn{Token: token, Session: sess, User: user}
-		return nil
+		out, newDevice, err = s.startSession(ctx, q, user, existed, ip, userAgent)
+		return err
 	})
 	if errors.Is(err, ErrInvalidCode) {
 		return nil, ErrInvalidCode
 	}
 	if err != nil {
 		return nil, fmt.Errorf("verify login: %w", err)
+	}
+	if newDevice {
+		s.alertNewDevice(ctx, out.User, "an emailed code", userAgent)
 	}
 	return out, nil
 }
