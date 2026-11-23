@@ -177,6 +177,88 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/projects/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Look up a public GitHub repository before adding it
+         * @description Takes what a person pastes (https://github.com/owner/repo, with or without the scheme, ".git" or a trailing path) and answers with what GitHub says about it, without creating anything. Errors: invalid_request (not a github.com repository address), repository_not_found (missing or private), repository_too_large (over the size limit) and github_unavailable (GitHub is not answering or is rate limiting).
+         */
+        post: operations["previewRepository"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/projects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The signed-in user's projects, newest first */
+        get: operations["listProjects"];
+        put?: never;
+        /**
+         * Add a public GitHub repository as a project
+         * @description Checks the repository the same way as the preview, then creates the project (status draft). At most 10 projects per user (409 project_limit); the same repository twice is 409 already_added. Analysis starts with a separate request.
+         */
+        post: operations["createProject"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/projects/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One project with its latest analysis job
+         * @description Someone else's project is indistinguishable from one that does not exist (404). The page polls this while a job runs.
+         */
+        get: operations["getProject"];
+        put?: never;
+        post?: never;
+        /** Delete a project and everything generated for it */
+        delete: operations["deleteProject"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/projects/{id}/analyse": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start analysing a project
+         * @description Queues the analysis job and sets the project to importing. Only one analysis runs per project at a time (409 analysis_running).
+         */
+        post: operations["analyseProject"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/auth/providers": {
         parameters: {
             query?: never;
@@ -357,6 +439,55 @@ export interface components {
         ConfirmDeletionRequest: {
             code: string;
         };
+        RepositoryUrlRequest: {
+            url: string;
+        };
+        RepositoryPreview: {
+            owner: string;
+            name: string;
+            /** @description Empty when the repository has none. Plain text. */
+            description: string;
+            default_branch: string;
+            size_kb: number;
+        };
+        /** @description The latest analysis job of a project. */
+        ProjectJob: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+            /** @description What the worker is doing now, a short code such as fetching or scanning. */
+            step: string | null;
+            progress: number;
+            /** @description A short code, never provider or stack text. */
+            error_code: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            finished_at: string | null;
+        };
+        Project: {
+            /** Format: uuid */
+            id: string;
+            /** @description owner/repo */
+            name: string;
+            owner: string;
+            repo: string;
+            description: string;
+            default_branch: string;
+            size_kb: number;
+            /** @enum {string} */
+            status: "draft" | "importing" | "ready" | "failed";
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** @description Null until the first analysis is requested. */
+            job: components["schemas"]["ProjectJob"] | null;
+        };
+        ProjectList: {
+            projects: components["schemas"]["Project"][];
+        };
         UpdateMeRequest: {
             /** @description No control characters (enforced by the server). */
             display_name: string;
@@ -473,6 +604,22 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /** @description A service this request depends on is not answering (github_unavailable). Try again shortly. */
+        NotAvailable: {
+            headers: {
+                "X-Request-ID": components["headers"]["RequestId"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": "github_unavailable",
+                 *       "request_id": "6P5E3ETHKJKOTOXXMXCEJGDW6I"
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
         /** @description No such resource for this user (not_found). */
         NotFound: {
             headers: {
@@ -525,6 +672,7 @@ export interface components {
         };
     };
     parameters: {
+        ProjectId: string;
         Provider: components["schemas"]["Provider"];
         /** @description The csrf_token from GET /v1/me, bound to the current session. Required on every state-changing request that has a session. */
         CsrfToken: string;
@@ -936,6 +1084,210 @@ export interface operations {
             400: components["responses"]["InvalidCode"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+            429: components["responses"]["RateLimited"];
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    previewRepository: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The csrf_token from GET /v1/me, bound to the current session. Required on every state-changing request that has a session. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "url": "https://github.com/octocat/Hello-World"
+                 *     }
+                 */
+                "application/json": components["schemas"]["RepositoryUrlRequest"];
+            };
+        };
+        responses: {
+            /** @description The repository exists, is public and is small enough. */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "owner": "octocat",
+                     *       "name": "Hello-World",
+                     *       "description": "My first repository on GitHub!",
+                     *       "default_branch": "master",
+                     *       "size_kb": 1
+                     *     }
+                     */
+                    "application/json": components["schemas"]["RepositoryPreview"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["NotAvailable"];
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    listProjects: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The projects, each with its latest analysis job. */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "projects": []
+                     *     }
+                     */
+                    "application/json": components["schemas"]["ProjectList"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    createProject: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The csrf_token from GET /v1/me, bound to the current session. Required on every state-changing request that has a session. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "url": "https://github.com/octocat/Hello-World"
+                 *     }
+                 */
+                "application/json": components["schemas"]["RepositoryUrlRequest"];
+            };
+        };
+        responses: {
+            /** @description The project was created. */
+            201: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Project"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["NotAvailable"];
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    getProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The project. */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Project"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    deleteProject: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The csrf_token from GET /v1/me, bound to the current session. Required on every state-changing request that has a session. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The project is gone. */
+            204: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    analyseProject: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The csrf_token from GET /v1/me, bound to the current session. Required on every state-changing request that has a session. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The job is queued. */
+            202: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Project"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             429: components["responses"]["RateLimited"];
             default: components["responses"]["UnexpectedError"];
         };

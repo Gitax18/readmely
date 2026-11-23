@@ -86,3 +86,21 @@ SELECT * FROM jobs
 WHERE project_id = @project_id AND user_id = @user_id
 ORDER BY created_at DESC, id DESC
 LIMIT @row_limit;
+
+-- name: SetJobProgress :one
+-- The worker reports what it is doing. Only the worker holding the job can; others change nothing.
+UPDATE jobs SET step = @step::text, progress = @progress::smallint
+WHERE id = @id AND locked_by = @worker::text AND status = 'running'
+RETURNING *;
+
+-- name: GetLatestProjectJob :one
+-- The newest job of a kind for a project, for the project page and the dashboard.
+SELECT * FROM jobs
+WHERE project_id = @project_id AND user_id = @user_id AND kind = @kind
+ORDER BY created_at DESC, id DESC
+LIMIT 1;
+
+-- name: CountActiveProjectJobs :one
+-- Jobs of a kind that are queued or running: at most one analysis per project at a time.
+SELECT count(*) FROM jobs
+WHERE project_id = @project_id AND user_id = @user_id AND kind = @kind AND status IN ('queued', 'running');

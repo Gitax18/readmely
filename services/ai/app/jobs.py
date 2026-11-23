@@ -39,6 +39,8 @@ class JobRow(BaseModel):
     lease_expires_at: datetime | None
     idempotency_key: str
     error_code: str | None
+    step: str | None
+    progress: int
     created_at: datetime
     updated_at: datetime
     finished_at: datetime | None

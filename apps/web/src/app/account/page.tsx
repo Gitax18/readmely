@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { AccountView } from "@/components/account-view";
+import { AppHeader } from "@/components/app-header";
 import {
   fetchIdentities,
   fetchProviders,
@@ -45,7 +46,8 @@ export default async function AccountPage({
   ]);
   return (
     <main className="mx-auto flex max-w-2xl flex-col gap-6 p-6 sm:p-10">
-      <h1 className="text-2xl font-semibold">Readmely</h1>
+      <AppHeader active="account" />
+      <h1 className="text-2xl font-semibold">Account</h1>
       <AccountView
         me={session.me}
         initialSessions={sessions ?? []}

@@ -18,10 +18,12 @@ import (
 	"github.com/Gitax18/readmely/services/core/internal/auth"
 	"github.com/Gitax18/readmely/services/core/internal/clientip"
 	"github.com/Gitax18/readmely/services/core/internal/config"
+	"github.com/Gitax18/readmely/services/core/internal/github"
 	"github.com/Gitax18/readmely/services/core/internal/health"
 	"github.com/Gitax18/readmely/services/core/internal/logging"
 	"github.com/Gitax18/readmely/services/core/internal/mail"
 	"github.com/Gitax18/readmely/services/core/internal/oauth"
+	"github.com/Gitax18/readmely/services/core/internal/projects"
 	"github.com/Gitax18/readmely/services/core/internal/ratelimit"
 	"github.com/Gitax18/readmely/services/core/internal/server"
 	"github.com/Gitax18/readmely/services/core/internal/status"
@@ -103,6 +105,8 @@ func run(ctx context.Context, args []string, getenv func(string) string, stdout,
 	authService.EnableOAuth(auth.OAuthConfig{Providers: providers, Store: oauth.NewStore(rdb, "rm:"), WebOrigin: cfg.WebOrigin})
 	logger.Info("provider sign-in", "providers", authService.Providers())
 	authHandler := auth.NewHandler(authService, clientip.New(cfg.TrustedProxies), cfg.WebOrigin, logger)
+	projectHandler := projects.NewHandler(projects.NewService(pool, ratelimit.New(rdb, "rm:rl:"), github.NewClient(cfg.GitHubAPIToken), logger))
+	authHandler.AddRoutes(projectHandler.Routes)
 
 	var lc net.ListenConfig
 	publicLn, err := lc.Listen(ctx, "tcp", cfg.HTTPAddr)

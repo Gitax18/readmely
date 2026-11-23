@@ -98,6 +98,8 @@ services:
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      # Optional: a read-only token that only raises GitHub's rate limit for repository lookups.
+      GITHUB_API_TOKEN: ${GITHUB_API_TOKEN:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -117,6 +119,31 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  # The repository analysis worker. It claims analysis jobs from the Postgres queue; it has no port.
+  # Phase 4 adds the clone sandbox (egress limited to GitHub, resource limits) to this service.
+  ingest:
+    profiles: ["app"]
+    build:
+      context: ..
+      dockerfile: infra/docker/core.Dockerfile
+      args:
+        CMD: ingest
+    image: readmely/ingest:dev
+    restart: unless-stopped
+    environment:
+      APP_ENV: development
+      DATABASE_URL: postgres://readmely_app:${APP_DB_PASSWORD:?APP_DB_PASSWORD is not set in .env}@postgres:5432/${POSTGRES_DB:?}?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - internal
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
 
   # The Python AI service. Internal only: no port is published to the host.
   # Started with `make up-app`; `make run-ai` runs it on the host instead (bound to 127.0.0.1).

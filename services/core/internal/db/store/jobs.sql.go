@@ -16,7 +16,7 @@ const cancelJob = `-- name: CancelJob :one
 UPDATE jobs
 SET status = 'cancelled', finished_at = now()
 WHERE id = $1 AND user_id = $2 AND status = 'queued'
-RETURNING id, user_id, project_id, kind, payload, status, attempts, max_attempts, run_after, locked_by, lease_expires_at, idempotency_key, error_code, created_at, updated_at, finished_at
+RETURNING id, user_id, project_id, kind, payload, status, attempts, max_attempts, run_after, locked_by, lease_expires_at, idempotency_key, error_code, created_at, updated_at, finished_at, step, progress
 `
 
 type CancelJobParams struct {
@@ -45,6 +45,8 @@ func (q *Queries) CancelJob(ctx context.Context, arg CancelJobParams) (Job, erro
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.FinishedAt,
+		&i.Step,
+		&i.Progress,
 	)
 	return i, err
 }
@@ -66,7 +68,7 @@ SET status = 'running',
     lease_expires_at = now() + make_interval(secs => $2::float8)
 FROM next
 WHERE jobs.id = next.id
-RETURNING jobs.id, jobs.user_id, jobs.project_id, jobs.kind, jobs.payload, jobs.status, jobs.attempts, jobs.max_attempts, jobs.run_after, jobs.locked_by, jobs.lease_expires_at, jobs.idempotency_key, jobs.error_code, jobs.created_at, jobs.updated_at, jobs.finished_at
+RETURNING jobs.id, jobs.user_id, jobs.project_id, jobs.kind, jobs.payload, jobs.status, jobs.attempts, jobs.max_attempts, jobs.run_after, jobs.locked_by, jobs.lease_expires_at, jobs.idempotency_key, jobs.error_code, jobs.created_at, jobs.updated_at, jobs.finished_at, jobs.step, jobs.progress
 `
 
 type ClaimJobParams struct {
@@ -97,6 +99,8 @@ func (q *Queries) ClaimJob(ctx context.Context, arg ClaimJobParams) (Job, error)
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.FinishedAt,
+		&i.Step,
+		&i.Progress,
 	)
 	return i, err
 }
@@ -105,7 +109,7 @@ const completeJob = `-- name: CompleteJob :one
 UPDATE jobs
 SET status = 'succeeded', finished_at = now(), locked_by = NULL, lease_expires_at = NULL, error_code = NULL
 WHERE id = $1 AND locked_by = $2::text AND status = 'running'
-RETURNING id, user_id, project_id, kind, payload, status, attempts, max_attempts, run_after, locked_by, lease_expires_at, idempotency_key, error_code, created_at, updated_at, finished_at
+RETURNING id, user_id, project_id, kind, payload, status, attempts, max_attempts, run_after, locked_by, lease_expires_at, idempotency_key, error_code, created_at, updated_at, finished_at, step, progress
 `
 
 type CompleteJobParams struct {
@@ -133,8 +137,29 @@ func (q *Queries) CompleteJob(ctx context.Context, arg CompleteJobParams) (Job, 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.FinishedAt,
+		&i.Step,
+		&i.Progress,
 	)
 	return i, err
+}
+
+const countActiveProjectJobs = `-- name: CountActiveProjectJobs :one
+SELECT count(*) FROM jobs
+WHERE project_id = $1 AND user_id = $2 AND kind = $3 AND status IN ('queued', 'running')
+`
+
+type CountActiveProjectJobsParams struct {
+	ProjectID *uuid.UUID
+	UserID    uuid.UUID
+	Kind      string
+}
+
+// Jobs of a kind that are queued or running: at most one analysis per project at a time.
+func (q *Queries) CountActiveProjectJobs(ctx context.Context, arg CountActiveProjectJobsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countActiveProjectJobs, arg.ProjectID, arg.UserID, arg.Kind)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
 }
 
 const enqueueJob = `-- name: EnqueueJob :one
@@ -145,7 +170,7 @@ VALUES (
     COALESCE($7::timestamptz, now())
 )
 ON CONFLICT (user_id, idempotency_key) DO UPDATE SET idempotency_key = EXCLUDED.idempotency_key
-RETURNING id, user_id, project_id, kind, payload, status, attempts, max_attempts, run_after, locked_by, lease_expires_at, idempotency_key, error_code, created_at, updated_at, finished_at
+RETURNING id, user_id, project_id, kind, payload, status, attempts, max_attempts, run_after, locked_by, lease_expires_at, idempotency_key, error_code, created_at, updated_at, finished_at, step, progress
 `
 
 type EnqueueJobParams struct {
@@ -192,6 +217,8 @@ func (q *Queries) EnqueueJob(ctx context.Context, arg EnqueueJobParams) (Job, er
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.FinishedAt,
+		&i.Step,
+		&i.Progress,
 	)
 	return i, err
 }
@@ -200,7 +227,7 @@ const extendJobLease = `-- name: ExtendJobLease :one
 UPDATE jobs
 SET lease_expires_at = now() + make_interval(secs => $1::float8)
 WHERE id = $2 AND locked_by = $3::text AND status = 'running' AND lease_expires_at > now()
-RETURNING id, user_id, project_id, kind, payload, status, attempts, max_attempts, run_after, locked_by, lease_expires_at, idempotency_key, error_code, created_at, updated_at, finished_at
+RETURNING id, user_id, project_id, kind, payload, status, attempts, max_attempts, run_after, locked_by, lease_expires_at, idempotency_key, error_code, created_at, updated_at, finished_at, step, progress
 `
 
 type ExtendJobLeaseParams struct {
@@ -229,12 +256,14 @@ func (q *Queries) ExtendJobLease(ctx context.Context, arg ExtendJobLeaseParams) 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.FinishedAt,
+		&i.Step,
+		&i.Progress,
 	)
 	return i, err
 }
 
 const getJob = `-- name: GetJob :one
-SELECT id, user_id, project_id, kind, payload, status, attempts, max_attempts, run_after, locked_by, lease_expires_at, idempotency_key, error_code, created_at, updated_at, finished_at FROM jobs WHERE id = $1 AND user_id = $2
+SELECT id, user_id, project_id, kind, payload, status, attempts, max_attempts, run_after, locked_by, lease_expires_at, idempotency_key, error_code, created_at, updated_at, finished_at, step, progress FROM jobs WHERE id = $1 AND user_id = $2
 `
 
 type GetJobParams struct {
@@ -262,12 +291,54 @@ func (q *Queries) GetJob(ctx context.Context, arg GetJobParams) (Job, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.FinishedAt,
+		&i.Step,
+		&i.Progress,
+	)
+	return i, err
+}
+
+const getLatestProjectJob = `-- name: GetLatestProjectJob :one
+SELECT id, user_id, project_id, kind, payload, status, attempts, max_attempts, run_after, locked_by, lease_expires_at, idempotency_key, error_code, created_at, updated_at, finished_at, step, progress FROM jobs
+WHERE project_id = $1 AND user_id = $2 AND kind = $3
+ORDER BY created_at DESC, id DESC
+LIMIT 1
+`
+
+type GetLatestProjectJobParams struct {
+	ProjectID *uuid.UUID
+	UserID    uuid.UUID
+	Kind      string
+}
+
+// The newest job of a kind for a project, for the project page and the dashboard.
+func (q *Queries) GetLatestProjectJob(ctx context.Context, arg GetLatestProjectJobParams) (Job, error) {
+	row := q.db.QueryRow(ctx, getLatestProjectJob, arg.ProjectID, arg.UserID, arg.Kind)
+	var i Job
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.ProjectID,
+		&i.Kind,
+		&i.Payload,
+		&i.Status,
+		&i.Attempts,
+		&i.MaxAttempts,
+		&i.RunAfter,
+		&i.LockedBy,
+		&i.LeaseExpiresAt,
+		&i.IdempotencyKey,
+		&i.ErrorCode,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.FinishedAt,
+		&i.Step,
+		&i.Progress,
 	)
 	return i, err
 }
 
 const listProjectJobs = `-- name: ListProjectJobs :many
-SELECT id, user_id, project_id, kind, payload, status, attempts, max_attempts, run_after, locked_by, lease_expires_at, idempotency_key, error_code, created_at, updated_at, finished_at FROM jobs
+SELECT id, user_id, project_id, kind, payload, status, attempts, max_attempts, run_after, locked_by, lease_expires_at, idempotency_key, error_code, created_at, updated_at, finished_at, step, progress FROM jobs
 WHERE project_id = $1 AND user_id = $2
 ORDER BY created_at DESC, id DESC
 LIMIT $3
@@ -305,6 +376,8 @@ func (q *Queries) ListProjectJobs(ctx context.Context, arg ListProjectJobsParams
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.FinishedAt,
+			&i.Step,
+			&i.Progress,
 		); err != nil {
 			return nil, err
 		}
@@ -325,7 +398,7 @@ SET status = CASE WHEN attempts >= max_attempts THEN 'failed' ELSE 'queued' END,
     locked_by = NULL,
     lease_expires_at = NULL
 WHERE id = $3 AND locked_by = $4::text AND status = 'running'
-RETURNING id, user_id, project_id, kind, payload, status, attempts, max_attempts, run_after, locked_by, lease_expires_at, idempotency_key, error_code, created_at, updated_at, finished_at
+RETURNING id, user_id, project_id, kind, payload, status, attempts, max_attempts, run_after, locked_by, lease_expires_at, idempotency_key, error_code, created_at, updated_at, finished_at, step, progress
 `
 
 type ReleaseJobParams struct {
@@ -362,6 +435,8 @@ func (q *Queries) ReleaseJob(ctx context.Context, arg ReleaseJobParams) (Job, er
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.FinishedAt,
+		&i.Step,
+		&i.Progress,
 	)
 	return i, err
 }
@@ -374,7 +449,7 @@ SET status = CASE WHEN attempts >= max_attempts THEN 'failed' ELSE 'queued' END,
     locked_by = NULL,
     lease_expires_at = NULL
 WHERE status = 'running' AND lease_expires_at < now()
-RETURNING id, user_id, project_id, kind, payload, status, attempts, max_attempts, run_after, locked_by, lease_expires_at, idempotency_key, error_code, created_at, updated_at, finished_at
+RETURNING id, user_id, project_id, kind, payload, status, attempts, max_attempts, run_after, locked_by, lease_expires_at, idempotency_key, error_code, created_at, updated_at, finished_at, step, progress
 `
 
 // Recovers jobs whose worker stopped renewing the lease. Same retry rule as ReleaseJob.
@@ -404,6 +479,8 @@ func (q *Queries) RequeueExpiredJobs(ctx context.Context) ([]Job, error) {
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.FinishedAt,
+			&i.Step,
+			&i.Progress,
 		); err != nil {
 			return nil, err
 		}
@@ -413,4 +490,49 @@ func (q *Queries) RequeueExpiredJobs(ctx context.Context) ([]Job, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const setJobProgress = `-- name: SetJobProgress :one
+UPDATE jobs SET step = $1::text, progress = $2::smallint
+WHERE id = $3 AND locked_by = $4::text AND status = 'running'
+RETURNING id, user_id, project_id, kind, payload, status, attempts, max_attempts, run_after, locked_by, lease_expires_at, idempotency_key, error_code, created_at, updated_at, finished_at, step, progress
+`
+
+type SetJobProgressParams struct {
+	Step     string
+	Progress int16
+	ID       uuid.UUID
+	Worker   string
+}
+
+// The worker reports what it is doing. Only the worker holding the job can; others change nothing.
+func (q *Queries) SetJobProgress(ctx context.Context, arg SetJobProgressParams) (Job, error) {
+	row := q.db.QueryRow(ctx, setJobProgress,
+		arg.Step,
+		arg.Progress,
+		arg.ID,
+		arg.Worker,
+	)
+	var i Job
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.ProjectID,
+		&i.Kind,
+		&i.Payload,
+		&i.Status,
+		&i.Attempts,
+		&i.MaxAttempts,
+		&i.RunAfter,
+		&i.LockedBy,
+		&i.LeaseExpiresAt,
+		&i.IdempotencyKey,
+		&i.ErrorCode,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.FinishedAt,
+		&i.Step,
+		&i.Progress,
+	)
+	return i, err
 }

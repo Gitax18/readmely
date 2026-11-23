@@ -22,6 +22,9 @@ type Querier interface {
 	// of workers claim at the same time without waiting for or duplicating each other.
 	ClaimJob(ctx context.Context, arg ClaimJobParams) (Job, error)
 	CompleteJob(ctx context.Context, arg CompleteJobParams) (Job, error)
+	// Jobs of a kind that are queued or running: at most one analysis per project at a time.
+	CountActiveProjectJobs(ctx context.Context, arg CountActiveProjectJobsParams) (int64, error)
+	CountUserProjects(ctx context.Context, userID uuid.UUID) (int64, error)
 	// Fails with a unique violation when the provider account is connected elsewhere or the user
 	// already has one for this provider; the caller turns that into the right refusal.
 	CreateIdentity(ctx context.Context, arg CreateIdentityParams) (OauthIdentity, error)
@@ -32,6 +35,8 @@ type Querier interface {
 	// Every project query is scoped to its owner (@user_id): asking for someone else's project
 	// finds nothing, the same as asking for one that does not exist.
 	CreateProject(ctx context.Context, arg CreateProjectParams) (Project, error)
+	// A project for a GitHub repository. A unique violation on (user, repository) means it is already added.
+	CreateRepositoryProject(ctx context.Context, arg CreateRepositoryProjectParams) (Project, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	DeleteAllUserSessions(ctx context.Context, userID uuid.UUID) (int64, error)
@@ -60,6 +65,8 @@ type Querier interface {
 	// The connected account for a provider's stable id, with its user (the caller checks the status).
 	GetIdentityByProviderAccount(ctx context.Context, arg GetIdentityByProviderAccountParams) (GetIdentityByProviderAccountRow, error)
 	GetJob(ctx context.Context, arg GetJobParams) (Job, error)
+	// The newest job of a kind for a project, for the project page and the dashboard.
+	GetLatestProjectJob(ctx context.Context, arg GetLatestProjectJobParams) (Job, error)
 	GetProject(ctx context.Context, arg GetProjectParams) (Project, error)
 	// The live session for a cookie, with its user. Ended sessions and suspended users find nothing.
 	GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (GetSessionByTokenHashRow, error)
@@ -82,6 +89,8 @@ type Querier interface {
 	// Holds credits for a job. Fails with SQLSTATE CR001 when the balance is too small and CR002
 	// when the key was used for something else; a replay returns the first entry and charges nothing.
 	ReserveCredits(ctx context.Context, arg ReserveCreditsParams) (CreditLedger, error)
+	// The worker reports what it is doing. Only the worker holding the job can; others change nothing.
+	SetJobProgress(ctx context.Context, arg SetJobProgressParams) (Job, error)
 	SetProjectStatus(ctx context.Context, arg SetProjectStatusParams) (Project, error)
 	SetUserStatus(ctx context.Context, arg SetUserStatusParams) (User, error)
 	TouchIdentityLogin(ctx context.Context, arg TouchIdentityLoginParams) error

@@ -29,6 +29,7 @@ import (
 	"github.com/Gitax18/readmely/services/core/internal/contract/coreinternal"
 	"github.com/Gitax18/readmely/services/core/internal/health"
 	"github.com/Gitax18/readmely/services/core/internal/httpx"
+	"github.com/Gitax18/readmely/services/core/internal/projects"
 	"github.com/Gitax18/readmely/services/core/internal/server"
 	"github.com/Gitax18/readmely/services/core/internal/status"
 )
@@ -370,7 +371,9 @@ func publicRouter(checks *health.Handler) http.Handler {
 // accountRoutes registers the /v1 account endpoints on a router.
 func accountRoutes(r chi.Router) {
 	svc := auth.NewService(nil, nil, nil, auth.NewKeys(testToken), logger())
-	auth.NewHandler(svc, clientip.New(nil), "http://127.0.0.1:3000", logger()).Mount(r)
+	h := auth.NewHandler(svc, clientip.New(nil), "http://127.0.0.1:3000", logger())
+	h.AddRoutes(projects.NewHandler(projects.NewService(nil, nil, nil, logger())).Routes)
+	h.Mount(r)
 }
 
 func withoutPlanned(spec, skip []string) []string {
