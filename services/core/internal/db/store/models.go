@@ -134,6 +134,7 @@ type Project struct {
 }
 
 type ProjectDiagram struct {
+	ID        uuid.UUID
 	ProjectID uuid.UUID
 	Title     string
 	Svg       string

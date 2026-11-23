@@ -3,7 +3,8 @@
 -- A project's architecture diagram: the current one only, replaced when a new one is generated.
 -- The SVG is made by the AI worker's own renderer from a validated graph, never taken from the model.
 CREATE TABLE project_diagrams (
-    project_id  uuid        PRIMARY KEY REFERENCES projects (id) ON DELETE CASCADE,
+    id          uuid        PRIMARY KEY DEFAULT uuid_generate_v7(),
+    project_id  uuid        NOT NULL UNIQUE REFERENCES projects (id) ON DELETE CASCADE,
     title       text        NOT NULL,
     svg         text        NOT NULL,
     node_count  integer     NOT NULL,

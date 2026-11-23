@@ -13,7 +13,7 @@ import (
 
 const getProjectDiagram = `-- name: GetProjectDiagram :one
 
-SELECT project_id, title, svg, node_count, commit_sha, job_id, created_at FROM project_diagrams WHERE project_id = $1
+SELECT id, project_id, title, svg, node_count, commit_sha, job_id, created_at FROM project_diagrams WHERE project_id = $1
 `
 
 // A project's diagram. Callers check the project belongs to the user first (GetProject).
@@ -21,6 +21,7 @@ func (q *Queries) GetProjectDiagram(ctx context.Context, projectID uuid.UUID) (P
 	row := q.db.QueryRow(ctx, getProjectDiagram, projectID)
 	var i ProjectDiagram
 	err := row.Scan(
+		&i.ID,
 		&i.ProjectID,
 		&i.Title,
 		&i.Svg,
