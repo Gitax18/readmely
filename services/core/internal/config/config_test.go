@@ -54,7 +54,7 @@ func TestAuthSettings(t *testing.T) {
 		{"proxy garbage", map[string]string{"TRUSTED_PROXIES": "10.0.0.1, banana"}, "TRUSTED_PROXIES: must be a comma-separated"},
 		{"trust everyone", map[string]string{"TRUSTED_PROXIES": "0.0.0.0/0"}, "TRUSTED_PROXIES: must not trust every address"},
 		{"trust every v6", map[string]string{"TRUSTED_PROXIES": "::/0"}, "TRUSTED_PROXIES: must not trust every address"},
-		{"unknown mailer", map[string]string{"MAILER": "smtp"}, "MAILER: must be log or file"},
+		{"unknown mailer", map[string]string{"MAILER": "sendgrid"}, "MAILER: must be log, file or smtp"},
 		{"file without dir", map[string]string{"MAILER": "file"}, "MAIL_DIR: is required when MAILER=file"},
 		{"production without origin", map[string]string{"APP_ENV": "production", "MAILER": "log"}, "WEB_ORIGIN: is required in production"},
 		{"production over http", map[string]string{"APP_ENV": "production", "WEB_ORIGIN": "http://x.example"}, "WEB_ORIGIN: must use https in production"},

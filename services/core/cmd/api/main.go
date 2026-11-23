@@ -5,8 +5,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
+	netmail "net/mail"
 	"os"
 	"os/signal"
 	"syscall"
@@ -91,7 +93,7 @@ func run(ctx context.Context, args []string, getenv func(string) string, stdout,
 	)
 	statusHandler := status.NewHandler(checks, status.NewAIClient(logger, cfg.AIServiceURL, cfg.AIServiceToken)).Cached(statusCacheTTL)
 
-	mailer, err := mail.New(cfg.Mailer, cfg.MailDir, logger)
+	mailer, err := newMailer(cfg, logger)
 	if err != nil {
 		logger.Error("MAILER could not be used")
 		return 2
@@ -159,6 +161,17 @@ func run(ctx context.Context, args []string, getenv func(string) string, stdout,
 	}
 	logger.Info("api stopped")
 	return 0
+}
+
+// newMailer builds the configured mailer. Errors never carry the SMTP password.
+func newMailer(cfg config.Config, logger *slog.Logger) (mail.Mailer, error) {
+	if cfg.Mailer != config.MailerSMTP {
+		return mail.New(cfg.Mailer, cfg.MailDir, logger)
+	}
+	return mail.NewSMTP(mail.SMTPConfig{
+		Host: cfg.SMTPHost, Port: cfg.SMTPPort, Username: cfg.SMTPUsername, Password: cfg.SMTPPassword,
+		From: netmail.Address{Name: cfg.MailFromName, Address: cfg.MailFrom},
+	})
 }
 
 type redisPinger struct{ c *redis.Client }

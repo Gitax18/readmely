@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"net/mail"
 	"net/netip"
 	"net/url"
 	"slices"
@@ -30,11 +31,13 @@ const (
 )
 
 // Mailers. Only development may use the log and file mailers: they put codes on disk or in
-// logs. No production mailer exists yet (plans/phase-2a-email-login.md), so production refuses
-// to start until one is added.
+// logs. Production sends through an SMTP relay (Brevo, Mailgun, Resend and others offer one).
 const (
 	MailerLog  = "log"  // writes each email to the log, code included (development only)
 	MailerFile = "file" // writes each email as a JSON file to MAIL_DIR (development and browser tests)
+	MailerSMTP = "smtp" // sends through an SMTP relay; the only mailer production accepts
+
+	defaultSMTPPort = 587
 )
 
 // Config is the validated configuration of a Readmely Go process.
@@ -55,8 +58,14 @@ type Config struct {
 	AuthCodeKey    string         // HMAC key for login codes and CSRF tokens; never logged
 	WebOrigin      string         // the only origin allowed to make state-changing requests
 	TrustedProxies []netip.Prefix // peers whose X-Forwarded-For is believed (the web server)
-	Mailer         string         // MailerLog or MailerFile
+	Mailer         string         // MailerLog, MailerFile or MailerSMTP
 	MailDir        string         // where MailerFile writes
+	SMTPHost       string         // MailerSMTP only
+	SMTPPort       int            // 587 (STARTTLS) or 465 (TLS from the start)
+	SMTPUsername   string
+	SMTPPassword   string // never logged
+	MailFrom       string // the sender address; it must be one the provider has verified
+	MailFromName   string // shown next to it
 
 	// Provider sign-in (Phase 2b). Each pair is optional; with neither value the provider is off.
 	GoogleClientID     string
@@ -164,15 +173,53 @@ func (c *Config) loadAuth(getenv func(string) string, errs *[]error) {
 	c.Mailer = value(getenv, "MAILER", fallbackMailer)
 	switch {
 	case c.Mailer == "":
-		*errs = append(*errs, fieldError("MAILER", errors.New("is required in production, and no production mailer exists yet")))
-	case c.Mailer != MailerLog && c.Mailer != MailerFile:
-		*errs = append(*errs, fieldError("MAILER", errors.New("must be log or file")))
-	case production:
+		*errs = append(*errs, fieldError("MAILER", errors.New("is required in production (use smtp)")))
+	case c.Mailer != MailerLog && c.Mailer != MailerFile && c.Mailer != MailerSMTP:
+		*errs = append(*errs, fieldError("MAILER", errors.New("must be log, file or smtp")))
+	case production && c.Mailer != MailerSMTP:
 		*errs = append(*errs, fieldError("MAILER", errors.New("log and file are for development only: they expose sign-in codes")))
 	}
 	c.MailDir = value(getenv, "MAIL_DIR", "")
 	if c.Mailer == MailerFile && c.MailDir == "" {
 		*errs = append(*errs, fieldError("MAIL_DIR", errors.New("is required when MAILER=file")))
+	}
+	if c.Mailer == MailerSMTP {
+		c.loadSMTP(getenv, errs)
+	}
+}
+
+// loadSMTP reads the relay settings. Each missing one is named, so a half-filled .env is
+// explained in one go instead of one restart at a time.
+func (c *Config) loadSMTP(getenv func(string) string, errs *[]error) {
+	c.SMTPHost = value(getenv, "SMTP_HOST", "")
+	c.SMTPUsername = value(getenv, "SMTP_USERNAME", "")
+	c.SMTPPassword = value(getenv, "SMTP_PASSWORD", "")
+	c.MailFrom = value(getenv, "MAIL_FROM", "")
+	c.MailFromName = value(getenv, "MAIL_FROM_NAME", "Readmely")
+	for _, req := range []struct{ name, v string }{
+		{"SMTP_HOST", c.SMTPHost}, {"SMTP_USERNAME", c.SMTPUsername},
+		{"SMTP_PASSWORD", c.SMTPPassword}, {"MAIL_FROM", c.MailFrom},
+	} {
+		if req.v == "" {
+			*errs = append(*errs, fieldError(req.name, errors.New("is required when MAILER=smtp")))
+		}
+	}
+	if c.SMTPHost != "" && strings.ContainsAny(c.SMTPHost, " /\\@:") {
+		*errs = append(*errs, fieldError("SMTP_HOST", errors.New("must be a host name only, for example smtp-relay.brevo.com")))
+	}
+	c.SMTPPort = defaultSMTPPort
+	if raw := value(getenv, "SMTP_PORT", ""); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 1 || n > 65535 {
+			*errs = append(*errs, fieldError("SMTP_PORT", errors.New("must be a port number, usually 587")))
+		} else {
+			c.SMTPPort = n
+		}
+	}
+	if c.MailFrom != "" {
+		if a, err := mail.ParseAddress(c.MailFrom); err != nil || a.Name != "" || strings.ContainsAny(c.MailFromName, "\r\n") {
+			*errs = append(*errs, fieldError("MAIL_FROM", errors.New("must be one email address, for example hello@example.com")))
+		}
 	}
 }
 
