@@ -34,6 +34,7 @@ export type Failure =
   | { ok: false; kind: "insufficient_credits" }
   | { ok: false; kind: "not_analysed" }
   | { ok: false; kind: "readme_running" }
+  | { ok: false; kind: "diagram_running" }
   | { ok: false; kind: "stale_version" }
   | { ok: false; kind: "unavailable" };
 
@@ -95,6 +96,8 @@ export async function failure(res: Response | null): Promise<Failure> {
   if (res.status === 402) return { ok: false, kind: "insufficient_credits" };
   if (res.status === 409 && code === "not_analysed") return { ok: false, kind: "not_analysed" };
   if (res.status === 409 && code === "readme_running") return { ok: false, kind: "readme_running" };
+  if (res.status === 409 && code === "diagram_running")
+    return { ok: false, kind: "diagram_running" };
   if (res.status === 409 && code === "stale_version") return { ok: false, kind: "stale_version" };
   if (res.status === 409) return { ok: false, kind: "conflict" };
   if (res.status === 503 && code === "github_unavailable") {

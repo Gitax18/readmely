@@ -1,4 +1,5 @@
 import { failure, parsed, request, type Result } from "./browser-api";
+import { diagramStateSchema, type DiagramState } from "./diagram-schema";
 import {
   readmeSchema,
   readmeStateSchema,
@@ -27,6 +28,8 @@ export interface ProjectsApi {
   analyse(csrf: string, id: string): Promise<Result<{ project: Project }>>;
   analysis(id: string): Promise<Result<{ analysis: ProjectAnalysis }>>;
   contextPack(id: string): Promise<Result<{ pack: ContextPack }>>;
+  diagram(id: string): Promise<Result<{ state: DiagramState }>>;
+  generateDiagram(csrf: string, id: string, focus: string): Promise<Result<object>>;
   readme(id: string): Promise<Result<{ state: ReadmeState }>>;
   generateReadme(csrf: string, id: string, template: ReadmeTemplate): Promise<Result<object>>;
   saveReadme(
@@ -97,6 +100,19 @@ export function createProjectsApi(
       if (res?.status !== 200) return failure(res);
       const pack = await parsed(res, contextPackSchema);
       return pack ? { ok: true, pack } : { ok: false, kind: "unavailable" };
+    },
+    async diagram(id) {
+      const res = await request(fetchImpl, "GET", `/projects/${encodeURIComponent(id)}/diagram`);
+      if (res?.status !== 200) return failure(res);
+      const state = await parsed(res, diagramStateSchema);
+      return state ? { ok: true, state } : { ok: false, kind: "unavailable" };
+    },
+    async generateDiagram(csrf, id, focus) {
+      const res = await request(fetchImpl, "POST", `/projects/${encodeURIComponent(id)}/diagram`, {
+        body: { focus },
+        csrf,
+      });
+      return res?.status === 202 ? { ok: true } : failure(res);
     },
     async readme(id) {
       const res = await request(fetchImpl, "GET", `/projects/${encodeURIComponent(id)}/readme`);

@@ -10,6 +10,7 @@ import type {
 } from "./account-schema";
 import type { ProjectAnalysis, ProjectFacts, ProjectSummary } from "./analysis-schema";
 import type { ContextPack, ContextPackPreset } from "./context-pack-schema";
+import type { Diagram, DiagramState } from "./diagram-schema";
 import type { Readme, ReadmeScore, ReadmeState, ReadmeVersions } from "./readme-schema";
 import type { CreditBalance, CreditEntry } from "./credit-schema";
 import type { Project, ProjectJob, RepositoryPreview } from "./project-schema";
@@ -104,4 +105,12 @@ export const readmeStateMatchesContract: SameShape<
 export const readmeVersionsMatchContract: SameShape<
   ReadmeVersions,
   publicComponents["schemas"]["ReadmeVersions"]
+> = true;
+
+// The diagram endpoints.
+export const diagramMatchesContract: SameShape<Diagram, publicComponents["schemas"]["Diagram"]> =
+  true;
+export const diagramStateMatchesContract: SameShape<
+  DiagramState,
+  publicComponents["schemas"]["DiagramState"]
 > = true;

@@ -24,6 +24,8 @@ export function projectFailureText(f: Failure): string {
       return "Analyse the project first.";
     case "readme_running":
       return "A README is already being written for this project.";
+    case "diagram_running":
+      return "A diagram is already being drawn for this project.";
     case "stale_version":
       return "The README changed since you opened it. Reload the page, then make your edit again.";
     case "rate_limited":
@@ -186,4 +188,32 @@ const README_STEPS: Record<string, string> = {
 
 export function readmeStepLabel(step: string | null): string {
   return (step !== null && README_STEPS[step]) || "Waiting for the writer";
+}
+
+/** Why a diagram job failed, in plain words. Credits are never lost: a failed job is refunded. */
+export function diagramFailureText(code: string | null): string {
+  switch (code) {
+    case "insufficient_credits":
+      return "There were not enough credits.";
+    case "spend_cap_reached":
+      return "Readmely has reached its limit for AI work today. Try again tomorrow. Nothing was charged.";
+    case "llm_not_configured":
+      return "AI drawing is not switched on for this server. Nothing was charged.";
+    case "llm_invalid_output":
+    case "diagram_unusable":
+      return "The diagram did not come out clean enough to show. Nothing was charged. Try again.";
+    default:
+      return "The diagram could not be drawn this time. Nothing was charged. Try again.";
+  }
+}
+
+const DIAGRAM_STEPS: Record<string, string> = {
+  reading: "Reading the project",
+  writing: "Working out the parts",
+  drawing: "Drawing",
+  saving: "Saving",
+};
+
+export function diagramStepLabel(step: string | null): string {
+  return (step !== null && DIAGRAM_STEPS[step]) || "Waiting for the artist";
 }
