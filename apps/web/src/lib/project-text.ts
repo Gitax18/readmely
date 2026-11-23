@@ -127,3 +127,29 @@ export function skipReasonLabel(reason: string): string {
 export function formatCount(n: number): string {
   return new Intl.NumberFormat("en-US").format(n);
 }
+
+const SUMMARY_STEPS: Record<string, string> = {
+  reading: "Reading the project",
+  writing: "Writing the summary",
+  saving: "Saving the summary",
+};
+
+export function summaryStepLabel(step: string | null): string {
+  return (step !== null && SUMMARY_STEPS[step]) || "Waiting for the writer";
+}
+
+/** Why there is no summary, in plain words. Credits are never lost: a failed summary is refunded. */
+export function summaryFailureText(code: string | null): string {
+  switch (code) {
+    case "insufficient_credits":
+      return "There were not enough credits to write the summary. Writing it holds 10 credits; see Usage.";
+    case "spend_cap_reached":
+      return "Readmely has reached its limit for AI work today. Analyse again tomorrow. Nothing was charged.";
+    case "llm_not_configured":
+      return "AI summaries are not switched on for this server. Nothing was charged.";
+    case "stale_analysis":
+      return "The project was analysed again while the summary was being written. Nothing was charged.";
+    default:
+      return "The summary could not be written this time. Nothing was charged. Analyse again to retry.";
+  }
+}
