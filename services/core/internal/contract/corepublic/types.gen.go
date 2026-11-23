@@ -24,6 +24,33 @@ func (e AcceptedStatus) Valid() bool {
 	}
 }
 
+// Defines values for CreditEntryKind.
+const (
+	CreditEntryKindAdjustment CreditEntryKind = "adjustment"
+	CreditEntryKindGrant      CreditEntryKind = "grant"
+	CreditEntryKindRefund     CreditEntryKind = "refund"
+	CreditEntryKindReserve    CreditEntryKind = "reserve"
+	CreditEntryKindSettle     CreditEntryKind = "settle"
+)
+
+// Valid indicates whether the value is a known member of the CreditEntryKind enum.
+func (e CreditEntryKind) Valid() bool {
+	switch e {
+	case CreditEntryKindAdjustment:
+		return true
+	case CreditEntryKindGrant:
+		return true
+	case CreditEntryKindRefund:
+		return true
+	case CreditEntryKindReserve:
+		return true
+	case CreditEntryKindSettle:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for HubKind.
 const (
 	HubKindExternal HubKind = "external"
@@ -150,6 +177,31 @@ type AuthorizationUrl struct {
 // ConfirmDeletionRequest defines model for ConfirmDeletionRequest.
 type ConfirmDeletionRequest struct {
 	Code string `json:"code"`
+}
+
+// CreditBalance defines model for CreditBalance.
+type CreditBalance struct {
+	// Balance Credits available now. A hold placed for a running job is already taken off.
+	Balance int `json:"balance"`
+}
+
+// CreditEntry defines model for CreditEntry.
+type CreditEntry struct {
+	CreatedAt time.Time `json:"created_at"`
+
+	// Delta Positive adds credits, negative takes them.
+	Delta int                `json:"delta"`
+	Id    openapi_types.UUID `json:"id"`
+	Kind  CreditEntryKind    `json:"kind"`
+	Note  string             `json:"note"`
+}
+
+// CreditEntryKind defines model for CreditEntry.Kind.
+type CreditEntryKind string
+
+// CreditHistory defines model for CreditHistory.
+type CreditHistory struct {
+	Entries []CreditEntry `json:"entries"`
 }
 
 // Error The generic error body. Details never appear here; they go to the log only. The Go API sends not_found, method_not_allowed and internal_error. The AI service also sends unauthorized, payload_too_large and invalid_request.
