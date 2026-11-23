@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type CreditBalance struct {
@@ -45,6 +46,8 @@ type Job struct {
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 	FinishedAt     *time.Time
+	Step           *string
+	Progress       int16
 }
 
 type LoginChallenge struct {
@@ -70,12 +73,17 @@ type OauthIdentity struct {
 }
 
 type Project struct {
-	ID        uuid.UUID
-	UserID    uuid.UUID
-	Name      string
-	Status    string
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID              uuid.UUID
+	UserID          uuid.UUID
+	Name            string
+	Status          string
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	RepoOwner       *string
+	RepoName        *string
+	RepoDescription *string
+	DefaultBranch   *string
+	RepoSizeKb      pgtype.Int4
 }
 
 type Session struct {

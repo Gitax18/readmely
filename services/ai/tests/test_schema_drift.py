@@ -36,6 +36,7 @@ PYTHON_TYPE_FOR: dict[str, type] = {
     "uuid": UUID,
     "text": str,
     "integer": int,
+    "smallint": int,
     "jsonb": dict,
     "timestamp with time zone": datetime,
 }
@@ -98,6 +99,8 @@ COLUMNS = [
     Column("lease_expires_at", "timestamp with time zone", True),
     Column("idempotency_key", "text", False),
     Column("error_code", "text", True),
+    Column("step", "text", True),
+    Column("progress", "smallint", False),
     Column("created_at", "timestamp with time zone", False),
     Column("updated_at", "timestamp with time zone", False),
     Column("finished_at", "timestamp with time zone", True),
