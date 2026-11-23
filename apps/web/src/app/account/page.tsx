@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { AccountView } from "@/components/account-view";
 import { AppHeader } from "@/components/app-header";
 import {
+  fetchCredits,
   fetchIdentities,
   fetchProviders,
   fetchSession,
@@ -39,14 +40,15 @@ export default async function AccountPage({
     );
   }
 
-  const [sessions, identities, providers] = await Promise.all([
+  const [sessions, identities, providers, credits] = await Promise.all([
     fetchSessions(env.apiPublicUrl, token),
     fetchIdentities(env.apiPublicUrl, token),
     fetchProviders(env.apiPublicUrl),
+    fetchCredits(env.apiPublicUrl, token),
   ]);
   return (
     <main className="mx-auto flex max-w-2xl flex-col gap-6 p-6 sm:p-10">
-      <AppHeader active="account" />
+      <AppHeader active="account" credits={credits} />
       <h1 className="text-2xl font-semibold">Account</h1>
       <AccountView
         me={session.me}

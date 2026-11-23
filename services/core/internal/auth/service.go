@@ -20,6 +20,9 @@ import (
 	"github.com/Gitax18/readmely/services/core/internal/ratelimit"
 )
 
+// WelcomeCredits is the one-time grant every new account receives.
+const WelcomeCredits int64 = 100
+
 // The lifetimes and limits from the approved plan. They are constants, not settings: changing
 // one is a security decision that should go through review.
 const (
@@ -192,6 +195,11 @@ func (s *Service) VerifyLogin(ctx context.Context, rawEmail, code string, ip net
 		user, err := q.UpsertVerifiedUser(ctx, email)
 		if err != nil {
 			return err
+		}
+		if !existed {
+			if err := q.GrantWelcomeCredits(ctx, store.GrantWelcomeCreditsParams{UserID: user.ID, Amount: WelcomeCredits}); err != nil {
+				return err
+			}
 		}
 		if user.Status != "active" {
 			return ErrInvalidCode

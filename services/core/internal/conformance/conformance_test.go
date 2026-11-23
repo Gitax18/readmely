@@ -27,6 +27,7 @@ import (
 	"github.com/Gitax18/readmely/services/core/internal/auth"
 	"github.com/Gitax18/readmely/services/core/internal/clientip"
 	"github.com/Gitax18/readmely/services/core/internal/contract/coreinternal"
+	"github.com/Gitax18/readmely/services/core/internal/credits"
 	"github.com/Gitax18/readmely/services/core/internal/health"
 	"github.com/Gitax18/readmely/services/core/internal/httpx"
 	"github.com/Gitax18/readmely/services/core/internal/projects"
@@ -373,6 +374,7 @@ func accountRoutes(r chi.Router) {
 	svc := auth.NewService(nil, nil, nil, auth.NewKeys(testToken), logger())
 	h := auth.NewHandler(svc, clientip.New(nil), "http://127.0.0.1:3000", logger())
 	h.AddRoutes(projects.NewHandler(projects.NewService(nil, nil, nil, logger())).Routes)
+	h.AddRoutes(credits.NewHandler(nil).Routes)
 	h.Mount(r)
 }
 

@@ -321,6 +321,11 @@ func (s *Service) loginTx(ctx context.Context, c Callback, account, email, name 
 			if user.Status != "active" {
 				return &refusal{ErrCodeAccountUnavailable}
 			}
+			if !existed {
+				if err := q.GrantWelcomeCredits(ctx, store.GrantWelcomeCreditsParams{UserID: user.ID, Amount: WelcomeCredits}); err != nil {
+					return err
+				}
+			}
 			if _, err := q.CreateIdentity(ctx, store.CreateIdentityParams{UserID: user.ID, Provider: c.Provider, ProviderUserID: account, Email: email}); err != nil {
 				return err
 			}

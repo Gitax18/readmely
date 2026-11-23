@@ -143,6 +143,47 @@ paths:
           $ref: '#/components/responses/Forbidden'
         default:
           $ref: '#/components/responses/UnexpectedError'
+  /v1/me/credits:
+    get:
+      operationId: getCredits
+      summary: The signed-in user's credit balance
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: The balance.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreditBalance'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        default:
+          $ref: '#/components/responses/UnexpectedError'
+  /v1/me/credits/history:
+    get:
+      operationId: getCreditHistory
+      summary: The most recent credit movements, newest first
+      description: Grants, holds placed for a job, what was settled and what was refunded.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Up to 50 entries.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreditHistory'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        default:
+          $ref: '#/components/responses/UnexpectedError'
   /v1/me:
     get:
       operationId: getMe
@@ -1175,6 +1216,43 @@ components:
               type: object
               additionalProperties:
                 type: integer
+    CreditBalance:
+      type: object
+      required: [balance]
+      additionalProperties: false
+      properties:
+        balance:
+          type: integer
+          description: Credits available now. A hold placed for a running job is already taken off.
+    CreditEntry:
+      type: object
+      required: [id, delta, kind, note, created_at]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        delta:
+          type: integer
+          description: Positive adds credits, negative takes them.
+        kind:
+          type: string
+          enum: [grant, reserve, settle, refund, adjustment]
+        note:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    CreditHistory:
+      type: object
+      required: [entries]
+      additionalProperties: false
+      properties:
+        entries:
+          type: array
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/CreditEntry'
     ProjectList:
       type: object
       required: [projects]

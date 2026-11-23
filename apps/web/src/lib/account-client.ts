@@ -8,6 +8,7 @@ import {
   type Me,
   type Session,
 } from "./account-schema";
+import { creditBalanceSchema, creditHistorySchema, type CreditEntry } from "./credit-schema";
 import { projectListSchema, projectSchema, type Project } from "./project-schema";
 import type { Provider } from "./providers";
 import { readLimited } from "./read-limited";
@@ -149,4 +150,28 @@ export async function fetchProject(
   } catch {
     return null;
   }
+}
+
+/** The signed-in user's credit balance, or null when it cannot be loaded. */
+export async function fetchCredits(
+  baseUrl: string,
+  sessionToken: string,
+  options: Options = {},
+): Promise<number | null> {
+  const res = await getJson(baseUrl, "/v1/me/credits", sessionToken, options);
+  if (res === null || res.status === 401) return null;
+  const parsed = creditBalanceSchema.safeParse(res.json);
+  return parsed.success ? parsed.data.balance : null;
+}
+
+/** The most recent credit movements, newest first, or null when they cannot be loaded. */
+export async function fetchCreditHistory(
+  baseUrl: string,
+  sessionToken: string,
+  options: Options = {},
+): Promise<CreditEntry[] | null> {
+  const res = await getJson(baseUrl, "/v1/me/credits/history", sessionToken, options);
+  if (res === null || res.status === 401) return null;
+  const parsed = creditHistorySchema.safeParse(res.json);
+  return parsed.success ? parsed.data.entries : null;
 }

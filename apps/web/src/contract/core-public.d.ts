@@ -78,6 +78,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/me/credits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The signed-in user's credit balance */
+        get: operations["getCredits"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/credits/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The most recent credit movements, newest first
+         * @description Grants, holds placed for a job, what was settled and what was refunded.
+         */
+        get: operations["getCreditHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/me": {
         parameters: {
             query?: never;
@@ -569,6 +606,24 @@ export interface components {
                 };
             };
         };
+        CreditBalance: {
+            /** @description Credits available now. A hold placed for a running job is already taken off. */
+            balance: number;
+        };
+        CreditEntry: {
+            /** Format: uuid */
+            id: string;
+            /** @description Positive adds credits, negative takes them. */
+            delta: number;
+            /** @enum {string} */
+            kind: "grant" | "reserve" | "settle" | "refund" | "adjustment";
+            note: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        CreditHistory: {
+            entries: components["schemas"]["CreditEntry"][];
+        };
         ProjectList: {
             projects: components["schemas"]["Project"][];
         };
@@ -931,6 +986,52 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    getCredits: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The balance. */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreditBalance"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    getCreditHistory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Up to 50 entries. */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreditHistory"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
             default: components["responses"]["UnexpectedError"];
         };
     };
