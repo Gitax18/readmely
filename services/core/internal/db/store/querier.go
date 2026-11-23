@@ -38,6 +38,8 @@ type Querier interface {
 	DeleteEndedSessions(ctx context.Context) (int64, error)
 	// Challenges are kept for @retention_days for abuse review (requested_ip), then removed.
 	DeleteOldLoginChallenges(ctx context.Context, retentionDays int32) (int64, error)
+	// Sign out everywhere else: every session of the user except the one making the request.
+	DeleteOtherUserSessions(ctx context.Context, arg DeleteOtherUserSessionsParams) (int64, error)
 	DeleteProject(ctx context.Context, arg DeleteProjectParams) (int64, error)
 	DeleteSessionByTokenHash(ctx context.Context, tokenHash []byte) (int64, error)
 	DeleteUser(ctx context.Context, id uuid.UUID) (int64, error)

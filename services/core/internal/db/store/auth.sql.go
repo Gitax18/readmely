@@ -200,6 +200,24 @@ func (q *Queries) DeleteOldLoginChallenges(ctx context.Context, retentionDays in
 	return result.RowsAffected(), nil
 }
 
+const deleteOtherUserSessions = `-- name: DeleteOtherUserSessions :execrows
+DELETE FROM sessions WHERE user_id = $1 AND id <> $2
+`
+
+type DeleteOtherUserSessionsParams struct {
+	UserID uuid.UUID
+	KeepID uuid.UUID
+}
+
+// Sign out everywhere else: every session of the user except the one making the request.
+func (q *Queries) DeleteOtherUserSessions(ctx context.Context, arg DeleteOtherUserSessionsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteOtherUserSessions, arg.UserID, arg.KeepID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteSessionByTokenHash = `-- name: DeleteSessionByTokenHash :execrows
 DELETE FROM sessions WHERE token_hash = $1::bytea
 `
