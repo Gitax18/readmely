@@ -235,6 +235,26 @@ paths:
           $ref: '#/components/responses/Unauthenticated'
         default:
           $ref: '#/components/responses/UnexpectedError'
+    delete:
+      operationId: revokeOtherSessions
+      summary: End every session except the current one
+      description: Useful after losing a device. The session making the request stays signed in.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '204':
+          description: Every other session is gone.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/UnexpectedError'
   /v1/me/sessions/{id}:
     delete:
       operationId: revokeSession
@@ -262,6 +282,76 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/UnexpectedError'
+
+  /v1/me/deletion/start:
+    post:
+      operationId: startAccountDeletion
+      summary: Email a code that confirms deleting the account
+      description: >-
+        Deleting an account cannot be undone, so being signed in is not enough: a one-time code is sent to
+        the account's own address and must be entered to confirm. The code is valid for 10 minutes and 5 attempts.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '202':
+          description: Accepted. A code is on its way to the account's address.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Accepted'
+              example:
+                status: accepted
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        default:
+          $ref: '#/components/responses/UnexpectedError'
+  /v1/me/deletion/confirm:
+    post:
+      operationId: confirmAccountDeletion
+      summary: Delete the account and everything in it
+      description: >-
+        Removes the user, their sessions, connected accounts, projects and jobs. Credit ledger entries are kept
+        for accounting with the user reference removed. The session cookie is cleared. A wrong, expired or used
+        code is one error.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmDeletionRequest'
+            example:
+              code: '123456'
+      responses:
+        '204':
+          description: The account is deleted.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Set-Cookie:
+              $ref: '#/components/headers/SessionCookie'
+        '400':
+          $ref: '#/components/responses/InvalidCode'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
         default:
           $ref: '#/components/responses/UnexpectedError'
 
@@ -591,6 +681,14 @@ components:
           type: string
           minLength: 3
           maxLength: 254
+        code:
+          type: string
+          pattern: '^[0-9]{6}$'
+    ConfirmDeletionRequest:
+      type: object
+      required: [code]
+      additionalProperties: false
+      properties:
         code:
           type: string
           pattern: '^[0-9]{6}$'

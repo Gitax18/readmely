@@ -75,6 +75,11 @@ type AuthorizationUrl struct {
 	AuthorizationUrl string `json:"authorization_url"`
 }
 
+// ConfirmDeletionRequest defines model for ConfirmDeletionRequest.
+type ConfirmDeletionRequest struct {
+	Code string `json:"code"`
+}
+
 // Error The generic error body. Details never appear here; they go to the log only. The Go API sends not_found, method_not_allowed and internal_error. The AI service also sends unauthorized, payload_too_large and invalid_request.
 type Error struct {
 	// Error A stable machine-readable code.
@@ -209,6 +214,18 @@ type UpdateMeParams struct {
 	XCSRFToken CsrfToken `json:"X-CSRF-Token"`
 }
 
+// ConfirmAccountDeletionParams defines parameters for ConfirmAccountDeletion.
+type ConfirmAccountDeletionParams struct {
+	// XCSRFToken The csrf_token from GET /v1/me, bound to the current session. Required on every state-changing request that has a session.
+	XCSRFToken CsrfToken `json:"X-CSRF-Token"`
+}
+
+// StartAccountDeletionParams defines parameters for StartAccountDeletion.
+type StartAccountDeletionParams struct {
+	// XCSRFToken The csrf_token from GET /v1/me, bound to the current session. Required on every state-changing request that has a session.
+	XCSRFToken CsrfToken `json:"X-CSRF-Token"`
+}
+
 // DisconnectIdentityParams defines parameters for DisconnectIdentity.
 type DisconnectIdentityParams struct {
 	// XCSRFToken The csrf_token from GET /v1/me, bound to the current session. Required on every state-changing request that has a session.
@@ -217,6 +234,12 @@ type DisconnectIdentityParams struct {
 
 // StartConnectIdentityParams defines parameters for StartConnectIdentity.
 type StartConnectIdentityParams struct {
+	// XCSRFToken The csrf_token from GET /v1/me, bound to the current session. Required on every state-changing request that has a session.
+	XCSRFToken CsrfToken `json:"X-CSRF-Token"`
+}
+
+// RevokeOtherSessionsParams defines parameters for RevokeOtherSessions.
+type RevokeOtherSessionsParams struct {
 	// XCSRFToken The csrf_token from GET /v1/me, bound to the current session. Required on every state-changing request that has a session.
 	XCSRFToken CsrfToken `json:"X-CSRF-Token"`
 }
@@ -235,3 +258,6 @@ type VerifyEmailLoginJSONRequestBody = VerifyEmailLoginRequest
 
 // UpdateMeJSONRequestBody defines body for UpdateMe for application/json ContentType.
 type UpdateMeJSONRequestBody = UpdateMeRequest
+
+// ConfirmAccountDeletionJSONRequestBody defines body for ConfirmAccountDeletion for application/json ContentType.
+type ConfirmAccountDeletionJSONRequestBody = ConfirmDeletionRequest

@@ -107,7 +107,11 @@ export interface paths {
         get: operations["listSessions"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * End every session except the current one
+         * @description Useful after losing a device. The session making the request stays signed in.
+         */
+        delete: operations["revokeOtherSessions"];
         options?: never;
         head?: never;
         patch?: never;
@@ -128,6 +132,46 @@ export interface paths {
          * @description A session that belongs to someone else is indistinguishable from one that does not exist (404).
          */
         delete: operations["revokeSession"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/deletion/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Email a code that confirms deleting the account
+         * @description Deleting an account cannot be undone, so being signed in is not enough: a one-time code is sent to the account's own address and must be entered to confirm. The code is valid for 10 minutes and 5 attempts.
+         */
+        post: operations["startAccountDeletion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/deletion/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Delete the account and everything in it
+         * @description Removes the user, their sessions, connected accounts, projects and jobs. Credit ledger entries are kept for accounting with the user reference removed. The session cookie is cleared. A wrong, expired or used code is one error.
+         */
+        post: operations["confirmAccountDeletion"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -308,6 +352,9 @@ export interface components {
         };
         VerifyEmailLoginRequest: {
             email: string;
+            code: string;
+        };
+        ConfirmDeletionRequest: {
             code: string;
         };
         UpdateMeRequest: {
@@ -770,6 +817,31 @@ export interface operations {
             default: components["responses"]["UnexpectedError"];
         };
     };
+    revokeOtherSessions: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The csrf_token from GET /v1/me, bound to the current session. Required on every state-changing request that has a session. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every other session is gone. */
+            204: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
     revokeSession: {
         parameters: {
             query?: never;
@@ -795,6 +867,76 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    startAccountDeletion: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The csrf_token from GET /v1/me, bound to the current session. Required on every state-changing request that has a session. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted. A code is on its way to the account's address. */
+            202: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "status": "accepted"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Accepted"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["RateLimited"];
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    confirmAccountDeletion: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The csrf_token from GET /v1/me, bound to the current session. Required on every state-changing request that has a session. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "code": "123456"
+                 *     }
+                 */
+                "application/json": components["schemas"]["ConfirmDeletionRequest"];
+            };
+        };
+        responses: {
+            /** @description The account is deleted. */
+            204: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    "Set-Cookie": components["headers"]["SessionCookie"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["InvalidCode"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["RateLimited"];
             default: components["responses"]["UnexpectedError"];
         };
     };
