@@ -31,6 +31,16 @@ func (q *Queries) ClearProjectGraph(ctx context.Context, projectID uuid.UUID) er
 	return err
 }
 
+const clearProjectSummary = `-- name: ClearProjectSummary :exec
+DELETE FROM project_summaries WHERE project_id = $1
+`
+
+// A new analysis starts without the old summary, so a summary never describes another commit.
+func (q *Queries) ClearProjectSummary(ctx context.Context, projectID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, clearProjectSummary, projectID)
+	return err
+}
+
 const getProjectFacts = `-- name: GetProjectFacts :one
 
 SELECT f.id, f.project_id, f.commit_sha, f.facts, f.analysed_at, f.created_at, f.updated_at FROM project_facts f
@@ -54,6 +64,32 @@ func (q *Queries) GetProjectFacts(ctx context.Context, arg GetProjectFactsParams
 		&i.CommitSha,
 		&i.Facts,
 		&i.AnalysedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getProjectSummary = `-- name: GetProjectSummary :one
+SELECT s.id, s.project_id, s.commit_sha, s.model, s.summary, s.created_at, s.updated_at FROM project_summaries s
+JOIN projects p ON p.id = s.project_id
+WHERE s.project_id = $1 AND p.user_id = $2
+`
+
+type GetProjectSummaryParams struct {
+	ProjectID uuid.UUID
+	UserID    uuid.UUID
+}
+
+func (q *Queries) GetProjectSummary(ctx context.Context, arg GetProjectSummaryParams) (ProjectSummary, error) {
+	row := q.db.QueryRow(ctx, getProjectSummary, arg.ProjectID, arg.UserID)
+	var i ProjectSummary
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.CommitSha,
+		&i.Model,
+		&i.Summary,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

@@ -79,6 +79,23 @@ type Job struct {
 	Progress       int16
 }
 
+type LlmCall struct {
+	ID           uuid.UUID
+	UserID       *uuid.UUID
+	JobID        *uuid.UUID
+	Provider     string
+	Model        string
+	Tier         string
+	Purpose      string
+	InputTokens  int32
+	OutputTokens int32
+	CostMicroUsd int64
+	Status       string
+	ErrorCode    *string
+	DurationMs   int32
+	CreatedAt    time.Time
+}
+
 type LoginChallenge struct {
 	ID          uuid.UUID
 	Email       string
@@ -124,6 +141,16 @@ type ProjectFact struct {
 	AnalysedAt time.Time
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
+}
+
+type ProjectSummary struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	CommitSha string
+	Model     string
+	Summary   []byte
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 type Session struct {
