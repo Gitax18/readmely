@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AnalysisPanel } from "@/components/analysis-panel";
 import { ContextPackPanel } from "@/components/context-pack-panel";
+import { ReadmePanel } from "@/components/readme-panel";
 import { usePolling } from "@/components/projects-view";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -153,6 +154,27 @@ export function ProjectView({
           </div>
         </CardContent>
       </Card>
+
+      {project.status === "ready" ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>README</CardTitle>
+            <p className="text-muted-foreground text-sm">
+              Write one from the analysis, edit it here, and download it. Every edit is a version
+              you can go back to.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <ReadmePanel
+              key={project.job?.finished_at ?? project.updated_at}
+              api={client}
+              projectId={project.id}
+              csrf={csrf}
+              repoName={project.name}
+            />
+          </CardContent>
+        </Card>
+      ) : null}
 
       {project.status === "ready" ? (
         <Card>
