@@ -55,7 +55,8 @@ describe("LoginForm: email step", () => {
     await reachCodeStep(api);
     expect(api.startLogin).toHaveBeenCalledWith("ada@example.com");
     expect(screen.getByText("ada@example.com")).toBeInTheDocument();
-    expect(screen.getByLabelText(/6-digit code/i)).toHaveFocus();
+    // Focus is set in an effect that runs just after the input appears, so wait for it.
+    await waitFor(() => expect(screen.getByLabelText(/6-digit code/i)).toHaveFocus());
     expect(screen.getByLabelText(/6-digit code/i)).toHaveAttribute("autocomplete", "one-time-code");
     expect(screen.getByRole("status")).toHaveTextContent(/code sent/i);
   });
@@ -154,7 +155,7 @@ describe("LoginForm: code step", () => {
     fireEvent.click(screen.getByRole("button", { name: /^sign in$/i }));
     expect(await screen.findByRole("alert")).toHaveTextContent(/wrong or has expired/i);
     expect(onSignedIn).not.toHaveBeenCalled();
-    expect(screen.getByLabelText(/6-digit code/i)).toHaveFocus();
+    await waitFor(() => expect(screen.getByLabelText(/6-digit code/i)).toHaveFocus());
     expect(screen.getByLabelText(/6-digit code/i)).toHaveAttribute("aria-invalid", "true");
   });
 
