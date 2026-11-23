@@ -1,6 +1,6 @@
 # Phase 2b · Google and GitHub sign-in, connected accounts, sign-in alerts
 
-**Status:** Approved (2026-11-23) · **Last updated:** 2026-11-23
+**Status:** Built, in review (2026-11-23) · **Last updated:** 2026-11-23
 
 Phase 2 slices: 2a email codes and sessions (done), **2b** (this one) Google and GitHub sign-in with safe account linking, 2c TOTP, recovery codes, account deletion and the full settings UI.
 
@@ -125,3 +125,46 @@ Each step is one reviewed commit (or a few) on branch `feat/auth-oauth`.
 3. **Alert rule for new devices:** email when the account existed before this sign-in and none of its live sessions has the same device label (browser and system). This applies to every sign-in method, email codes included. A person returning after all sessions expired gets one notice. Say if you want it narrower (provider sign-ins only) or off.
 4. **Alert cap:** at most 5 alert emails per user per hour; extra alerts are dropped and counted, not queued.
 5. **Disconnect confirmation** is a browser confirm step only (no email code), because the alert goes out and email sign-in remains. Step-up for sensitive actions arrives with 2c.
+
+## Outcome (2026-11-23)
+
+Steps 1 to 6 were built on `feat/auth-oauth` with you in the loop. This section records what differs from the plan above and the small decisions the plan did not settle, so any of them can be reversed by saying so.
+
+### Decisions taken during the build (reverse any of them by saying so)
+
+1. **A connect also needs a verified email from the provider**, although you are already signed in. The identity stores that address for display, and one rule for both flows is simpler to reason about. The address may differ from your account's; connecting is your own choice.
+2. **A returning sign-in updates the identity's stored email** to what the provider reports now. The account's own email never changes, and the user is found by the provider's id, so a provider changing someone's address moves nobody.
+3. **A name from the provider is used only for a new account, and only if it passes the display-name rules**; an existing name is never overwritten.
+4. **Unexpected failures inside the callback (database, Redis) redirect to `/login?error=provider_error`** instead of showing an error page, so a navigation never ends on raw JSON. They are logged without request content.
+5. **The callback answers 404 for a provider that is not configured**, so "a callback with a bad state lands on /login" is only observable for a configured provider. CI therefore starts the stack with a throwaway Google client (random values, no real client behind them) and the browser tests derive what they expect from `GET /v1/auth/providers`; they also pass with no provider, and with real ones.
+6. **The bridge turns any redirect it does not recognise into a 502**: a 3xx from any route other than the two provider routes, a status other than 302, or a `Location` that is not a same-site path or a provider authorization URL. The browser client independently refuses to navigate to anything but a provider authorization URL.
+7. **A signed-in person whose connect fails lands on `/login?error=`**, as for sign-in; because `/login` sends signed-in visitors on, the code is passed to `/account?error=` so the reason is not lost. Unknown codes show nothing.
+8. **A connected provider stays listed on `/account` even when its credentials are later removed**, so it can still be disconnected.
+9. **Google's account chooser is always shown** (`prompt=select_account`), so a person with several Google accounts picks one rather than being signed in with whichever is active.
+10. **A brand new account gets no alert** (there is no usual device to compare with); an existing account signing in by email code from an unfamiliar device does (decision 3 of the plan, as approved).
+11. **`GET /v1/auth/email/start` now answers 404, not 405**, because `email` matches the `{provider}` route and is not a provider. A 2a test was changed to check a real POST-only route and to pin this behaviour.
+12. **Cache and referrer headers on the redirects come from the router's global middleware**, which already sets `no-store` and `no-referrer` on every response; tests assert the result.
+
+### Bugs found by the new tests and fixed on this branch
+
+- **The rate limiter could refuse a whole burst, the first request included** (2a code). Each rule was counted in its own Redis call, so concurrent requests could raise the slower counters before the first request reached them. A stress test of 150 bursts of 20 failed on the old code; all of a request's rules are now counted in one script. It showed up as a rare failure of a 2a test once the suite got bigger.
+- **Two overlapping first sign-ins for the same provider account could report `provider_conflict`** to the loser. It now compares provider account ids and runs again. Random concurrency almost never hit the window, so a test seam makes the overlap certain; the test fails on the old code.
+
+### Differences from the plan text
+
+- The conformance rules treat the provider routes as their own kind (GET, 302 with `Location` and `Set-Cookie`, 404 and 429 documented); the `planned` list is empty again.
+- The web session check, CSRF token and Origin rules are unchanged; the connect start and disconnect go through them like every other state change.
+
+### Known limits (accepted for 2b)
+
+- The provider round trip against a real provider has not been exercised by an automated test, by design (no back door). Try it once with real credentials (README, "Sign in with Google or GitHub").
+- Per-address limits can still be used to delay someone's email sign-in (2a); a provider sign-in does not share those limits.
+- Alerts are capped at five per user per hour; extra ones are dropped and logged, not queued.
+- A person who disconnects every provider and loses access to their email has no other way in until 2c adds recovery.
+
+### Evidence
+
+- Go: 56 planted faults, each caught by the intended test (database 7, provider clients and state store 20, sign-in and linking 29: unverified email, wrong session, cross-user attach, second account per provider, suspended user, both rate limits, alert rules and cap, cookie attributes, redirects, secrets in logs, race retry, and more). Every response in the new Go tests is also validated against `core-public.yaml`.
+- Web: 34 planted faults, each caught (bridge paths, callback query, `Location` rules, cookies on redirects, authorization URL checks, CSRF on connect and disconnect, confirmation step, error-code handling, provider list handling).
+- Tests: 335 web unit tests (97.6% line coverage), 27 browser tests against the real stack (19 new), the Go integration suite for `auth`, `oauth`, `ratelimit`, `db/store` and `config`, and the conformance suite.
+- Scenarios 1 to 16 are each covered (14 by the configuration tests, 16 by the redirect tests and the bridge tests).
