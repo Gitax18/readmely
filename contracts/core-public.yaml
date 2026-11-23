@@ -355,6 +355,206 @@ paths:
         default:
           $ref: '#/components/responses/UnexpectedError'
 
+  /v1/projects/preview:
+    post:
+      operationId: previewRepository
+      summary: Look up a public GitHub repository before adding it
+      description: >-
+        Takes what a person pastes (https://github.com/owner/repo, with or without the scheme, ".git" or a trailing
+        path) and answers with what GitHub says about it, without creating anything. Errors: invalid_request (not a
+        github.com repository address), repository_not_found (missing or private), repository_too_large (over the
+        size limit) and github_unavailable (GitHub is not answering or is rate limiting).
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RepositoryUrlRequest'
+            example:
+              url: https://github.com/octocat/Hello-World
+      responses:
+        '200':
+          description: The repository exists, is public and is small enough.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RepositoryPreview'
+              example:
+                owner: octocat
+                name: Hello-World
+                description: My first repository on GitHub!
+                default_branch: master
+                size_kb: 1
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/NotAvailable'
+        default:
+          $ref: '#/components/responses/UnexpectedError'
+  /v1/projects:
+    get:
+      operationId: listProjects
+      summary: The signed-in user's projects, newest first
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: The projects, each with its latest analysis job.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectList'
+              example:
+                projects: []
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        default:
+          $ref: '#/components/responses/UnexpectedError'
+    post:
+      operationId: createProject
+      summary: Add a public GitHub repository as a project
+      description: >-
+        Checks the repository the same way as the preview, then creates the project (status draft). At most 10
+        projects per user (409 project_limit); the same repository twice is 409 already_added. Analysis starts
+        with a separate request.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RepositoryUrlRequest'
+            example:
+              url: https://github.com/octocat/Hello-World
+      responses:
+        '201':
+          description: The project was created.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/NotAvailable'
+        default:
+          $ref: '#/components/responses/UnexpectedError'
+  /v1/projects/{id}:
+    get:
+      operationId: getProject
+      summary: One project with its latest analysis job
+      description: Someone else's project is indistinguishable from one that does not exist (404). The page polls this while a job runs.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: The project.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/UnexpectedError'
+    delete:
+      operationId: deleteProject
+      summary: Delete a project and everything generated for it
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '204':
+          description: The project is gone.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/UnexpectedError'
+  /v1/projects/{id}/analyse:
+    post:
+      operationId: analyseProject
+      summary: Start analysing a project
+      description: >-
+        Queues the analysis job and sets the project to importing. Only one analysis runs per project at a
+        time (409 analysis_running).
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '202':
+          description: The job is queued.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        default:
+          $ref: '#/components/responses/UnexpectedError'
+
   /v1/auth/providers:
     get:
       operationId: listAuthProviders
@@ -692,6 +892,111 @@ components:
         code:
           type: string
           pattern: '^[0-9]{6}$'
+    RepositoryUrlRequest:
+      type: object
+      required: [url]
+      additionalProperties: false
+      properties:
+        url:
+          type: string
+          minLength: 1
+          maxLength: 300
+    RepositoryPreview:
+      type: object
+      required: [owner, name, description, default_branch, size_kb]
+      additionalProperties: false
+      properties:
+        owner:
+          type: string
+          pattern: '^[A-Za-z0-9][A-Za-z0-9-]{0,38}$'
+        name:
+          type: string
+          pattern: '^[A-Za-z0-9._-]{1,100}$'
+        description:
+          type: string
+          maxLength: 500
+          description: Empty when the repository has none. Plain text.
+        default_branch:
+          type: string
+        size_kb:
+          type: integer
+          minimum: 0
+    ProjectJob:
+      type: object
+      description: The latest analysis job of a project.
+      required: [id, status, step, progress, error_code, created_at, finished_at]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [queued, running, succeeded, failed, cancelled]
+        step:
+          type: string
+          nullable: true
+          description: What the worker is doing now, a short code such as fetching or scanning.
+        progress:
+          type: integer
+          minimum: 0
+          maximum: 100
+        error_code:
+          type: string
+          nullable: true
+          description: A short code, never provider or stack text.
+        created_at:
+          type: string
+          format: date-time
+        finished_at:
+          type: string
+          format: date-time
+          nullable: true
+    Project:
+      type: object
+      required: [id, name, owner, repo, description, default_branch, size_kb, status, created_at, updated_at, job]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          description: owner/repo
+        owner:
+          type: string
+        repo:
+          type: string
+        description:
+          type: string
+        default_branch:
+          type: string
+        size_kb:
+          type: integer
+        status:
+          type: string
+          enum: [draft, importing, ready, failed]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        job:
+          allOf:
+            - $ref: '#/components/schemas/ProjectJob'
+          nullable: true
+          description: Null until the first analysis is requested.
+    ProjectList:
+      type: object
+      required: [projects]
+      additionalProperties: false
+      properties:
+        projects:
+          type: array
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/Project'
     UpdateMeRequest:
       type: object
       required: [display_name]
@@ -768,6 +1073,13 @@ components:
       description: >-
         Opaque 256-bit token. Set with Secure, HttpOnly, SameSite=Lax, Path=/ and no Domain. Only its hash is stored.
   parameters:
+    ProjectId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
     Provider:
       name: provider
       in: path
@@ -842,6 +1154,18 @@ components:
             $ref: '#/components/schemas/Error'
           example:
             error: conflict
+            request_id: 6P5E3ETHKJKOTOXXMXCEJGDW6I
+    NotAvailable:
+      description: A service this request depends on is not answering (github_unavailable). Try again shortly.
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: github_unavailable
             request_id: 6P5E3ETHKJKOTOXXMXCEJGDW6I
     NotFound:
       description: No such resource for this user (not_found).

@@ -93,11 +93,12 @@ func TestAccountAPIDocumentsItsSecurityRules(t *testing.T) {
 	}
 	sort.Strings(seen)
 	want := []string{
-		"DELETE /v1/me/identities/{provider}", "DELETE /v1/me/sessions", "DELETE /v1/me/sessions/{id}", "GET /v1/auth/providers",
+		"DELETE /v1/me/identities/{provider}", "DELETE /v1/me/sessions", "DELETE /v1/me/sessions/{id}", "DELETE /v1/projects/{id}", "GET /v1/auth/providers",
 		"GET /v1/auth/{provider}/callback", "GET /v1/auth/{provider}/start", "GET /v1/me",
-		"GET /v1/me/identities", "GET /v1/me/sessions", "PATCH /v1/me",
+		"GET /v1/me/identities", "GET /v1/me/sessions", "GET /v1/projects", "GET /v1/projects/{id}", "PATCH /v1/me",
 		"POST /v1/auth/email/start", "POST /v1/auth/email/verify", "POST /v1/auth/logout",
 		"POST /v1/me/deletion/confirm", "POST /v1/me/deletion/start", "POST /v1/me/identities/{provider}/start",
+		"POST /v1/projects", "POST /v1/projects/preview", "POST /v1/projects/{id}/analyse",
 	}
 	if strings.Join(seen, ",") != strings.Join(want, ",") {
 		t.Errorf("operations under /v1 = %v, want %v", seen, want)

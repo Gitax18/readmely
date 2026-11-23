@@ -39,6 +39,57 @@ func (e LivenessStatus) Valid() bool {
 	}
 }
 
+// Defines values for ProjectStatus.
+const (
+	ProjectStatusDraft     ProjectStatus = "draft"
+	ProjectStatusFailed    ProjectStatus = "failed"
+	ProjectStatusImporting ProjectStatus = "importing"
+	ProjectStatusReady     ProjectStatus = "ready"
+)
+
+// Valid indicates whether the value is a known member of the ProjectStatus enum.
+func (e ProjectStatus) Valid() bool {
+	switch e {
+	case ProjectStatusDraft:
+		return true
+	case ProjectStatusFailed:
+		return true
+	case ProjectStatusImporting:
+		return true
+	case ProjectStatusReady:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ProjectJobStatus.
+const (
+	ProjectJobStatusCancelled ProjectJobStatus = "cancelled"
+	ProjectJobStatusFailed    ProjectJobStatus = "failed"
+	ProjectJobStatusQueued    ProjectJobStatus = "queued"
+	ProjectJobStatusRunning   ProjectJobStatus = "running"
+	ProjectJobStatusSucceeded ProjectJobStatus = "succeeded"
+)
+
+// Valid indicates whether the value is a known member of the ProjectJobStatus enum.
+func (e ProjectJobStatus) Valid() bool {
+	switch e {
+	case ProjectJobStatusCancelled:
+		return true
+	case ProjectJobStatusFailed:
+		return true
+	case ProjectJobStatusQueued:
+		return true
+	case ProjectJobStatusRunning:
+		return true
+	case ProjectJobStatusSucceeded:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for Provider.
 const (
 	ProviderGithub Provider = "github"
@@ -119,8 +170,69 @@ type Me struct {
 	User      User   `json:"user"`
 }
 
+// Project defines model for Project.
+type Project struct {
+	CreatedAt     time.Time          `json:"created_at"`
+	DefaultBranch string             `json:"default_branch"`
+	Description   string             `json:"description"`
+	Id            openapi_types.UUID `json:"id"`
+
+	// Job Null until the first analysis is requested.
+	Job *ProjectJob `json:"job"`
+
+	// Name owner/repo
+	Name      string        `json:"name"`
+	Owner     string        `json:"owner"`
+	Repo      string        `json:"repo"`
+	SizeKb    int           `json:"size_kb"`
+	Status    ProjectStatus `json:"status"`
+	UpdatedAt time.Time     `json:"updated_at"`
+}
+
+// ProjectStatus defines model for Project.Status.
+type ProjectStatus string
+
+// ProjectJob The latest analysis job of a project.
+type ProjectJob struct {
+	CreatedAt time.Time `json:"created_at"`
+
+	// ErrorCode A short code, never provider or stack text.
+	ErrorCode  *string            `json:"error_code"`
+	FinishedAt *time.Time         `json:"finished_at"`
+	Id         openapi_types.UUID `json:"id"`
+	Progress   int                `json:"progress"`
+	Status     ProjectJobStatus   `json:"status"`
+
+	// Step What the worker is doing now, a short code such as fetching or scanning.
+	Step *string `json:"step"`
+}
+
+// ProjectJobStatus defines model for ProjectJob.Status.
+type ProjectJobStatus string
+
+// ProjectList defines model for ProjectList.
+type ProjectList struct {
+	Projects []Project `json:"projects"`
+}
+
 // Provider defines model for Provider.
 type Provider string
+
+// RepositoryPreview defines model for RepositoryPreview.
+type RepositoryPreview struct {
+	DefaultBranch string `json:"default_branch"`
+
+	// Description Empty when the repository has none. Plain text.
+	Description string `json:"description"`
+	Name        string `json:"name"`
+	Owner       string `json:"owner"`
+	SizeKb      int    `json:"size_kb"`
+}
+
+// RepositoryUrlRequest defines model for RepositoryUrlRequest.
+type RepositoryUrlRequest struct {
+	Url string `json:"url"`
+}
 
 // Session defines model for Session.
 type Session struct {
@@ -171,6 +283,9 @@ type VerifyEmailLoginRequest struct {
 // CsrfToken defines model for CsrfToken.
 type CsrfToken = string
 
+// ProjectId defines model for ProjectId.
+type ProjectId = openapi_types.UUID
+
 // BadRequest The generic error body. Details never appear here; they go to the log only. The Go API sends not_found, method_not_allowed and internal_error. The AI service also sends unauthorized, payload_too_large and invalid_request.
 type BadRequest = Error
 
@@ -182,6 +297,9 @@ type Forbidden = Error
 
 // InvalidCode The generic error body. Details never appear here; they go to the log only. The Go API sends not_found, method_not_allowed and internal_error. The AI service also sends unauthorized, payload_too_large and invalid_request.
 type InvalidCode = Error
+
+// NotAvailable The generic error body. Details never appear here; they go to the log only. The Go API sends not_found, method_not_allowed and internal_error. The AI service also sends unauthorized, payload_too_large and invalid_request.
+type NotAvailable = Error
 
 // NotFound The generic error body. Details never appear here; they go to the log only. The Go API sends not_found, method_not_allowed and internal_error. The AI service also sends unauthorized, payload_too_large and invalid_request.
 type NotFound = Error
@@ -250,6 +368,30 @@ type RevokeSessionParams struct {
 	XCSRFToken CsrfToken `json:"X-CSRF-Token"`
 }
 
+// CreateProjectParams defines parameters for CreateProject.
+type CreateProjectParams struct {
+	// XCSRFToken The csrf_token from GET /v1/me, bound to the current session. Required on every state-changing request that has a session.
+	XCSRFToken CsrfToken `json:"X-CSRF-Token"`
+}
+
+// PreviewRepositoryParams defines parameters for PreviewRepository.
+type PreviewRepositoryParams struct {
+	// XCSRFToken The csrf_token from GET /v1/me, bound to the current session. Required on every state-changing request that has a session.
+	XCSRFToken CsrfToken `json:"X-CSRF-Token"`
+}
+
+// DeleteProjectParams defines parameters for DeleteProject.
+type DeleteProjectParams struct {
+	// XCSRFToken The csrf_token from GET /v1/me, bound to the current session. Required on every state-changing request that has a session.
+	XCSRFToken CsrfToken `json:"X-CSRF-Token"`
+}
+
+// AnalyseProjectParams defines parameters for AnalyseProject.
+type AnalyseProjectParams struct {
+	// XCSRFToken The csrf_token from GET /v1/me, bound to the current session. Required on every state-changing request that has a session.
+	XCSRFToken CsrfToken `json:"X-CSRF-Token"`
+}
+
 // StartEmailLoginJSONRequestBody defines body for StartEmailLogin for application/json ContentType.
 type StartEmailLoginJSONRequestBody = StartEmailLoginRequest
 
@@ -261,3 +403,9 @@ type UpdateMeJSONRequestBody = UpdateMeRequest
 
 // ConfirmAccountDeletionJSONRequestBody defines body for ConfirmAccountDeletion for application/json ContentType.
 type ConfirmAccountDeletionJSONRequestBody = ConfirmDeletionRequest
+
+// CreateProjectJSONRequestBody defines body for CreateProject for application/json ContentType.
+type CreateProjectJSONRequestBody = RepositoryUrlRequest
+
+// PreviewRepositoryJSONRequestBody defines body for PreviewRepository for application/json ContentType.
+type PreviewRepositoryJSONRequestBody = RepositoryUrlRequest
