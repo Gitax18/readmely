@@ -171,7 +171,7 @@ Dependencies are linear except that 6 and 7 could swap; the context pack goes fi
 | 2 | **LLM accounts:** an OpenAI key and an xAI key (decision D8), with a monthly budget | Start with one provider and a low cap; the second is a fallback | Phase 5 |
 | 3 | **Free grant size** | 100 credits at sign-up (about two full projects, see the brief) | Phase 5 |
 | 4 | **Hosting** | One DigitalOcean droplet with Docker Compose and Caddy for TLS; simplest to run and to explain | Phase 4 (sandbox) and 9 |
-| 5 | **Production mailer** | Resend or Postmark; a few lines of code behind the existing mailer interface | Phase 9 |
+| 5 | **Production mailer** | **Built** (`MAILER=smtp`, tried first with Brevo's free relay, 300 emails a day; any SMTP relay works). Still yours: the Brevo account, an SMTP key in your `.env`, a verified sender, and the sender domain's SPF/DKIM records once you have a domain | Phase 9 |
 | 6 | **Domain name** | Any; needed for the Google and GitHub sign-in callbacks in production | Phase 9 |
 | 7 | **Real sign-in providers** | Register the Google client and GitHub OAuth App (README, "Sign in with Google or GitHub") for the demo | Phase 9 |
 | 8 | **Private repositories** in version 1 | No, public only; add the GitHub App in 1.1 | Now |
