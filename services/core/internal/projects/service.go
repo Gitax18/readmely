@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -267,4 +268,29 @@ func newKey() (string, error) {
 		return "", fmt.Errorf("projects: %w", err)
 	}
 	return "ingest-" + hex.EncodeToString(b), nil
+}
+
+// Analysis is what the last finished analysis found.
+type Analysis struct {
+	CommitSHA  string
+	AnalysedAt time.Time
+	Facts      json.RawMessage
+	Hubs       []store.ListProjectHubsRow
+}
+
+// Analysis returns the stored facts and the most imported files. Until an analysis has finished,
+// and for someone else's project, it is ErrNotFound.
+func (s *Service) Analysis(ctx context.Context, userID, id uuid.UUID) (Analysis, error) {
+	f, err := s.q.GetProjectFacts(ctx, store.GetProjectFactsParams{ProjectID: id, UserID: userID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Analysis{}, ErrNotFound
+	}
+	if err != nil {
+		return Analysis{}, fmt.Errorf("get analysis: %w", err)
+	}
+	hubs, err := s.q.ListProjectHubs(ctx, store.ListProjectHubsParams{ProjectID: id, UserID: userID})
+	if err != nil {
+		return Analysis{}, fmt.Errorf("get analysis: %w", err)
+	}
+	return Analysis{CommitSHA: f.CommitSha, AnalysedAt: f.AnalysedAt, Facts: f.Facts, Hubs: hubs}, nil
 }
