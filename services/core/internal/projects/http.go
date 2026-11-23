@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/Gitax18/readmely/services/core/internal/auth"
+	"github.com/Gitax18/readmely/services/core/internal/contextpack"
 	"github.com/Gitax18/readmely/services/core/internal/contract/corepublic"
 	"github.com/Gitax18/readmely/services/core/internal/db/store"
 	"github.com/Gitax18/readmely/services/core/internal/httpx"
@@ -35,6 +36,7 @@ func (h *Handler) Routes(r chi.Router) {
 	r.Delete("/projects/{id}", h.delete)
 	r.Post("/projects/{id}/analyse", h.analyse)
 	r.Get("/projects/{id}/analysis", h.analysis)
+	r.Get("/projects/{id}/context-pack", h.contextPack)
 }
 
 func decode(r *http.Request, v any) bool {
@@ -227,4 +229,24 @@ func (h *Handler) analysis(w http.ResponseWriter, r *http.Request) {
 		body.SummaryJob = jobBody(*a.SummaryJob)
 	}
 	httpx.WriteJSON(w, http.StatusOK, body)
+}
+
+type contextPackBody struct {
+	CommitSHA   string               `json:"commit_sha"`
+	WithSummary bool                 `json:"with_summary"`
+	Presets     []contextpack.Preset `json:"presets"`
+}
+
+func (h *Handler) contextPack(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		httpx.WriteError(w, r, http.StatusNotFound, "not_found")
+		return
+	}
+	p, err := h.svc.ContextPack(r.Context(), auth.PrincipalFrom(r).User.ID, id)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, contextPackBody(p))
 }

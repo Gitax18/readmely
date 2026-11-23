@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/Gitax18/readmely/services/core/internal/contextpack"
 	"github.com/Gitax18/readmely/services/core/internal/db/store"
 	"github.com/Gitax18/readmely/services/core/internal/github"
 	"github.com/Gitax18/readmely/services/core/internal/ratelimit"
@@ -310,4 +311,50 @@ func (s *Service) Analysis(ctx context.Context, userID, id uuid.UUID) (Analysis,
 		return Analysis{}, fmt.Errorf("get analysis: %w", err)
 	}
 	return out, nil
+}
+
+// ContextPack is the built pack and whether the summary went into it.
+type ContextPack struct {
+	CommitSHA   string
+	WithSummary bool
+	Presets     []contextpack.Preset
+}
+
+// ContextPack builds the context pack from the stored analysis. It reads only; building is
+// deterministic and takes no credits. Until an analysis has finished it is ErrNotFound.
+func (s *Service) ContextPack(ctx context.Context, userID, id uuid.UUID) (ContextPack, error) {
+	a, err := s.Analysis(ctx, userID, id)
+	if err != nil {
+		return ContextPack{}, err
+	}
+	p, err := s.q.GetProject(ctx, store.GetProjectParams{ID: id, UserID: userID})
+	if err != nil {
+		return ContextPack{}, fmt.Errorf("context pack: %w", err)
+	}
+	files, err := s.q.ListProjectFiles(ctx, store.ListProjectFilesParams{ProjectID: id, UserID: userID, RowLimit: 20000})
+	if err != nil {
+		return ContextPack{}, fmt.Errorf("context pack: %w", err)
+	}
+	in := contextpack.Input{Name: p.Name}
+	if p.RepoDescription != nil {
+		in.Description = *p.RepoDescription
+	}
+	if err := json.Unmarshal(a.Facts, &in.Facts); err != nil {
+		return ContextPack{}, fmt.Errorf("context pack: read facts: %w", err)
+	}
+	if len(a.Summary) > 0 {
+		var sum contextpack.Summary
+		if err := json.Unmarshal(a.Summary, &sum); err == nil {
+			in.Summary = &sum
+		}
+	}
+	for _, h := range a.Hubs {
+		in.Hubs = append(in.Hubs, contextpack.Hub{Kind: h.Kind, Key: h.Key, ImportedBy: int(h.ImportedBy)})
+	}
+	for _, f := range files {
+		if f.SkippedReason == nil {
+			in.Paths = append(in.Paths, f.Path)
+		}
+	}
+	return ContextPack{CommitSHA: a.CommitSHA, WithSummary: in.Summary != nil, Presets: contextpack.Build(in)}, nil
 }

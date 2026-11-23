@@ -27,7 +27,15 @@ function summaryWorking(a: ProjectAnalysis): boolean {
 }
 
 /** What the last analysis found. Mount it with a key that changes per analysis to reload it. */
-export function AnalysisPanel({ api, projectId }: { api: ProjectsApi; projectId: string }) {
+export function AnalysisPanel({
+  api,
+  projectId,
+  onSummaryReady,
+}: {
+  api: ProjectsApi;
+  projectId: string;
+  onSummaryReady?: () => void;
+}) {
   const router = useRouter();
   const [state, setState] = useState<State>({ kind: "loading" });
 
@@ -49,7 +57,10 @@ export function AnalysisPanel({ api, projectId }: { api: ProjectsApi; projectId:
     const res = await api.analysis(projectId);
     if (!res.ok) return;
     setState({ kind: "ready", analysis: res.analysis });
-    if (!summaryWorking(res.analysis)) router.refresh();
+    if (!summaryWorking(res.analysis)) {
+      router.refresh();
+      onSummaryReady?.();
+    }
   });
 
   if (state.kind === "loading") {

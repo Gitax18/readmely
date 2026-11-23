@@ -24,6 +24,30 @@ func (e AcceptedStatus) Valid() bool {
 	}
 }
 
+// Defines values for ContextPackPresetId.
+const (
+	ContextPackPresetIdAgents  ContextPackPresetId = "agents"
+	ContextPackPresetIdClaude  ContextPackPresetId = "claude"
+	ContextPackPresetIdCursor  ContextPackPresetId = "cursor"
+	ContextPackPresetIdGeneric ContextPackPresetId = "generic"
+)
+
+// Valid indicates whether the value is a known member of the ContextPackPresetId enum.
+func (e ContextPackPresetId) Valid() bool {
+	switch e {
+	case ContextPackPresetIdAgents:
+		return true
+	case ContextPackPresetIdClaude:
+		return true
+	case ContextPackPresetIdCursor:
+		return true
+	case ContextPackPresetIdGeneric:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for CreditEntryKind.
 const (
 	CreditEntryKindAdjustment CreditEntryKind = "adjustment"
@@ -178,6 +202,37 @@ type AuthorizationUrl struct {
 type ConfirmDeletionRequest struct {
 	Code string `json:"code"`
 }
+
+// ContextPack defines model for ContextPack.
+type ContextPack struct {
+	CommitSha string              `json:"commit_sha"`
+	Presets   []ContextPackPreset `json:"presets"`
+
+	// WithSummary Whether the written summary is part of the pack.
+	WithSummary bool `json:"with_summary"`
+}
+
+// ContextPackFile defines model for ContextPackFile.
+type ContextPackFile struct {
+	Content string `json:"content"`
+
+	// Path Where the file belongs, relative to the repository root.
+	Path string `json:"path"`
+}
+
+// ContextPackPreset defines model for ContextPackPreset.
+type ContextPackPreset struct {
+	Description string              `json:"description"`
+	Files       []ContextPackFile   `json:"files"`
+	Id          ContextPackPresetId `json:"id"`
+	Label       string              `json:"label"`
+
+	// Tokens A rough count (four characters to a token).
+	Tokens int `json:"tokens"`
+}
+
+// ContextPackPresetId defines model for ContextPackPreset.Id.
+type ContextPackPresetId string
 
 // CreditBalance defines model for CreditBalance.
 type CreditBalance struct {

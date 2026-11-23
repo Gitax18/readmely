@@ -28,6 +28,7 @@ const ALLOWED_PATHS = [
   new RegExp(`^v1/projects/${UUID}$`),
   new RegExp(`^v1/projects/${UUID}/analyse$`),
   new RegExp(`^v1/projects/${UUID}/analysis$`),
+  new RegExp(`^v1/projects/${UUID}/context-pack$`),
   /^v1\/auth\/providers$/,
   /^v1\/auth\/(google|github)\/(start|callback)$/,
   /^v1\/me\/identities$/,

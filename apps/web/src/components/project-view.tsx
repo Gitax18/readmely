@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AnalysisPanel } from "@/components/analysis-panel";
+import { ContextPackPanel } from "@/components/context-pack-panel";
 import { usePolling } from "@/components/projects-view";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,8 @@ export function ProjectView({
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Bumped when the summary lands, so the pack is rebuilt with it.
+  const [packVersion, setPackVersion] = useState(0);
 
   function fail(f: Parameters<typeof projectFailureText>[0]) {
     if (f.kind === "unauthenticated") {
@@ -132,6 +135,7 @@ export function ProjectView({
               key={project.job?.finished_at ?? project.updated_at}
               api={client}
               projectId={project.id}
+              onSummaryReady={() => setPackVersion((v) => v + 1)}
             />
           ) : null}
           {project.status === "failed" ? (
@@ -149,6 +153,26 @@ export function ProjectView({
           </div>
         </CardContent>
       </Card>
+
+      {project.status === "ready" ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Context pack</CardTitle>
+            <p className="text-muted-foreground text-sm">
+              Files that tell an AI coding tool what this repository is and how to work in it. Free:
+              built from the analysis, no credits.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <ContextPackPanel
+              key={`${project.job?.finished_at ?? project.updated_at}:${packVersion}`}
+              api={client}
+              projectId={project.id}
+              repoName={project.name}
+            />
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader>

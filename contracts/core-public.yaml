@@ -623,6 +623,35 @@ paths:
           $ref: '#/components/responses/NotFound'
         default:
           $ref: '#/components/responses/UnexpectedError'
+  /v1/projects/{id}/context-pack:
+    get:
+      operationId: getContextPack
+      summary: The context pack for AI coding tools, in every preset
+      description: >-
+        Files that tell a coding tool what the repository is and how to work in it (CLAUDE.md, AGENTS.md,
+        a Cursor rule, a generic CONTEXT.md), built from the last analysis. Deterministic: it costs no
+        credits and makes no model call. It includes the summary when one has been written. 404 until a
+        first analysis has finished, and for someone else's project.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: The pack.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContextPack'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/UnexpectedError'
 
   /v1/auth/providers:
     get:
@@ -1298,6 +1327,54 @@ components:
           maxItems: 50
           items:
             $ref: '#/components/schemas/CreditEntry'
+    ContextPack:
+      type: object
+      required: [commit_sha, with_summary, presets]
+      additionalProperties: false
+      properties:
+        commit_sha:
+          type: string
+          pattern: '^[0-9a-f]{40}$'
+        with_summary:
+          type: boolean
+          description: Whether the written summary is part of the pack.
+        presets:
+          type: array
+          maxItems: 8
+          items:
+            $ref: '#/components/schemas/ContextPackPreset'
+    ContextPackPreset:
+      type: object
+      required: [id, label, description, tokens, files]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          enum: [claude, agents, cursor, generic]
+        label:
+          type: string
+        description:
+          type: string
+        tokens:
+          type: integer
+          description: A rough count (four characters to a token).
+        files:
+          type: array
+          maxItems: 8
+          items:
+            $ref: '#/components/schemas/ContextPackFile'
+    ContextPackFile:
+      type: object
+      required: [path, content]
+      additionalProperties: false
+      properties:
+        path:
+          type: string
+          maxLength: 200
+          description: Where the file belongs, relative to the repository root.
+        content:
+          type: string
+          maxLength: 200000
     ProjectList:
       type: object
       required: [projects]
