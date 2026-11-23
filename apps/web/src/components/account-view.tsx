@@ -24,6 +24,8 @@ export function formatWhen(iso: string): string {
 
 function failureText(f: Failure): string {
   switch (f.kind) {
+    case "invalid_code":
+      return "That code is wrong or has expired. Send a new one and try again.";
     case "invalid_request":
       return "A name needs 1 to 80 characters and no control characters.";
     case "forbidden":
@@ -71,6 +73,9 @@ export function AccountView({
   const [confirming, setConfirming] = useState<Provider | null>(null);
   const [identityError, setIdentityError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [deleteStep, setDeleteStep] = useState<"idle" | "confirm" | "code">("idle");
+  const [deleteCode, setDeleteCode] = useState("");
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   function leave() {
     if (onSignedOut) {
@@ -132,6 +137,51 @@ export function AccountView({
     setBusy(false);
     if (refreshed.ok) setSessions(refreshed.sessions);
     else handleFailure(refreshed, setSessionError);
+  }
+
+  async function signOutOthers() {
+    if (busy) return;
+    setBusy(true);
+    setSessionError(null);
+    const result = await client.revokeOtherSessions(me.csrf_token);
+    if (!result.ok) {
+      setBusy(false);
+      handleFailure(result, setSessionError);
+      return;
+    }
+    const refreshed = await client.listSessions();
+    setBusy(false);
+    if (refreshed.ok) setSessions(refreshed.sessions);
+    else handleFailure(refreshed, setSessionError);
+  }
+
+  async function sendDeletionCode() {
+    if (busy) return;
+    setBusy(true);
+    setDeleteError(null);
+    const result = await client.startDeletion(me.csrf_token);
+    setBusy(false);
+    if (result.ok) {
+      setDeleteStep("code");
+      setDeleteCode("");
+    } else {
+      handleFailure(result, setDeleteError);
+    }
+  }
+
+  async function deleteAccount(event: FormEvent) {
+    event.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    setDeleteError(null);
+    const result = await client.confirmDeletion(me.csrf_token, deleteCode.trim());
+    if (result.ok) {
+      router.replace("/goodbye");
+      router.refresh();
+      return;
+    }
+    setBusy(false);
+    handleFailure(result, setDeleteError);
   }
 
   async function connect(provider: Provider) {
@@ -355,11 +405,99 @@ export function AccountView({
               {sessionError}
             </p>
           ) : null}
-          <div className="mt-4">
+          <div className="mt-4 flex flex-wrap gap-2">
             <Button variant="danger" onClick={() => void signOut()} disabled={busy}>
               Sign out of this device
             </Button>
+            {sessions.some((s) => !s.current) ? (
+              <Button variant="secondary" onClick={() => void signOutOthers()} disabled={busy}>
+                Sign out all other devices
+              </Button>
+            ) : null}
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Delete account</CardTitle>
+          <p className="text-muted-foreground text-sm">
+            Removes your account, your projects and everything generated for them. This cannot be
+            undone.
+          </p>
+        </CardHeader>
+        <CardContent>
+          {deleteStep === "idle" ? (
+            <Button variant="danger" onClick={() => setDeleteStep("confirm")} disabled={busy}>
+              Delete my account
+            </Button>
+          ) : null}
+          {deleteStep === "confirm" ? (
+            <div
+              role="group"
+              aria-label="Confirm deleting your account"
+              className="flex flex-col gap-3 rounded-md border border-border p-3"
+            >
+              <p className="text-sm">
+                To make sure it is you, we will email a code to{" "}
+                <strong className="break-all">{user.email}</strong>. Nothing is deleted until you
+                enter it.
+              </p>
+              <div className="flex gap-2">
+                <Button variant="danger" onClick={() => void sendDeletionCode()} disabled={busy}>
+                  Email me a code
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setDeleteStep("idle");
+                    setDeleteError(null);
+                  }}
+                  disabled={busy}
+                >
+                  Keep my account
+                </Button>
+              </div>
+            </div>
+          ) : null}
+          {deleteStep === "code" ? (
+            <form onSubmit={deleteAccount} className="flex flex-col gap-3">
+              <label htmlFor="delete-code" className="text-sm font-medium">
+                6-digit code from your email
+              </label>
+              <Input
+                id="delete-code"
+                name="code"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                pattern="[0-9]{6}"
+                maxLength={6}
+                value={deleteCode}
+                onChange={(e) => setDeleteCode(e.target.value.replace(/\D/g, ""))}
+              />
+              <div className="flex gap-2">
+                <Button type="submit" variant="danger" disabled={busy || deleteCode.length !== 6}>
+                  Delete my account permanently
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => {
+                    setDeleteStep("idle");
+                    setDeleteError(null);
+                  }}
+                  disabled={busy}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          ) : null}
+          {deleteError ? (
+            <p role="alert" className="text-bad mt-3 text-sm">
+              {deleteError}
+            </p>
+          ) : null}
         </CardContent>
       </Card>
     </div>

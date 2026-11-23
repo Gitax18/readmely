@@ -22,6 +22,7 @@ const ALLOWED_PATHS = [
   /^v1\/me$/,
   /^v1\/me\/sessions$/,
   new RegExp(`^v1/me/sessions/${UUID}$`),
+  /^v1\/me\/deletion\/(start|confirm)$/,
   /^v1\/auth\/providers$/,
   /^v1\/auth\/(google|github)\/(start|callback)$/,
   /^v1\/me\/identities$/,

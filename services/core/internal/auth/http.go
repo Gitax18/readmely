@@ -59,7 +59,10 @@ func (h *Handler) Mount(r chi.Router) {
 			r.Get("/me", h.me)
 			r.Patch("/me", h.updateMe)
 			r.Get("/me/sessions", h.listSessions)
+			r.Delete("/me/sessions", h.revokeOthers)
 			r.Delete("/me/sessions/{id}", h.revoke)
+			r.Post("/me/deletion/start", h.startDeletion)
+			r.Post("/me/deletion/confirm", h.confirmDeletion)
 			r.Get("/me/identities", h.listIdentities)
 			r.Post("/me/identities/{provider}/start", h.startConnect)
 			r.Delete("/me/identities/{provider}", h.disconnect)
@@ -249,6 +252,36 @@ func (h *Handler) revoke(w http.ResponseWriter, r *http.Request) {
 	if id == p.Session.ID {
 		clearSessionCookie(w) // revoking the session you are on is signing out
 	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) revokeOthers(w http.ResponseWriter, r *http.Request) {
+	if err := h.svc.RevokeOtherSessions(r.Context(), principal(r)); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) startDeletion(w http.ResponseWriter, r *http.Request) {
+	if err := h.svc.StartDeletion(r.Context(), principal(r)); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusAccepted, corepublic.Accepted{Status: corepublic.AcceptedStatusAccepted})
+}
+
+func (h *Handler) confirmDeletion(w http.ResponseWriter, r *http.Request) {
+	var req corepublic.ConfirmDeletionRequest
+	if !decode(r, &req) {
+		httpx.WriteError(w, r, http.StatusBadRequest, "invalid_request")
+		return
+	}
+	if err := h.svc.ConfirmDeletion(r.Context(), principal(r), req.Code); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	clearSessionCookie(w)
 	w.WriteHeader(http.StatusNoContent)
 }
 

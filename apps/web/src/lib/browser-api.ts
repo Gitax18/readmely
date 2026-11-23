@@ -96,6 +96,10 @@ export interface AccountApi {
   rename(csrf: string, displayName: string): Promise<Result<{ user: User }>>;
   listSessions(): Promise<Result<{ sessions: Session[] }>>;
   revokeSession(csrf: string, id: string): Promise<Result<object>>;
+  revokeOtherSessions(csrf: string): Promise<Result<object>>;
+  /** Emails a code to the account's own address; deleting needs it. */
+  startDeletion(csrf: string): Promise<Result<object>>;
+  confirmDeletion(csrf: string, code: string): Promise<Result<object>>;
   listIdentities(): Promise<Result<{ identities: Identity[] }>>;
   /** Where to send the browser to connect a provider; only ever a provider's own authorization URL. */
   startConnect(csrf: string, provider: Provider): Promise<Result<{ url: string }>>;
@@ -137,6 +141,21 @@ export function createAccountApi(
     },
     async revokeSession(csrf, id) {
       const res = await request(fetchImpl, "DELETE", `/me/sessions/${encodeURIComponent(id)}`, {
+        csrf,
+      });
+      return res?.status === 204 ? { ok: true } : failure(res);
+    },
+    async revokeOtherSessions(csrf) {
+      const res = await request(fetchImpl, "DELETE", "/me/sessions", { csrf });
+      return res?.status === 204 ? { ok: true } : failure(res);
+    },
+    async startDeletion(csrf) {
+      const res = await request(fetchImpl, "POST", "/me/deletion/start", { csrf });
+      return res?.status === 202 ? { ok: true } : failure(res);
+    },
+    async confirmDeletion(csrf, code) {
+      const res = await request(fetchImpl, "POST", "/me/deletion/confirm", {
+        body: { code },
         csrf,
       });
       return res?.status === 204 ? { ok: true } : failure(res);

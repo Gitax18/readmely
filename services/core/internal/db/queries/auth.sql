@@ -70,6 +70,10 @@ DELETE FROM sessions WHERE token_hash = @token_hash::bytea;
 -- name: DeleteAllUserSessions :execrows
 DELETE FROM sessions WHERE user_id = @user_id;
 
+-- name: DeleteOtherUserSessions :execrows
+-- Sign out everywhere else: every session of the user except the one making the request.
+DELETE FROM sessions WHERE user_id = @user_id AND id <> @keep_id;
+
 -- name: DeleteEndedSessions :execrows
 DELETE FROM sessions WHERE idle_expires_at <= now();
 
