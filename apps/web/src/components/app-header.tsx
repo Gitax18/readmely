@@ -1,9 +1,17 @@
 import Link from "next/link";
 
-type Active = "projects" | "account";
+type Active = "projects" | "usage" | "account";
 
 /** The top bar of the signed-in app: the way between projects and the account. */
-export function AppHeader({ active, email }: { active: Active; email?: string }) {
+export function AppHeader({
+  active,
+  email,
+  credits,
+}: {
+  active: Active;
+  email?: string;
+  credits?: number | null;
+}) {
   const link = (href: string, label: string, key: Active) => (
     <Link
       href={href}
@@ -23,10 +31,18 @@ export function AppHeader({ active, email }: { active: Active; email?: string })
         </Link>
         <nav aria-label="Main" className="flex items-center gap-4">
           {link("/dashboard", "Projects", "projects")}
+          {link("/usage", "Usage", "usage")}
           {link("/account", "Account", "account")}
         </nav>
       </div>
-      {email ? <span className="text-muted-foreground text-xs break-all">{email}</span> : null}
+      <div className="flex items-center gap-3">
+        {typeof credits === "number" ? (
+          <Link href="/usage" className="text-xs font-medium underline">
+            {credits.toLocaleString("en-US")} credits
+          </Link>
+        ) : null}
+        {email ? <span className="text-muted-foreground text-xs break-all">{email}</span> : null}
+      </div>
     </header>
   );
 }

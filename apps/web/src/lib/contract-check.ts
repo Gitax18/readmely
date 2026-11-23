@@ -9,6 +9,7 @@ import type {
   User,
 } from "./account-schema";
 import type { ProjectAnalysis, ProjectFacts } from "./analysis-schema";
+import type { CreditBalance, CreditEntry } from "./credit-schema";
 import type { Project, ProjectJob, RepositoryPreview } from "./project-schema";
 import type { Report } from "./status-schema";
 
@@ -64,4 +65,14 @@ export const projectFactsMatchContract: SameShape<
 export const projectAnalysisMatchesContract: SameShape<
   ProjectAnalysis,
   publicComponents["schemas"]["ProjectAnalysis"]
+> = true;
+
+// The credits endpoints.
+export const creditBalanceMatchesContract: SameShape<
+  CreditBalance,
+  publicComponents["schemas"]["CreditBalance"]
+> = true;
+export const creditEntryMatchesContract: SameShape<
+  CreditEntry,
+  publicComponents["schemas"]["CreditEntry"]
 > = true;

@@ -1,7 +1,7 @@
 import "server-only";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { fetchSession, SESSION_COOKIE } from "./account-client";
+import { fetchCredits, fetchSession, SESSION_COOKIE } from "./account-client";
 import { loadApiPublicEnv } from "./env";
 
 /**
@@ -14,5 +14,7 @@ export async function requireUser() {
   const session = await fetchSession(env.apiPublicUrl, token);
   if (session.kind === "signed_out") redirect("/login");
   if (session.kind === "error" || token === undefined) return { unavailable: true as const };
-  return { unavailable: false as const, env, token, me: session.me };
+  // The balance in the top bar is a convenience: if it cannot be read the page still works.
+  const credits = await fetchCredits(env.apiPublicUrl, token);
+  return { unavailable: false as const, env, token, me: session.me, credits };
 }

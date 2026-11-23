@@ -15,7 +15,7 @@ export default async function DashboardPage() {
 
   return (
     <main className="mx-auto flex max-w-4xl flex-col gap-6 p-6 sm:p-10">
-      <AppHeader active="projects" email={user.me.user.email} />
+      <AppHeader active="projects" email={user.me.user.email} credits={user.credits} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold">Your projects</h1>
         {projects && projects.length > 0 ? (

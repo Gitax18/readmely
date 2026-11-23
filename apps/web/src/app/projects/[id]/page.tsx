@@ -28,7 +28,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   if (project === "missing") notFound();
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-6 p-6 sm:p-10">
-      <AppHeader active="projects" email={user.me.user.email} />
+      <AppHeader active="projects" email={user.me.user.email} credits={user.credits} />
       {project === null ? (
         <p role="alert" className="text-muted-foreground text-sm">
           We could not load this project just now. Reload the page in a moment.

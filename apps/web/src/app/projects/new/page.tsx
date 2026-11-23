@@ -20,7 +20,7 @@ export default async function NewProjectPage() {
   }
   return (
     <main className="mx-auto flex max-w-2xl flex-col gap-6 p-6 sm:p-10">
-      <AppHeader active="projects" email={user.me.user.email} />
+      <AppHeader active="projects" email={user.me.user.email} credits={user.credits} />
       <h1 className="text-2xl font-semibold">New project</h1>
       <NewProjectForm csrf={user.me.csrf_token} />
     </main>
