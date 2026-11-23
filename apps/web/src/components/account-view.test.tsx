@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AccountApi, Failure } from "@/lib/browser-api";
-import { CSRF, me, session } from "@/test/account-fixtures";
+import { CSRF, identity, me, session } from "@/test/account-fixtures";
 import { AccountView, formatWhen } from "./account-view";
 
 const router = vi.hoisted(() => ({ replace: vi.fn(), refresh: vi.fn() }));
@@ -24,6 +24,9 @@ function fakeApi(overrides: Partial<AccountApi> = {}): AccountApi {
     })),
     listSessions: vi.fn(async () => ({ ok: true as const, sessions: [session()] })),
     revokeSession: vi.fn(async () => ({ ok: true as const })),
+    listIdentities: vi.fn(async () => ({ ok: true as const, identities: [] })),
+    startConnect: vi.fn(),
+    disconnect: vi.fn(async () => ({ ok: true as const })),
     ...overrides,
   };
 }
@@ -181,5 +184,140 @@ describe("formatWhen", () => {
   });
   it("does not throw on junk", () => {
     expect(formatWhen("not a date")).toBe("unknown");
+  });
+});
+
+const GOOGLE_URL = "https://accounts.google.com/o/oauth2/v2/auth?client_id=x&state=y";
+
+describe("AccountView: connected accounts", () => {
+  const renderWith = (props: Partial<React.ComponentProps<typeof AccountView>>, api = fakeApi()) =>
+    render(<AccountView me={me()} initialSessions={[session()]} api={api} {...props} />);
+
+  it("is not shown when no provider is configured and none is connected", () => {
+    renderWith({});
+    expect(screen.queryByText("Connected accounts")).not.toBeInTheDocument();
+  });
+
+  it("offers Connect for a configured provider that is not connected", () => {
+    renderWith({
+      providers: ["google", "github"],
+      initialIdentities: [identity({ provider: "github", email: "octo@example.com" })],
+    });
+    expect(screen.getByRole("button", { name: "Connect Google" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Connect GitHub" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Disconnect GitHub" })).toBeInTheDocument();
+    expect(screen.getByText("octo@example.com")).toBeInTheDocument();
+  });
+
+  it("still lists a connected provider that is no longer configured, so it can be removed", () => {
+    renderWith({ providers: [], initialIdentities: [identity({ provider: "google" })] });
+    expect(screen.getByRole("button", { name: "Disconnect Google" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^connect google$/i })).not.toBeInTheDocument();
+  });
+
+  it("shows the provider's address as text, never as markup", () => {
+    renderWith({
+      initialIdentities: [identity({ email: "<img src=x onerror=alert(1)>@example.com" })],
+    });
+    expect(screen.getByText("<img src=x onerror=alert(1)>@example.com")).toBeInTheDocument();
+    expect(document.querySelector("img")).toBeNull();
+  });
+
+  it("connects: posts with the CSRF token and leaves for the provider's URL", async () => {
+    const onNavigate = vi.fn();
+    const startConnect = vi.fn(async () => ({ ok: true as const, url: GOOGLE_URL }));
+    renderWith({ providers: ["google"], onNavigate }, fakeApi({ startConnect }));
+    fireEvent.click(screen.getByRole("button", { name: "Connect Google" }));
+    await waitFor(() => expect(onNavigate).toHaveBeenCalledWith(GOOGLE_URL));
+    expect(startConnect).toHaveBeenCalledWith(CSRF, "google");
+    // Nothing else can be clicked while leaving.
+    expect(screen.getByRole("button", { name: "Connect Google" })).toBeDisabled();
+  });
+
+  it.each([
+    ["conflict", { ok: false, kind: "conflict" } as const, /already connected/i],
+    ["forbidden", { ok: false, kind: "forbidden" } as const, /out of date/i],
+    ["unavailable", { ok: false, kind: "unavailable" } as const, /something went wrong/i],
+  ])("shows a connect failure (%s) and stays on the page", async (_n, failure, text) => {
+    const onNavigate = vi.fn();
+    renderWith({ providers: ["google"], onNavigate }, fakeApi({ startConnect: fail(failure) }));
+    fireEvent.click(screen.getByRole("button", { name: "Connect Google" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(text);
+    expect(onNavigate).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Connect Google" })).toBeEnabled();
+  });
+
+  it("an ended session during connect goes back to sign-in", async () => {
+    const onSignedOut = vi.fn();
+    renderWith(
+      { providers: ["google"], onSignedOut },
+      fakeApi({ startConnect: fail({ ok: false, kind: "unauthenticated" }) }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Connect Google" }));
+    await waitFor(() => expect(onSignedOut).toHaveBeenCalled());
+  });
+
+  it("asks before disconnecting, and Keep it changes nothing", () => {
+    const disconnect = vi.fn(async () => ({ ok: true as const }));
+    renderWith({ initialIdentities: [identity()] }, fakeApi({ disconnect }));
+    fireEvent.click(screen.getByRole("button", { name: "Disconnect Google" }));
+    const group = screen.getByRole("group", { name: /confirm disconnecting google/i });
+    expect(group).toHaveTextContent(/still sign in with an emailed code/i);
+    expect(disconnect).not.toHaveBeenCalled();
+    fireEvent.click(within(group).getByRole("button", { name: "Keep it" }));
+    expect(screen.queryByRole("group", { name: /confirm/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Disconnect Google" })).toBeInTheDocument();
+    expect(disconnect).not.toHaveBeenCalled();
+  });
+
+  it("disconnects after confirmation and shows the refreshed list", async () => {
+    const disconnect = vi.fn(async () => ({ ok: true as const }));
+    const listIdentities = vi.fn(async () => ({ ok: true as const, identities: [] }));
+    renderWith(
+      { providers: ["google"], initialIdentities: [identity()] },
+      fakeApi({ disconnect, listIdentities }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Disconnect Google" }));
+    fireEvent.click(screen.getByRole("button", { name: /yes, disconnect google/i }));
+    expect(await screen.findByRole("button", { name: "Connect Google" })).toBeInTheDocument();
+    expect(disconnect).toHaveBeenCalledWith(CSRF, "google");
+    expect(listIdentities).toHaveBeenCalledOnce();
+    expect(screen.getByText("Not connected")).toBeInTheDocument();
+  });
+
+  it("treats an already-removed account as done", async () => {
+    renderWith(
+      { initialIdentities: [identity()] },
+      fakeApi({ disconnect: fail({ ok: false, kind: "not_found" }) }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Disconnect Google" }));
+    fireEvent.click(screen.getByRole("button", { name: /yes, disconnect google/i }));
+    await waitFor(() =>
+      expect(screen.queryByRole("group", { name: /confirm/i })).not.toBeInTheDocument(),
+    );
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("shows a disconnect failure and keeps the account listed", async () => {
+    renderWith(
+      { initialIdentities: [identity()] },
+      fakeApi({ disconnect: fail({ ok: false, kind: "unavailable" }) }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Disconnect Google" }));
+    fireEvent.click(screen.getByRole("button", { name: /yes, disconnect google/i }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/something went wrong/i);
+    expect(screen.getByRole("button", { name: "Disconnect Google" })).toBeInTheDocument();
+  });
+
+  it("shows why a connect attempt failed, as text", () => {
+    renderWith({
+      notice: "That provider account is already connected to another Readmely account.",
+    });
+    expect(screen.getByRole("alert")).toHaveTextContent(/already connected to another/i);
+  });
+
+  it("shows no notice when there is none", () => {
+    renderWith({ providers: ["google"] });
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { CSRF, json, me, session } from "@/test/account-fixtures";
+import { CSRF, identity, json, me, session } from "@/test/account-fixtures";
 import { createAccountApi } from "./browser-api";
 
 function api(impl: () => Promise<Response>) {
@@ -144,5 +144,71 @@ describe("createAccountApi: failures", () => {
     // start must be exactly 202; a 200 from a captive portal or a misrouted page is not.
     const { api: a } = api(async () => json({ status: "accepted" }, { status: 200 }));
     expect(await a.startLogin("a@example.com")).toEqual({ ok: false, kind: "unavailable" });
+  });
+});
+
+describe("createAccountApi: connected accounts", () => {
+  const GOOGLE = "https://accounts.google.com/o/oauth2/v2/auth?client_id=x&state=y";
+
+  it("listIdentities returns the connected accounts", async () => {
+    const { api: a, fetchImpl } = api(async () => json({ identities: [identity()] }));
+    expect(await a.listIdentities()).toEqual({ ok: true, identities: [identity()] });
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe("/api/v1/me/identities");
+    expect(fetchImpl.mock.calls[0]?.[1]?.method).toBe("GET");
+  });
+
+  it("listIdentities refuses a body that is not the contract's shape", async () => {
+    for (const body of [
+      {},
+      { identities: [{ provider: "facebook", email: "a", created_at: "x" }] },
+    ]) {
+      const { api: a } = api(async () => json(body));
+      expect(await a.listIdentities()).toEqual({ ok: false, kind: "unavailable" });
+    }
+  });
+
+  it("startConnect posts with the CSRF token and returns the provider's URL", async () => {
+    const { api: a, fetchImpl } = api(async () => json({ authorization_url: GOOGLE }));
+    expect(await a.startConnect(CSRF, "google")).toEqual({ ok: true, url: GOOGLE });
+    const [url, init] = fetchImpl.mock.calls[0] ?? [];
+    expect(url).toBe("/api/v1/me/identities/google/start");
+    expect(init?.method).toBe("POST");
+    expect(new Headers(init?.headers).get("x-csrf-token")).toBe(CSRF);
+  });
+
+  it.each([
+    ["another site", "https://evil.example/o/oauth2/v2/auth"],
+    ["a lookalike host", "https://accounts.google.com.evil.example/o/oauth2/v2/auth"],
+    ["javascript", "javascript:alert(1)"],
+    ["http", "http://accounts.google.com/o/oauth2/v2/auth"],
+    ["a relative path", "/account"],
+  ])("startConnect never hands back %s", async (_name, url) => {
+    const { api: a } = api(async () => json({ authorization_url: url }));
+    expect(await a.startConnect(CSRF, "google")).toEqual({ ok: false, kind: "unavailable" });
+  });
+
+  it("startConnect maps 409 to conflict, 403 to forbidden and 401 to unauthenticated", async () => {
+    for (const [status, kind] of [
+      [409, "conflict"],
+      [403, "forbidden"],
+      [401, "unauthenticated"],
+    ] as const) {
+      const { api: a } = api(async () => err(status, "x"));
+      expect(await a.startConnect(CSRF, "github")).toEqual({ ok: false, kind });
+    }
+  });
+
+  it("disconnect deletes with the CSRF token", async () => {
+    const { api: a, fetchImpl } = api(async () => new Response(null, { status: 204 }));
+    expect(await a.disconnect(CSRF, "github")).toEqual({ ok: true });
+    const [url, init] = fetchImpl.mock.calls[0] ?? [];
+    expect(url).toBe("/api/v1/me/identities/github");
+    expect(init?.method).toBe("DELETE");
+    expect(new Headers(init?.headers).get("x-csrf-token")).toBe(CSRF);
+  });
+
+  it("disconnect reports a provider that was not connected as not_found", async () => {
+    const { api: a } = api(async () => err(404, "not_found"));
+    expect(await a.disconnect(CSRF, "google")).toEqual({ ok: false, kind: "not_found" });
   });
 });
