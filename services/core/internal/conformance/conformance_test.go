@@ -31,6 +31,7 @@ import (
 	"github.com/Gitax18/readmely/services/core/internal/health"
 	"github.com/Gitax18/readmely/services/core/internal/httpx"
 	"github.com/Gitax18/readmely/services/core/internal/projects"
+	"github.com/Gitax18/readmely/services/core/internal/readme"
 	"github.com/Gitax18/readmely/services/core/internal/server"
 	"github.com/Gitax18/readmely/services/core/internal/status"
 )
@@ -375,6 +376,7 @@ func accountRoutes(r chi.Router) {
 	h := auth.NewHandler(svc, clientip.New(nil), "http://127.0.0.1:3000", logger())
 	h.AddRoutes(projects.NewHandler(projects.NewService(nil, nil, nil, logger())).Routes)
 	h.AddRoutes(credits.NewHandler(nil).Routes)
+	h.AddRoutes(readme.NewHandler(readme.NewService(nil, nil)).Routes)
 	h.Mount(r)
 }
 
