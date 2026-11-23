@@ -34,6 +34,7 @@ func (h *Handler) Routes(r chi.Router) {
 	r.Get("/projects/{id}", h.get)
 	r.Delete("/projects/{id}", h.delete)
 	r.Post("/projects/{id}/analyse", h.analyse)
+	r.Get("/projects/{id}/analysis", h.analysis)
 }
 
 func decode(r *http.Request, v any) bool {
@@ -184,4 +185,35 @@ func jobBody(j store.Job) *corepublic.ProjectJob {
 		Id: j.ID, Status: corepublic.ProjectJobStatus(j.Status), Step: j.Step, Progress: int(j.Progress),
 		ErrorCode: j.ErrorCode, CreatedAt: j.CreatedAt, FinishedAt: j.FinishedAt,
 	}
+}
+
+type hubBody struct {
+	Kind       string `json:"kind"`
+	Key        string `json:"key"`
+	ImportedBy int    `json:"imported_by"`
+}
+
+type analysisBody struct {
+	CommitSHA  string          `json:"commit_sha"`
+	AnalysedAt time.Time       `json:"analysed_at"`
+	Facts      json.RawMessage `json:"facts"`
+	Hubs       []hubBody       `json:"hubs"`
+}
+
+func (h *Handler) analysis(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		httpx.WriteError(w, r, http.StatusNotFound, "not_found")
+		return
+	}
+	a, err := h.svc.Analysis(r.Context(), auth.PrincipalFrom(r).User.ID, id)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	hubs := make([]hubBody, 0, len(a.Hubs))
+	for _, hub := range a.Hubs {
+		hubs = append(hubs, hubBody{Kind: hub.Kind, Key: hub.Key, ImportedBy: int(hub.ImportedBy)})
+	}
+	httpx.WriteJSON(w, http.StatusOK, analysisBody{CommitSHA: a.CommitSHA, AnalysedAt: a.AnalysedAt, Facts: a.Facts, Hubs: hubs})
 }

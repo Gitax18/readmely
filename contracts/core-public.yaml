@@ -554,6 +554,34 @@ paths:
           $ref: '#/components/responses/RateLimited'
         default:
           $ref: '#/components/responses/UnexpectedError'
+  /v1/projects/{id}/analysis:
+    get:
+      operationId: getProjectAnalysis
+      summary: What the last analysis found
+      description: >-
+        The facts the analysis produced (languages, frameworks, commands, entry points, environment
+        variables, secrets found and removed) and the most imported files. 404 until a first analysis has
+        finished, and for someone else's project.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: The analysis.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectAnalysis'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/UnexpectedError'
 
   /v1/auth/providers:
     get:
@@ -987,6 +1015,166 @@ components:
             - $ref: '#/components/schemas/ProjectJob'
           nullable: true
           description: Null until the first analysis is requested.
+    ProjectAnalysis:
+      type: object
+      required: [commit_sha, analysed_at, facts, hubs]
+      additionalProperties: false
+      properties:
+        commit_sha:
+          type: string
+          pattern: '^[0-9a-f]{40}$'
+        analysed_at:
+          type: string
+          format: date-time
+        facts:
+          $ref: '#/components/schemas/ProjectFacts'
+        hubs:
+          type: array
+          maxItems: 10
+          description: The files other files import most, with how many do.
+          items:
+            $ref: '#/components/schemas/Hub'
+    Hub:
+      type: object
+      required: [kind, key, imported_by]
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+          enum: [file, package, external]
+        key:
+          type: string
+        imported_by:
+          type: integer
+    ProjectFacts:
+      type: object
+      required: [languages, frameworks, package_managers, entry_points, commands, env_vars, services, license, has_readme, has_tests, has_ci, has_docker, totals, directories, secrets, skipped]
+      additionalProperties: false
+      properties:
+        languages:
+          type: array
+          maxItems: 8
+          items:
+            type: object
+            required: [name, files, lines, percent]
+            additionalProperties: false
+            properties:
+              name:
+                type: string
+              files:
+                type: integer
+              lines:
+                type: integer
+              percent:
+                type: number
+        frameworks:
+          type: array
+          maxItems: 24
+          items:
+            type: string
+        package_managers:
+          type: array
+          items:
+            type: string
+        entry_points:
+          type: array
+          maxItems: 10
+          items:
+            type: string
+        commands:
+          type: array
+          maxItems: 20
+          items:
+            type: object
+            required: [name, source]
+            additionalProperties: false
+            properties:
+              name:
+                type: string
+              source:
+                type: string
+        env_vars:
+          type: array
+          maxItems: 60
+          items:
+            type: string
+        services:
+          type: array
+          items:
+            type: string
+        license:
+          type: string
+          nullable: true
+        has_readme:
+          type: boolean
+        has_tests:
+          type: boolean
+        has_ci:
+          type: boolean
+        has_docker:
+          type: boolean
+        totals:
+          type: object
+          required: [files, source_files, lines, bytes]
+          additionalProperties: false
+          properties:
+            files:
+              type: integer
+            source_files:
+              type: integer
+            lines:
+              type: integer
+            bytes:
+              type: integer
+        directories:
+          type: array
+          maxItems: 15
+          items:
+            type: object
+            required: [path, files]
+            additionalProperties: false
+            properties:
+              path:
+                type: string
+              files:
+                type: integer
+        secrets:
+          type: object
+          required: [count, by_rule, locations]
+          additionalProperties: false
+          description: Secret-like values found and removed. Only where they were, never the value.
+          properties:
+            count:
+              type: integer
+            by_rule:
+              type: object
+              additionalProperties:
+                type: integer
+            locations:
+              type: array
+              maxItems: 50
+              items:
+                type: object
+                required: [path, line, rule]
+                additionalProperties: false
+                properties:
+                  path:
+                    type: string
+                  line:
+                    type: integer
+                  rule:
+                    type: string
+        skipped:
+          type: object
+          required: [count, by_reason]
+          additionalProperties: false
+          properties:
+            count:
+              type: integer
+            by_reason:
+              type: object
+              additionalProperties:
+                type: integer
     ProjectList:
       type: object
       required: [projects]

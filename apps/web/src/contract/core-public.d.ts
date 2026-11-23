@@ -259,6 +259,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/projects/{id}/analysis": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What the last analysis found
+         * @description The facts the analysis produced (languages, frameworks, commands, entry points, environment variables, secrets found and removed) and the most imported files. 404 until a first analysis has finished, and for someone else's project.
+         */
+        get: operations["getProjectAnalysis"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/auth/providers": {
         parameters: {
             query?: never;
@@ -484,6 +504,70 @@ export interface components {
             updated_at: string;
             /** @description Null until the first analysis is requested. */
             job: components["schemas"]["ProjectJob"] | null;
+        };
+        ProjectAnalysis: {
+            commit_sha: string;
+            /** Format: date-time */
+            analysed_at: string;
+            facts: components["schemas"]["ProjectFacts"];
+            /** @description The files other files import most, with how many do. */
+            hubs: components["schemas"]["Hub"][];
+        };
+        Hub: {
+            /** @enum {string} */
+            kind: "file" | "package" | "external";
+            key: string;
+            imported_by: number;
+        };
+        ProjectFacts: {
+            languages: {
+                name: string;
+                files: number;
+                lines: number;
+                percent: number;
+            }[];
+            frameworks: string[];
+            package_managers: string[];
+            entry_points: string[];
+            commands: {
+                name: string;
+                source: string;
+            }[];
+            env_vars: string[];
+            services: string[];
+            license: string | null;
+            has_readme: boolean;
+            has_tests: boolean;
+            has_ci: boolean;
+            has_docker: boolean;
+            totals: {
+                files: number;
+                source_files: number;
+                lines: number;
+                bytes: number;
+            };
+            directories: {
+                path: string;
+                files: number;
+            }[];
+            /** @description Secret-like values found and removed. Only where they were, never the value. */
+            secrets: {
+                count: number;
+                by_rule: {
+                    [key: string]: number;
+                };
+                locations: {
+                    path: string;
+                    line: number;
+                    rule: string;
+                }[];
+            };
+            skipped: {
+                count: number;
+                by_reason: {
+                    [key: string]: number;
+                };
+            };
         };
         ProjectList: {
             projects: components["schemas"]["Project"][];
@@ -1289,6 +1373,32 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             429: components["responses"]["RateLimited"];
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    getProjectAnalysis: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The analysis. */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectAnalysis"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
             default: components["responses"]["UnexpectedError"];
         };
     };

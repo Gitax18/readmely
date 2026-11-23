@@ -29,6 +29,35 @@ type CreditLedger struct {
 	CreatedAt      time.Time
 }
 
+type File struct {
+	ID            uuid.UUID
+	ProjectID     uuid.UUID
+	Path          string
+	Language      *string
+	SizeBytes     int32
+	LineCount     int32
+	Content       *string
+	SkippedReason *string
+	CreatedAt     time.Time
+}
+
+type GraphEdge struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	FromNode  uuid.UUID
+	ToNode    uuid.UUID
+	Kind      string
+	CreatedAt time.Time
+}
+
+type GraphNode struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	Kind      string
+	Key       string
+	CreatedAt time.Time
+}
+
 type Job struct {
 	ID             uuid.UUID
 	UserID         uuid.UUID
@@ -84,6 +113,17 @@ type Project struct {
 	RepoDescription *string
 	DefaultBranch   *string
 	RepoSizeKb      pgtype.Int4
+	CommitSha       *string
+}
+
+type ProjectFact struct {
+	ID         uuid.UUID
+	ProjectID  uuid.UUID
+	CommitSha  string
+	Facts      []byte
+	AnalysedAt time.Time
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
 }
 
 type Session struct {
@@ -96,6 +136,16 @@ type Session struct {
 	IdleExpiresAt time.Time
 	UserAgent     string
 	Ip            *netip.Addr
+}
+
+type Symbol struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	FileID    uuid.UUID
+	Name      string
+	Kind      string
+	Line      int32
+	CreatedAt time.Time
 }
 
 type User struct {

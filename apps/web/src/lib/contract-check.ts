@@ -8,6 +8,7 @@ import type {
   Session,
   User,
 } from "./account-schema";
+import type { ProjectAnalysis, ProjectFacts } from "./analysis-schema";
 import type { Project, ProjectJob, RepositoryPreview } from "./project-schema";
 import type { Report } from "./status-schema";
 
@@ -55,4 +56,12 @@ export const projectMatchesContract: SameShape<Project, publicComponents["schema
 export const repositoryPreviewMatchesContract: SameShape<
   RepositoryPreview,
   publicComponents["schemas"]["RepositoryPreview"]
+> = true;
+export const projectFactsMatchContract: SameShape<
+  ProjectFacts,
+  publicComponents["schemas"]["ProjectFacts"]
+> = true;
+export const projectAnalysisMatchesContract: SameShape<
+  ProjectAnalysis,
+  publicComponents["schemas"]["ProjectAnalysis"]
 > = true;

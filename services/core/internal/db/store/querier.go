@@ -21,6 +21,9 @@ type Querier interface {
 	// Takes the oldest runnable job, optionally only of the given kinds. SKIP LOCKED lets any number
 	// of workers claim at the same time without waiting for or duplicating each other.
 	ClaimJob(ctx context.Context, arg ClaimJobParams) (Job, error)
+	// A new analysis replaces the old one completely. Symbols go with their files, edges with their nodes.
+	ClearProjectFiles(ctx context.Context, projectID uuid.UUID) error
+	ClearProjectGraph(ctx context.Context, projectID uuid.UUID) error
 	CompleteJob(ctx context.Context, arg CompleteJobParams) (Job, error)
 	// Jobs of a kind that are queued or running: at most one analysis per project at a time.
 	CountActiveProjectJobs(ctx context.Context, arg CountActiveProjectJobsParams) (int64, error)
@@ -60,6 +63,9 @@ type Querier interface {
 	// payload. The no-op update is what makes RETURNING work on conflict; it does not touch updated_at.
 	EnqueueJob(ctx context.Context, arg EnqueueJobParams) (Job, error)
 	ExtendJobLease(ctx context.Context, arg ExtendJobLeaseParams) (Job, error)
+	// Ends a job for good without further attempts, for an error that retrying cannot fix (a missing
+	// repository, one that is too large). Only the worker holding the job can.
+	FailJob(ctx context.Context, arg FailJobParams) (Job, error)
 	GetCreditBalance(ctx context.Context, userID uuid.UUID) (int64, error)
 	// Provider sign-in (plans/phase-2b-oauth-login.md). Identities are keyed by the provider's own id.
 	// The connected account for a provider's stable id, with its user (the caller checks the status).
@@ -68,6 +74,9 @@ type Querier interface {
 	// The newest job of a kind for a project, for the project page and the dashboard.
 	GetLatestProjectJob(ctx context.Context, arg GetLatestProjectJobParams) (Job, error)
 	GetProject(ctx context.Context, arg GetProjectParams) (Project, error)
+	// What an analysis stores and the project page reads. Every read is scoped to the owner through
+	// the project, so someone else's project finds nothing.
+	GetProjectFacts(ctx context.Context, arg GetProjectFactsParams) (ProjectFact, error)
 	// The live session for a cookie, with its user. Ended sessions and suspended users find nothing.
 	GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (GetSessionByTokenHashRow, error)
 	GetUser(ctx context.Context, id uuid.UUID) (User, error)
@@ -75,6 +84,9 @@ type Querier interface {
 	GetUserIdentity(ctx context.Context, arg GetUserIdentityParams) (OauthIdentity, error)
 	GrantCredits(ctx context.Context, arg GrantCreditsParams) (CreditLedger, error)
 	ListCreditEntries(ctx context.Context, arg ListCreditEntriesParams) ([]CreditLedger, error)
+	ListProjectFiles(ctx context.Context, arg ListProjectFilesParams) ([]ListProjectFilesRow, error)
+	// The nodes other files import most. Scoped to the owner through the project.
+	ListProjectHubs(ctx context.Context, arg ListProjectHubsParams) ([]ListProjectHubsRow, error)
 	ListProjectJobs(ctx context.Context, arg ListProjectJobsParams) ([]Job, error)
 	ListProjects(ctx context.Context, arg ListProjectsParams) ([]Project, error)
 	ListUserIdentities(ctx context.Context, userID uuid.UUID) ([]OauthIdentity, error)
@@ -91,12 +103,14 @@ type Querier interface {
 	ReserveCredits(ctx context.Context, arg ReserveCreditsParams) (CreditLedger, error)
 	// The worker reports what it is doing. Only the worker holding the job can; others change nothing.
 	SetJobProgress(ctx context.Context, arg SetJobProgressParams) (Job, error)
+	SetProjectCommit(ctx context.Context, arg SetProjectCommitParams) error
 	SetProjectStatus(ctx context.Context, arg SetProjectStatusParams) (Project, error)
 	SetUserStatus(ctx context.Context, arg SetUserStatusParams) (User, error)
 	TouchIdentityLogin(ctx context.Context, arg TouchIdentityLoginParams) error
 	// Slides the idle expiry, at most once per @min_interval_seconds, never past the absolute expiry.
 	TouchSession(ctx context.Context, arg TouchSessionParams) (int64, error)
 	UpdateUserDisplayName(ctx context.Context, arg UpdateUserDisplayNameParams) (User, error)
+	UpsertProjectFacts(ctx context.Context, arg UpsertProjectFactsParams) error
 	// The account for an address that just proved it receives mail: created on first sign-in,
 	// and marked verified either way.
 	UpsertVerifiedUser(ctx context.Context, email string) (User, error)

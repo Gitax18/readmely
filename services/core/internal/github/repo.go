@@ -79,9 +79,10 @@ type Repository struct {
 
 // Client reads from the GitHub API. The token is optional: it only raises the rate limit.
 type Client struct {
-	http  *http.Client
-	base  string
-	token string
+	http    *http.Client
+	archive *http.Client // downloads; its time limit is the caller's context
+	base    string
+	token   string
 }
 
 // NewClient returns a client for api.github.com.
@@ -91,8 +92,9 @@ func NewClient(token string) *Client {
 			Timeout:       httpTimeout,
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 		},
-		base:  apiBase,
-		token: token,
+		archive: &http.Client{CheckRedirect: archiveRedirect},
+		base:    apiBase,
+		token:   token,
 	}
 }
 
@@ -138,7 +140,7 @@ func (c *Client) Repository(ctx context.Context, ref Ref) (Repository, error) {
 		return Repository{}, ErrNotFound
 	}
 	// Use what GitHub says the repository is called (case, renames), but only if it is well formed.
-	if !ownerRe.MatchString(body.Owner.Login) || !nameRe.MatchString(body.Name) || !branchRe.MatchString(body.DefaultBranch) || body.Size < 0 {
+	if !ownerRe.MatchString(body.Owner.Login) || !nameRe.MatchString(body.Name) || !safeBranch(body.DefaultBranch) || body.Size < 0 {
 		return Repository{}, ErrUnavailable
 	}
 	desc := ""
@@ -168,4 +170,9 @@ func cleanDescription(s string) string {
 		s = string(r[:500])
 	}
 	return s
+}
+
+// safeBranch accepts the characters a branch name is stored with and nothing that climbs a path.
+func safeBranch(b string) bool {
+	return branchRe.MatchString(b) && !strings.Contains(b, "..") && !strings.HasPrefix(b, "/") && !strings.HasSuffix(b, "/")
 }

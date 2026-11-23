@@ -24,6 +24,27 @@ func (e AcceptedStatus) Valid() bool {
 	}
 }
 
+// Defines values for HubKind.
+const (
+	HubKindExternal HubKind = "external"
+	HubKindFile     HubKind = "file"
+	HubKindPackage  HubKind = "package"
+)
+
+// Valid indicates whether the value is a known member of the HubKind enum.
+func (e HubKind) Valid() bool {
+	switch e {
+	case HubKindExternal:
+		return true
+	case HubKindFile:
+		return true
+	case HubKindPackage:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for LivenessStatus.
 const (
 	LivenessStatusOk LivenessStatus = "ok"
@@ -142,6 +163,16 @@ type Error struct {
 	RequestId string `json:"request_id"`
 }
 
+// Hub defines model for Hub.
+type Hub struct {
+	ImportedBy int     `json:"imported_by"`
+	Key        string  `json:"key"`
+	Kind       HubKind `json:"kind"`
+}
+
+// HubKind defines model for Hub.Kind.
+type HubKind string
+
 // Identity defines model for Identity.
 type Identity struct {
 	CreatedAt time.Time `json:"created_at"`
@@ -191,6 +222,65 @@ type Project struct {
 
 // ProjectStatus defines model for Project.Status.
 type ProjectStatus string
+
+// ProjectAnalysis defines model for ProjectAnalysis.
+type ProjectAnalysis struct {
+	AnalysedAt time.Time    `json:"analysed_at"`
+	CommitSha  string       `json:"commit_sha"`
+	Facts      ProjectFacts `json:"facts"`
+
+	// Hubs The files other files import most, with how many do.
+	Hubs []Hub `json:"hubs"`
+}
+
+// ProjectFacts defines model for ProjectFacts.
+type ProjectFacts struct {
+	Commands []struct {
+		Name   string `json:"name"`
+		Source string `json:"source"`
+	} `json:"commands"`
+	Directories []struct {
+		Files int    `json:"files"`
+		Path  string `json:"path"`
+	} `json:"directories"`
+	EntryPoints []string `json:"entry_points"`
+	EnvVars     []string `json:"env_vars"`
+	Frameworks  []string `json:"frameworks"`
+	HasCi       bool     `json:"has_ci"`
+	HasDocker   bool     `json:"has_docker"`
+	HasReadme   bool     `json:"has_readme"`
+	HasTests    bool     `json:"has_tests"`
+	Languages   []struct {
+		Files   int     `json:"files"`
+		Lines   int     `json:"lines"`
+		Name    string  `json:"name"`
+		Percent float32 `json:"percent"`
+	} `json:"languages"`
+	License         *string  `json:"license"`
+	PackageManagers []string `json:"package_managers"`
+
+	// Secrets Secret-like values found and removed. Only where they were, never the value.
+	Secrets struct {
+		ByRule    map[string]int `json:"by_rule"`
+		Count     int            `json:"count"`
+		Locations []struct {
+			Line int    `json:"line"`
+			Path string `json:"path"`
+			Rule string `json:"rule"`
+		} `json:"locations"`
+	} `json:"secrets"`
+	Services []string `json:"services"`
+	Skipped  struct {
+		ByReason map[string]int `json:"by_reason"`
+		Count    int            `json:"count"`
+	} `json:"skipped"`
+	Totals struct {
+		Bytes       int `json:"bytes"`
+		Files       int `json:"files"`
+		Lines       int `json:"lines"`
+		SourceFiles int `json:"source_files"`
+	} `json:"totals"`
+}
 
 // ProjectJob The latest analysis job of a project.
 type ProjectJob struct {

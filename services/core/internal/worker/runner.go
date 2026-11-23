@@ -25,6 +25,8 @@ type Handler func(ctx context.Context, job store.Job, report Reporter) error
 type Failure struct {
 	Code string
 	Err  error
+	// Permanent means retrying cannot help (the repository is gone, or too large): the job fails now.
+	Permanent bool
 }
 
 func (f *Failure) Error() string { return f.Code + ": " + f.Err.Error() }
@@ -184,11 +186,20 @@ func (r *Runner) run(ctx context.Context, q *store.Queries, job store.Job) {
 		return
 	}
 	code := "internal_error"
+	permanent := false
 	var f *Failure
 	if errors.As(err, &f) {
-		code = f.Code
+		code, permanent = f.Code, f.Permanent
 	}
-	log.Error("job failed", "code", code, "error", err)
+	log.Error("job failed", "code", code, "permanent", permanent, "error", err)
+	if permanent {
+		if _, ferr := q.FailJob(fin, store.FailJobParams{ID: job.ID, Worker: r.workerID, ErrorCode: code}); ferr != nil {
+			log.Error("could not fail the job", "error", ferr)
+			return
+		}
+		r.setProjectStatus(fin, q, job, "failed")
+		return
+	}
 	released, rerr := q.ReleaseJob(fin, store.ReleaseJobParams{
 		ID: job.ID, Worker: r.workerID, ErrorCode: code,
 		BackoffSeconds: (orDefault(r.Backoff, defaultBackoff) * time.Duration(job.Attempts)).Seconds(),

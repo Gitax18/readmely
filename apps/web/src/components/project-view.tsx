@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { AnalysisPanel } from "@/components/analysis-panel";
 import { usePolling } from "@/components/projects-view";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -127,7 +128,11 @@ export function ProjectView({
             </div>
           ) : null}
           {project.status === "ready" ? (
-            <p className="text-sm">Analysis finished. What we learned will appear here next.</p>
+            <AnalysisPanel
+              key={project.job?.finished_at ?? project.updated_at}
+              api={client}
+              projectId={project.id}
+            />
           ) : null}
           {project.status === "failed" ? (
             <p role="alert" className="text-bad text-sm">
