@@ -24,6 +24,8 @@ type Querier interface {
 	// A new analysis replaces the old one completely. Symbols go with their files, edges with their nodes.
 	ClearProjectFiles(ctx context.Context, projectID uuid.UUID) error
 	ClearProjectGraph(ctx context.Context, projectID uuid.UUID) error
+	// A new analysis starts without the old summary, so a summary never describes another commit.
+	ClearProjectSummary(ctx context.Context, projectID uuid.UUID) error
 	CompleteJob(ctx context.Context, arg CompleteJobParams) (Job, error)
 	// Jobs of a kind that are queued or running: at most one analysis per project at a time.
 	CountActiveProjectJobs(ctx context.Context, arg CountActiveProjectJobsParams) (int64, error)
@@ -77,6 +79,7 @@ type Querier interface {
 	// What an analysis stores and the project page reads. Every read is scoped to the owner through
 	// the project, so someone else's project finds nothing.
 	GetProjectFacts(ctx context.Context, arg GetProjectFactsParams) (ProjectFact, error)
+	GetProjectSummary(ctx context.Context, arg GetProjectSummaryParams) (ProjectSummary, error)
 	// The live session for a cookie, with its user. Ended sessions and suspended users find nothing.
 	GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (GetSessionByTokenHashRow, error)
 	GetUser(ctx context.Context, id uuid.UUID) (User, error)
@@ -95,6 +98,8 @@ type Querier interface {
 	ListUserIdentities(ctx context.Context, userID uuid.UUID) ([]OauthIdentity, error)
 	ListUserSessions(ctx context.Context, userID uuid.UUID) ([]Session, error)
 	MarkUserEmailVerified(ctx context.Context, id uuid.UUID) (User, error)
+	// A job that was never run because it could not be paid for. It is kept, finished, so the page can say why.
+	RecordRefusedJob(ctx context.Context, arg RecordRefusedJobParams) (Job, error)
 	// Gives a job back after a failure: queued again after the backoff, or failed for good when the
 	// attempts are used up. error_code is a short machine code, never provider or stack text.
 	ReleaseJob(ctx context.Context, arg ReleaseJobParams) (Job, error)

@@ -8,7 +8,7 @@ import type {
   Session,
   User,
 } from "./account-schema";
-import type { ProjectAnalysis, ProjectFacts } from "./analysis-schema";
+import type { ProjectAnalysis, ProjectFacts, ProjectSummary } from "./analysis-schema";
 import type { CreditBalance, CreditEntry } from "./credit-schema";
 import type { Project, ProjectJob, RepositoryPreview } from "./project-schema";
 import type { Report } from "./status-schema";
@@ -75,4 +75,8 @@ export const creditBalanceMatchesContract: SameShape<
 export const creditEntryMatchesContract: SameShape<
   CreditEntry,
   publicComponents["schemas"]["CreditEntry"]
+> = true;
+export const projectSummaryMatchesContract: SameShape<
+  ProjectSummary,
+  publicComponents["schemas"]["ProjectSummary"]
 > = true;

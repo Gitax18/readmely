@@ -11,10 +11,12 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/Gitax18/readmely/services/core/internal/db/store"
 	"github.com/Gitax18/readmely/services/core/internal/github"
+	"github.com/Gitax18/readmely/services/core/internal/projects"
 	"github.com/Gitax18/readmely/services/core/internal/worker"
 )
 
@@ -102,7 +104,7 @@ func (p *Pipeline) Handle(ctx context.Context, job store.Job, report worker.Repo
 	}
 
 	report("saving", 88)
-	if err := p.save(ctx, proj, sha, files, stats, parsed, edges, factsJSON); err != nil {
+	if err := p.save(ctx, job, proj, sha, files, stats, parsed, edges, factsJSON); err != nil {
 		return err
 	}
 	return nil
@@ -121,7 +123,7 @@ func githubFailure(err error) error {
 
 // save replaces the project's earlier analysis in one transaction, so a failure leaves the old
 // result and a success never shows half of the new one.
-func (p *Pipeline) save(ctx context.Context, proj store.Project, sha string, files []File, _ ExtractStats, parsed map[string]Parsed, edges []Edge, factsJSON []byte) error {
+func (p *Pipeline) save(ctx context.Context, ingestJob store.Job, proj store.Project, sha string, files []File, _ ExtractStats, parsed map[string]Parsed, edges []Edge, factsJSON []byte) error {
 	tx, err := p.Pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -234,7 +236,51 @@ func (p *Pipeline) save(ctx context.Context, proj store.Project, sha string, fil
 	if err := q.SetProjectCommit(ctx, store.SetProjectCommitParams{ID: proj.ID, UserID: proj.UserID, CommitSha: &sha}); err != nil {
 		return err
 	}
+	if err := q.ClearProjectSummary(ctx, proj.ID); err != nil {
+		return err
+	}
+	if err := queueSummary(ctx, tx, q, proj, ingestJob, sha); err != nil {
+		return err
+	}
 	return tx.Commit(ctx)
+}
+
+// SummaryCost is what writing a project's summary holds, in credits. The AI worker settles it to
+// what the model calls really cost and returns the rest.
+const SummaryCost int64 = 10
+
+// queueSummary holds the credits and queues the summary job, in the analysis's own transaction. A
+// balance too small to pay for it is not an error: the project is analysed, and a finished,
+// refused job tells the page why there is no summary.
+func queueSummary(ctx context.Context, tx pgx.Tx, q *store.Queries, proj store.Project, ingestJob store.Job, sha string) error {
+	key := "summarise:" + ingestJob.ID.String()
+	sp, err := tx.Begin(ctx) // a savepoint: a refused hold must not abort the analysis
+	if err != nil {
+		return err
+	}
+	sq := q.WithTx(sp)
+	payload, err := json.Marshal(map[string]string{"commit_sha": sha})
+	if err != nil {
+		_ = sp.Rollback(ctx)
+		return err
+	}
+	job, err := sq.EnqueueJob(ctx, store.EnqueueJobParams{
+		UserID: proj.UserID, ProjectID: &proj.ID, Kind: projects.SummariseKind, Payload: payload, IdempotencyKey: key, MaxAttempts: 2,
+	})
+	if err == nil {
+		_, err = sq.ReserveCredits(ctx, store.ReserveCreditsParams{UserID: proj.UserID, Amount: SummaryCost, JobID: &job.ID, IdempotencyKey: "hold:" + job.ID.String()})
+	}
+	if err == nil {
+		return sp.Commit(ctx)
+	}
+	_ = sp.Rollback(ctx)
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "CR001" {
+		_, err = q.RecordRefusedJob(ctx, store.RecordRefusedJobParams{
+			UserID: proj.UserID, ProjectID: &proj.ID, Kind: projects.SummariseKind, IdempotencyKey: key, ErrorCode: "insufficient_credits",
+		})
+	}
+	return err
 }
 
 func truncate(s string, n int) string {

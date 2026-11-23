@@ -1,15 +1,34 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { usePolling } from "@/components/projects-view";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import type { ProjectAnalysis } from "@/lib/analysis-schema";
 import type { ProjectsApi } from "@/lib/projects-api";
-import { formatCount, formatSize, secretRuleLabel, skipReasonLabel } from "@/lib/project-text";
+import {
+  formatCount,
+  formatSize,
+  secretRuleLabel,
+  skipReasonLabel,
+  summaryFailureText,
+  summaryStepLabel,
+} from "@/lib/project-text";
 
 type State = { kind: "loading" } | { kind: "error" } | { kind: "ready"; analysis: ProjectAnalysis };
 
+function summaryWorking(a: ProjectAnalysis): boolean {
+  return (
+    a.summary === null &&
+    a.summary_job !== null &&
+    ["queued", "running"].includes(a.summary_job.status)
+  );
+}
+
 /** What the last analysis found. Mount it with a key that changes per analysis to reload it. */
 export function AnalysisPanel({ api, projectId }: { api: ProjectsApi; projectId: string }) {
+  const router = useRouter();
   const [state, setState] = useState<State>({ kind: "loading" });
 
   useEffect(() => {
@@ -22,6 +41,16 @@ export function AnalysisPanel({ api, projectId }: { api: ProjectsApi; projectId:
       live = false;
     };
   }, [api, projectId]);
+
+  // The summary arrives after the rest: poll until it settles, then refresh so the credit balance
+  // in the top bar shows what it cost.
+  const working = state.kind === "ready" && summaryWorking(state.analysis);
+  usePolling(working, async () => {
+    const res = await api.analysis(projectId);
+    if (!res.ok) return;
+    setState({ kind: "ready", analysis: res.analysis });
+    if (!summaryWorking(res.analysis)) router.refresh();
+  });
 
   if (state.kind === "loading") {
     return <p className="text-muted-foreground text-sm">Loading what we found…</p>;
@@ -36,6 +65,58 @@ export function AnalysisPanel({ api, projectId }: { api: ProjectsApi; projectId:
   return <Findings analysis={state.analysis} />;
 }
 
+function SummarySection({ analysis }: { analysis: ProjectAnalysis }) {
+  const { summary, summary_job: job } = analysis;
+  if (summary) {
+    return (
+      <Section title="What this project does">
+        <p className="text-sm font-medium">{summary.headline}</p>
+        <p className="text-sm">{summary.overview}</p>
+        <ul className="list-disc pl-5 text-sm">
+          {summary.how_it_works.map((step) => (
+            <li key={step}>{step}</li>
+          ))}
+        </ul>
+        {summary.components.length > 0 ? (
+          <ul className="flex flex-col gap-1">
+            {summary.components.map((c) => (
+              <li key={c.path} className="text-sm">
+                <code className="border-border rounded border px-1.5 py-0.5 text-xs break-all">
+                  {c.path}
+                </code>{" "}
+                <span className="text-muted-foreground">{c.role}</span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        <p className="text-muted-foreground text-xs">
+          Written by an AI model from the analysis. It can be wrong; check it against the code.
+        </p>
+      </Section>
+    );
+  }
+  if (job && ["queued", "running"].includes(job.status)) {
+    return (
+      <Section title="What this project does">
+        <div className="flex flex-col gap-2" aria-live="polite">
+          <Progress value={job.progress} label="Summary progress" />
+          <span className="text-sm">{summaryStepLabel(job.step)}…</span>
+        </div>
+      </Section>
+    );
+  }
+  if (job && job.status === "failed") {
+    return (
+      <Section title="What this project does">
+        <p role="status" className="text-muted-foreground text-sm">
+          {summaryFailureText(job.error_code)}
+        </p>
+      </Section>
+    );
+  }
+  return null;
+}
+
 function Findings({ analysis }: { analysis: ProjectAnalysis }) {
   const f = analysis.facts;
   const checks: [string, boolean][] = [
@@ -46,6 +127,7 @@ function Findings({ analysis }: { analysis: ProjectAnalysis }) {
   ];
   return (
     <div className="flex flex-col gap-4">
+      <SummarySection analysis={analysis} />
       <p className="text-muted-foreground text-xs">
         Commit {analysis.commit_sha.slice(0, 7)} · {formatCount(f.totals.files)} files ·{" "}
         {formatCount(f.totals.lines)} lines · {formatSize(Math.ceil(f.totals.bytes / 1024))}

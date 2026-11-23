@@ -7,6 +7,11 @@ is unreachable.
 
 from __future__ import annotations
 
+from contextlib import AbstractAsyncContextManager
+from typing import Any
+
+from psycopg import AsyncConnection
+from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 
 CONNECT_TIMEOUT_SECONDS = 2
@@ -19,7 +24,7 @@ class Database:
             min_size=0,
             max_size=max_size,
             open=False,
-            kwargs={"connect_timeout": CONNECT_TIMEOUT_SECONDS},
+            kwargs={"connect_timeout": CONNECT_TIMEOUT_SECONDS, "row_factory": dict_row},
             name="ai",
         )
 
@@ -28,6 +33,10 @@ class Database:
 
     async def close(self) -> None:
         await self._pool.close()
+
+    def connection(self) -> AbstractAsyncContextManager[AsyncConnection[Any]]:
+        """A pooled connection whose rows are dicts. Commits on a clean exit, rolls back on an error."""
+        return self._pool.connection()
 
     async def ping(self) -> None:
         async with self._pool.connection(timeout=CONNECT_TIMEOUT_SECONDS) as conn:

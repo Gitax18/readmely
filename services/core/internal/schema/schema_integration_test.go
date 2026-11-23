@@ -305,10 +305,23 @@ func TestServiceRolePrivileges(t *testing.T) {
 	}
 
 	ai := db.AsRole(t, migrate.RoleAI)
-	for _, table := range []string{"users", "projects", "jobs"} {
+	// The AI role reads what summarising needs and nothing about people.
+	for _, table := range []string{"users", "sessions", "oauth_identities", "login_challenges", "credit_ledger"} {
 		if _, err := ai.Exec(ctx, `SELECT 1 FROM `+table+` LIMIT 1`); pgErr(err) == nil || pgErr(err).Code != "42501" {
 			t.Errorf("the AI role must not read %s: %v", table, err)
 		}
+	}
+	for _, table := range []string{"projects", "jobs", "files", "project_facts"} {
+		if _, err := ai.Exec(ctx, `SELECT 1 FROM `+table+` LIMIT 1`); err != nil {
+			t.Errorf("the AI role must read %s: %v", table, err)
+		}
+	}
+	// It writes only its own results, never a project, and spends credits only through the two functions.
+	if _, err := ai.Exec(ctx, `UPDATE projects SET name = 'x'`); pgErr(err) == nil || pgErr(err).Code != "42501" {
+		t.Errorf("the AI role must not change projects: %v", err)
+	}
+	if _, err := ai.Exec(ctx, `INSERT INTO credit_ledger (user_id, delta, kind, idempotency_key) VALUES (gen_random_uuid(), 100, 'grant', 'abcdefgh')`); pgErr(err) == nil || pgErr(err).Code != "42501" {
+		t.Errorf("the AI role must not write the ledger directly: %v", err)
 	}
 }
 

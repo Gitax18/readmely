@@ -39,3 +39,12 @@ WHERE e.project_id = @project_id AND p.user_id = @user_id AND n.kind <> 'externa
 GROUP BY n.kind, n.key
 ORDER BY imported_by DESC, n.key
 LIMIT 10;
+
+-- name: GetProjectSummary :one
+SELECT s.* FROM project_summaries s
+JOIN projects p ON p.id = s.project_id
+WHERE s.project_id = @project_id AND p.user_id = @user_id;
+
+-- name: ClearProjectSummary :exec
+-- A new analysis starts without the old summary, so a summary never describes another commit.
+DELETE FROM project_summaries WHERE project_id = @project_id;

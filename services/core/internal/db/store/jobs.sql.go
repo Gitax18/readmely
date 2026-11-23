@@ -430,6 +430,54 @@ func (q *Queries) ListProjectJobs(ctx context.Context, arg ListProjectJobsParams
 	return items, nil
 }
 
+const recordRefusedJob = `-- name: RecordRefusedJob :one
+INSERT INTO jobs (user_id, project_id, kind, payload, idempotency_key, max_attempts, status, error_code, finished_at)
+VALUES ($1, $2, $3, '{}', $4, 1, 'failed', $5::text, now())
+ON CONFLICT (user_id, idempotency_key) DO UPDATE SET idempotency_key = EXCLUDED.idempotency_key
+RETURNING id, user_id, project_id, kind, payload, status, attempts, max_attempts, run_after, locked_by, lease_expires_at, idempotency_key, error_code, created_at, updated_at, finished_at, step, progress
+`
+
+type RecordRefusedJobParams struct {
+	UserID         uuid.UUID
+	ProjectID      *uuid.UUID
+	Kind           string
+	IdempotencyKey string
+	ErrorCode      string
+}
+
+// A job that was never run because it could not be paid for. It is kept, finished, so the page can say why.
+func (q *Queries) RecordRefusedJob(ctx context.Context, arg RecordRefusedJobParams) (Job, error) {
+	row := q.db.QueryRow(ctx, recordRefusedJob,
+		arg.UserID,
+		arg.ProjectID,
+		arg.Kind,
+		arg.IdempotencyKey,
+		arg.ErrorCode,
+	)
+	var i Job
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.ProjectID,
+		&i.Kind,
+		&i.Payload,
+		&i.Status,
+		&i.Attempts,
+		&i.MaxAttempts,
+		&i.RunAfter,
+		&i.LockedBy,
+		&i.LeaseExpiresAt,
+		&i.IdempotencyKey,
+		&i.ErrorCode,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.FinishedAt,
+		&i.Step,
+		&i.Progress,
+	)
+	return i, err
+}
+
 const releaseJob = `-- name: ReleaseJob :one
 UPDATE jobs
 SET status = CASE WHEN attempts >= max_attempts THEN 'failed' ELSE 'queued' END,

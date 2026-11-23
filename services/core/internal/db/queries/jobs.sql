@@ -112,3 +112,10 @@ UPDATE jobs
 SET status = 'failed', finished_at = now(), error_code = @error_code::text, locked_by = NULL, lease_expires_at = NULL
 WHERE id = @id AND locked_by = @worker::text AND status = 'running'
 RETURNING *;
+
+-- name: RecordRefusedJob :one
+-- A job that was never run because it could not be paid for. It is kept, finished, so the page can say why.
+INSERT INTO jobs (user_id, project_id, kind, payload, idempotency_key, max_attempts, status, error_code, finished_at)
+VALUES (@user_id, @project_id, @kind, '{}', @idempotency_key, 1, 'failed', @error_code::text, now())
+ON CONFLICT (user_id, idempotency_key) DO UPDATE SET idempotency_key = EXCLUDED.idempotency_key
+RETURNING *;

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { projectJobSchema } from "./project-schema";
 
 /**
  * The analysis response (contracts/core-public.yaml). The compile-time check in contract-check.ts
@@ -46,13 +47,23 @@ export const hubSchema = z.object({
   imported_by: count,
 });
 
+export const projectSummarySchema = z.object({
+  headline: z.string().min(1).max(160),
+  overview: z.string().min(1).max(1000),
+  how_it_works: z.array(z.string().max(300)).min(2).max(6),
+  components: z.array(z.object({ path: z.string().max(400), role: z.string().max(200) })).max(8),
+});
+
 export const projectAnalysisSchema = z.object({
   commit_sha: z.string().regex(/^[0-9a-f]{40}$/),
   analysed_at: z.string().min(1),
   facts: projectFactsSchema,
+  summary: projectSummarySchema.nullable(),
+  summary_job: projectJobSchema.nullable(),
   hubs: z.array(hubSchema).max(10),
 });
 
 export type ProjectFacts = z.infer<typeof projectFactsSchema>;
+export type ProjectSummary = z.infer<typeof projectSummarySchema>;
 export type Hub = z.infer<typeof hubSchema>;
 export type ProjectAnalysis = z.infer<typeof projectAnalysisSchema>;

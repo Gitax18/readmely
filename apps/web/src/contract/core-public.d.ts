@@ -547,8 +547,22 @@ export interface components {
             /** Format: date-time */
             analysed_at: string;
             facts: components["schemas"]["ProjectFacts"];
+            /** @description Null until the summary has been written for this analysis. */
+            summary: components["schemas"]["ProjectSummary"] | null;
+            /** @description The job that writes the summary. A failed one carries why (for example insufficient_credits, spend_cap_reached or llm_not_configured); its credits are refunded. */
+            summary_job: components["schemas"]["ProjectJob"] | null;
             /** @description The files other files import most, with how many do. */
             hubs: components["schemas"]["Hub"][];
+        };
+        /** @description Written by a model from the analysis. Plain text; never render it as markup. */
+        ProjectSummary: {
+            headline: string;
+            overview: string;
+            how_it_works: string[];
+            components: {
+                path: string;
+                role: string;
+            }[];
         };
         Hub: {
             /** @enum {string} */
