@@ -75,6 +75,27 @@ func (e CreditEntryKind) Valid() bool {
 	}
 }
 
+// Defines values for GenerateReadmeRequestTemplate.
+const (
+	GenerateReadmeRequestTemplateDetailed GenerateReadmeRequestTemplate = "detailed"
+	GenerateReadmeRequestTemplateMinimal  GenerateReadmeRequestTemplate = "minimal"
+	GenerateReadmeRequestTemplateStandard GenerateReadmeRequestTemplate = "standard"
+)
+
+// Valid indicates whether the value is a known member of the GenerateReadmeRequestTemplate enum.
+func (e GenerateReadmeRequestTemplate) Valid() bool {
+	switch e {
+	case GenerateReadmeRequestTemplateDetailed:
+		return true
+	case GenerateReadmeRequestTemplateMinimal:
+		return true
+	case GenerateReadmeRequestTemplateStandard:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for HubKind.
 const (
 	HubKindExternal HubKind = "external"
@@ -180,6 +201,96 @@ func (e Provider) Valid() bool {
 	}
 }
 
+// Defines values for ReadmeSource.
+const (
+	ReadmeSourceEdited      ReadmeSource = "edited"
+	ReadmeSourceGenerated   ReadmeSource = "generated"
+	ReadmeSourceRegenerated ReadmeSource = "regenerated"
+	ReadmeSourceRestored    ReadmeSource = "restored"
+)
+
+// Valid indicates whether the value is a known member of the ReadmeSource enum.
+func (e ReadmeSource) Valid() bool {
+	switch e {
+	case ReadmeSourceEdited:
+		return true
+	case ReadmeSourceGenerated:
+		return true
+	case ReadmeSourceRegenerated:
+		return true
+	case ReadmeSourceRestored:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ReadmeTemplate.
+const (
+	ReadmeTemplateDetailed ReadmeTemplate = "detailed"
+	ReadmeTemplateMinimal  ReadmeTemplate = "minimal"
+	ReadmeTemplateStandard ReadmeTemplate = "standard"
+)
+
+// Valid indicates whether the value is a known member of the ReadmeTemplate enum.
+func (e ReadmeTemplate) Valid() bool {
+	switch e {
+	case ReadmeTemplateDetailed:
+		return true
+	case ReadmeTemplateMinimal:
+		return true
+	case ReadmeTemplateStandard:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ReadmeVersionInfoSource.
+const (
+	ReadmeVersionInfoSourceEdited      ReadmeVersionInfoSource = "edited"
+	ReadmeVersionInfoSourceGenerated   ReadmeVersionInfoSource = "generated"
+	ReadmeVersionInfoSourceRegenerated ReadmeVersionInfoSource = "regenerated"
+	ReadmeVersionInfoSourceRestored    ReadmeVersionInfoSource = "restored"
+)
+
+// Valid indicates whether the value is a known member of the ReadmeVersionInfoSource enum.
+func (e ReadmeVersionInfoSource) Valid() bool {
+	switch e {
+	case ReadmeVersionInfoSourceEdited:
+		return true
+	case ReadmeVersionInfoSourceGenerated:
+		return true
+	case ReadmeVersionInfoSourceRegenerated:
+		return true
+	case ReadmeVersionInfoSourceRestored:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ReadmeVersionInfoTemplate.
+const (
+	ReadmeVersionInfoTemplateDetailed ReadmeVersionInfoTemplate = "detailed"
+	ReadmeVersionInfoTemplateMinimal  ReadmeVersionInfoTemplate = "minimal"
+	ReadmeVersionInfoTemplateStandard ReadmeVersionInfoTemplate = "standard"
+)
+
+// Valid indicates whether the value is a known member of the ReadmeVersionInfoTemplate enum.
+func (e ReadmeVersionInfoTemplate) Valid() bool {
+	switch e {
+	case ReadmeVersionInfoTemplateDetailed:
+		return true
+	case ReadmeVersionInfoTemplateMinimal:
+		return true
+	case ReadmeVersionInfoTemplateStandard:
+		return true
+	default:
+		return false
+	}
+}
+
 // Accepted defines model for Accepted.
 type Accepted struct {
 	Status AcceptedStatus `json:"status"`
@@ -269,6 +380,14 @@ type Error struct {
 	// RequestId Example: 6P5E3ETHKJKOTOXXMXCEJGDW6I
 	RequestId string `json:"request_id"`
 }
+
+// GenerateReadmeRequest defines model for GenerateReadmeRequest.
+type GenerateReadmeRequest struct {
+	Template GenerateReadmeRequestTemplate `json:"template"`
+}
+
+// GenerateReadmeRequestTemplate defines model for GenerateReadmeRequest.Template.
+type GenerateReadmeRequestTemplate string
 
 // Hub defines model for Hub.
 type Hub struct {
@@ -432,6 +551,72 @@ type ProjectSummary struct {
 // Provider defines model for Provider.
 type Provider string
 
+// Readme defines model for Readme.
+type Readme struct {
+	// Content Markdown. Render it without raw HTML.
+	Content   string          `json:"content"`
+	CreatedAt time.Time       `json:"created_at"`
+	Source    ReadmeSource    `json:"source"`
+	Template  *ReadmeTemplate `json:"template"`
+	Version   int             `json:"version"`
+}
+
+// ReadmeSource defines model for Readme.Source.
+type ReadmeSource string
+
+// ReadmeTemplate defines model for Readme.Template.
+type ReadmeTemplate string
+
+// ReadmeScore defines model for ReadmeScore.
+type ReadmeScore struct {
+	Items []ReadmeScoreItem `json:"items"`
+	Score int               `json:"score"`
+}
+
+// ReadmeScoreItem defines model for ReadmeScoreItem.
+type ReadmeScoreItem struct {
+	// Hint What to add when it is missing.
+	Hint  string `json:"hint"`
+	Key   string `json:"key"`
+	Label string `json:"label"`
+	Ok    bool   `json:"ok"`
+}
+
+// ReadmeState defines model for ReadmeState.
+type ReadmeState struct {
+	// Job The newest job that writes the README. A failed one carries why (insufficient_credits, spend_cap_reached, llm_not_configured, section_missing and so on); its credits are refunded.
+	Job    *ProjectJob  `json:"job"`
+	Readme *Readme      `json:"readme"`
+	Score  *ReadmeScore `json:"score"`
+}
+
+// ReadmeVersionInfo defines model for ReadmeVersionInfo.
+type ReadmeVersionInfo struct {
+	CreatedAt time.Time                  `json:"created_at"`
+	Source    ReadmeVersionInfoSource    `json:"source"`
+	Template  *ReadmeVersionInfoTemplate `json:"template"`
+	Version   int                        `json:"version"`
+}
+
+// ReadmeVersionInfoSource defines model for ReadmeVersionInfo.Source.
+type ReadmeVersionInfoSource string
+
+// ReadmeVersionInfoTemplate defines model for ReadmeVersionInfo.Template.
+type ReadmeVersionInfoTemplate string
+
+// ReadmeVersions defines model for ReadmeVersions.
+type ReadmeVersions struct {
+	Versions []ReadmeVersionInfo `json:"versions"`
+}
+
+// RegenerateSectionRequest defines model for RegenerateSectionRequest.
+type RegenerateSectionRequest struct {
+	Heading string `json:"heading"`
+
+	// Instruction Optional, for example "shorter" or "add Docker steps". May be empty.
+	Instruction string `json:"instruction"`
+}
+
 // RepositoryPreview defines model for RepositoryPreview.
 type RepositoryPreview struct {
 	DefaultBranch string `json:"default_branch"`
@@ -446,6 +631,13 @@ type RepositoryPreview struct {
 // RepositoryUrlRequest defines model for RepositoryUrlRequest.
 type RepositoryUrlRequest struct {
 	Url string `json:"url"`
+}
+
+// SaveReadmeRequest defines model for SaveReadmeRequest.
+type SaveReadmeRequest struct {
+	// BaseVersion The version this edit was made on; 0 when there was none.
+	BaseVersion int    `json:"base_version"`
+	Content     string `json:"content"`
 }
 
 // Session defines model for Session.
@@ -517,6 +709,9 @@ type NotAvailable = Error
 
 // NotFound The generic error body. Details never appear here; they go to the log only. The Go API sends not_found, method_not_allowed and internal_error. The AI service also sends unauthorized, payload_too_large and invalid_request.
 type NotFound = Error
+
+// PaymentRequired The generic error body. Details never appear here; they go to the log only. The Go API sends not_found, method_not_allowed and internal_error. The AI service also sends unauthorized, payload_too_large and invalid_request.
+type PaymentRequired = Error
 
 // RateLimited The generic error body. Details never appear here; they go to the log only. The Go API sends not_found, method_not_allowed and internal_error. The AI service also sends unauthorized, payload_too_large and invalid_request.
 type RateLimited = Error
@@ -606,6 +801,30 @@ type AnalyseProjectParams struct {
 	XCSRFToken CsrfToken `json:"X-CSRF-Token"`
 }
 
+// GenerateReadmeParams defines parameters for GenerateReadme.
+type GenerateReadmeParams struct {
+	// XCSRFToken The csrf_token from GET /v1/me, bound to the current session. Required on every state-changing request that has a session.
+	XCSRFToken CsrfToken `json:"X-CSRF-Token"`
+}
+
+// SaveReadmeParams defines parameters for SaveReadme.
+type SaveReadmeParams struct {
+	// XCSRFToken The csrf_token from GET /v1/me, bound to the current session. Required on every state-changing request that has a session.
+	XCSRFToken CsrfToken `json:"X-CSRF-Token"`
+}
+
+// RegenerateReadmeSectionParams defines parameters for RegenerateReadmeSection.
+type RegenerateReadmeSectionParams struct {
+	// XCSRFToken The csrf_token from GET /v1/me, bound to the current session. Required on every state-changing request that has a session.
+	XCSRFToken CsrfToken `json:"X-CSRF-Token"`
+}
+
+// RestoreReadmeVersionParams defines parameters for RestoreReadmeVersion.
+type RestoreReadmeVersionParams struct {
+	// XCSRFToken The csrf_token from GET /v1/me, bound to the current session. Required on every state-changing request that has a session.
+	XCSRFToken CsrfToken `json:"X-CSRF-Token"`
+}
+
 // StartEmailLoginJSONRequestBody defines body for StartEmailLogin for application/json ContentType.
 type StartEmailLoginJSONRequestBody = StartEmailLoginRequest
 
@@ -623,3 +842,12 @@ type CreateProjectJSONRequestBody = RepositoryUrlRequest
 
 // PreviewRepositoryJSONRequestBody defines body for PreviewRepository for application/json ContentType.
 type PreviewRepositoryJSONRequestBody = RepositoryUrlRequest
+
+// GenerateReadmeJSONRequestBody defines body for GenerateReadme for application/json ContentType.
+type GenerateReadmeJSONRequestBody = GenerateReadmeRequest
+
+// SaveReadmeJSONRequestBody defines body for SaveReadme for application/json ContentType.
+type SaveReadmeJSONRequestBody = SaveReadmeRequest
+
+// RegenerateReadmeSectionJSONRequestBody defines body for RegenerateReadmeSection for application/json ContentType.
+type RegenerateReadmeSectionJSONRequestBody = RegenerateSectionRequest

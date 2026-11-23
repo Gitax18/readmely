@@ -336,6 +336,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/projects/{id}/readme": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The current README, its health score and the state of any job writing it
+         * @description The readme and score are null until a README has been generated or saved. The job is the newest generate or section job, so the page can show progress or why one failed.
+         */
+        get: operations["getReadme"];
+        /**
+         * Save an edit as a new version
+         * @description Adds a version. base_version is the version the edit was made on; if a newer one exists the answer is 409 stale_version and nothing is overwritten.
+         */
+        put: operations["saveReadme"];
+        /**
+         * Write a README from the analysis
+         * @description Holds 15 credits and queues the job; it is charged what the model calls cost and the rest is returned, or refunded in full if it fails. 409 not_analysed before a first analysis, 409 readme_running while one is being written, 402 insufficient_credits.
+         */
+        post: operations["generateReadme"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/projects/{id}/readme/sections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rewrite one section of the README
+         * @description Holds 2 credits and queues a job that rewrites the section under the given heading, following the optional instruction, and saves the result as a new version. 404 when the heading is not in the current README.
+         */
+        post: operations["regenerateReadmeSection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/projects/{id}/readme/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The README's history, newest first */
+        get: operations["listReadmeVersions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/projects/{id}/readme/versions/{version}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Make an older version current again
+         * @description Adds a new version with the older one's text; nothing is removed.
+         */
+        post: operations["restoreReadmeVersion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/auth/providers": {
         parameters: {
             query?: never;
@@ -678,6 +763,60 @@ export interface components {
             path: string;
             content: string;
         };
+        GenerateReadmeRequest: {
+            /** @enum {string} */
+            template: "standard" | "minimal" | "detailed";
+        };
+        SaveReadmeRequest: {
+            content: string;
+            /** @description The version this edit was made on; 0 when there was none. */
+            base_version: number;
+        };
+        RegenerateSectionRequest: {
+            heading: string;
+            /** @description Optional, for example "shorter" or "add Docker steps". May be empty. */
+            instruction: string;
+        };
+        Readme: {
+            version: number;
+            /** @description Markdown. Render it without raw HTML. */
+            content: string;
+            /** @enum {string} */
+            source: "generated" | "edited" | "regenerated" | "restored";
+            /** @enum {string|null} */
+            template: "standard" | "minimal" | "detailed" | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        ReadmeScoreItem: {
+            key: string;
+            label: string;
+            ok: boolean;
+            /** @description What to add when it is missing. */
+            hint: string;
+        };
+        ReadmeScore: {
+            score: number;
+            items: components["schemas"]["ReadmeScoreItem"][];
+        };
+        ReadmeState: {
+            readme: components["schemas"]["Readme"] | null;
+            score: components["schemas"]["ReadmeScore"] | null;
+            /** @description The newest job that writes the README. A failed one carries why (insufficient_credits, spend_cap_reached, llm_not_configured, section_missing and so on); its credits are refunded. */
+            job: components["schemas"]["ProjectJob"] | null;
+        };
+        ReadmeVersionInfo: {
+            version: number;
+            /** @enum {string} */
+            source: "generated" | "edited" | "regenerated" | "restored";
+            /** @enum {string|null} */
+            template: "standard" | "minimal" | "detailed" | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        ReadmeVersions: {
+            versions: components["schemas"]["ReadmeVersionInfo"][];
+        };
         ProjectList: {
             projects: components["schemas"]["Project"][];
         };
@@ -775,6 +914,22 @@ export interface components {
                 /**
                  * @example {
                  *       "error": "forbidden",
+                 *       "request_id": "6P5E3ETHKJKOTOXXMXCEJGDW6I"
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description Not enough credits for this (insufficient_credits). */
+        PaymentRequired: {
+            headers: {
+                "X-Request-ID": components["headers"]["RequestId"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": "insufficient_credits",
                  *       "request_id": "6P5E3ETHKJKOTOXXMXCEJGDW6I"
                  *     }
                  */
@@ -1580,6 +1735,203 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    getReadme: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The state. */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReadmeState"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    saveReadme: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The csrf_token from GET /v1/me, bound to the current session. Required on every state-changing request that has a session. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveReadmeRequest"];
+            };
+        };
+        responses: {
+            /** @description The saved version. */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Readme"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["RateLimited"];
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    generateReadme: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The csrf_token from GET /v1/me, bound to the current session. Required on every state-changing request that has a session. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GenerateReadmeRequest"];
+            };
+        };
+        responses: {
+            /** @description The job is queued. */
+            202: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectJob"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            402: components["responses"]["PaymentRequired"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["RateLimited"];
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    regenerateReadmeSection: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The csrf_token from GET /v1/me, bound to the current session. Required on every state-changing request that has a session. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegenerateSectionRequest"];
+            };
+        };
+        responses: {
+            /** @description The job is queued. */
+            202: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectJob"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            402: components["responses"]["PaymentRequired"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["RateLimited"];
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    listReadmeVersions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Up to 50 versions. */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReadmeVersions"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    restoreReadmeVersion: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The csrf_token from GET /v1/me, bound to the current session. Required on every state-changing request that has a session. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                id: components["parameters"]["ProjectId"];
+                version: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The new current version. */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Readme"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
             default: components["responses"]["UnexpectedError"];
         };
     };

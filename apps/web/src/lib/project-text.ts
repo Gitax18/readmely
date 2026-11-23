@@ -18,6 +18,14 @@ export function projectFailureText(f: Failure): string {
       return "You have 10 projects, the most for now. Delete one to add another.";
     case "analysis_running":
       return "An analysis is already running for this project.";
+    case "insufficient_credits":
+      return "You do not have enough credits for that. See Usage for your balance.";
+    case "not_analysed":
+      return "Analyse the project first.";
+    case "readme_running":
+      return "A README is already being written for this project.";
+    case "stale_version":
+      return "The README changed since you opened it. Reload the page, then make your edit again.";
     case "rate_limited":
       return "Too many requests. Try again shortly.";
     case "forbidden":
@@ -152,4 +160,30 @@ export function summaryFailureText(code: string | null): string {
     default:
       return "The summary could not be written this time. Nothing was charged. Analyse again to retry.";
   }
+}
+
+/** Why a README job failed, in plain words. Credits are never lost: a failed job is refunded. */
+export function readmeFailureText(code: string | null): string {
+  switch (code) {
+    case "insufficient_credits":
+      return "There were not enough credits.";
+    case "spend_cap_reached":
+      return "Readmely has reached its limit for AI work today. Try again tomorrow. Nothing was charged.";
+    case "llm_not_configured":
+      return "AI writing is not switched on for this server. Nothing was charged.";
+    case "section_missing":
+      return "That section is no longer in the README. Nothing was charged.";
+    default:
+      return "The README could not be written this time. Nothing was charged. Try again.";
+  }
+}
+
+const README_STEPS: Record<string, string> = {
+  reading: "Reading the project",
+  writing: "Writing",
+  saving: "Saving",
+};
+
+export function readmeStepLabel(step: string | null): string {
+  return (step !== null && README_STEPS[step]) || "Waiting for the writer";
 }

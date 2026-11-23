@@ -26,6 +26,7 @@ import (
 	"github.com/Gitax18/readmely/services/core/internal/oauth"
 	"github.com/Gitax18/readmely/services/core/internal/projects"
 	"github.com/Gitax18/readmely/services/core/internal/ratelimit"
+	"github.com/Gitax18/readmely/services/core/internal/readme"
 	"github.com/Gitax18/readmely/services/core/internal/server"
 	"github.com/Gitax18/readmely/services/core/internal/status"
 )
@@ -109,6 +110,7 @@ func run(ctx context.Context, args []string, getenv func(string) string, stdout,
 	projectHandler := projects.NewHandler(projects.NewService(pool, ratelimit.New(rdb, "rm:rl:"), github.NewClient(cfg.GitHubAPIToken), logger))
 	authHandler.AddRoutes(projectHandler.Routes)
 	authHandler.AddRoutes(credits.NewHandler(pool).Routes)
+	authHandler.AddRoutes(readme.NewHandler(readme.NewService(pool, ratelimit.New(rdb, "rm:rl:"))).Routes)
 
 	var lc net.ListenConfig
 	publicLn, err := lc.Listen(ctx, "tcp", cfg.HTTPAddr)

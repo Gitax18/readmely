@@ -10,6 +10,7 @@ import type {
 } from "./account-schema";
 import type { ProjectAnalysis, ProjectFacts, ProjectSummary } from "./analysis-schema";
 import type { ContextPack, ContextPackPreset } from "./context-pack-schema";
+import type { Readme, ReadmeScore, ReadmeState, ReadmeVersions } from "./readme-schema";
 import type { CreditBalance, CreditEntry } from "./credit-schema";
 import type { Project, ProjectJob, RepositoryPreview } from "./project-schema";
 import type { Report } from "./status-schema";
@@ -88,4 +89,19 @@ export const contextPackMatchesContract: SameShape<
 export const contextPackPresetMatchesContract: SameShape<
   ContextPackPreset,
   publicComponents["schemas"]["ContextPackPreset"]
+> = true;
+
+// The README endpoints.
+export const readmeMatchesContract: SameShape<Readme, publicComponents["schemas"]["Readme"]> = true;
+export const readmeScoreMatchesContract: SameShape<
+  ReadmeScore,
+  publicComponents["schemas"]["ReadmeScore"]
+> = true;
+export const readmeStateMatchesContract: SameShape<
+  ReadmeState,
+  publicComponents["schemas"]["ReadmeState"]
+> = true;
+export const readmeVersionsMatchContract: SameShape<
+  ReadmeVersions,
+  publicComponents["schemas"]["ReadmeVersions"]
 > = true;

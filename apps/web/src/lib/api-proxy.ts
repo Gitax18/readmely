@@ -13,9 +13,12 @@ import { readLimited } from "./read-limited";
 
 export const REQUEST_TIMEOUT_MS = 10_000;
 export const MAX_REQUEST_BYTES = 16 * 1024;
+/** A README is up to 100 KiB, so saving one may send more than the usual limit; only that path may. */
+export const README_REQUEST_BYTES = 128 * 1024;
 export const MAX_RESPONSE_BYTES = 256 * 1024;
 
 const UUID = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}";
+const README_SAVE_PATH = new RegExp(`^v1/projects/${UUID}/readme$`);
 const ALLOWED_PATHS = [
   /^v1\/auth\/email\/(start|verify)$/,
   /^v1\/auth\/logout$/,
@@ -29,6 +32,10 @@ const ALLOWED_PATHS = [
   new RegExp(`^v1/projects/${UUID}/analyse$`),
   new RegExp(`^v1/projects/${UUID}/analysis$`),
   new RegExp(`^v1/projects/${UUID}/context-pack$`),
+  new RegExp(`^v1/projects/${UUID}/readme$`),
+  new RegExp(`^v1/projects/${UUID}/readme/sections$`),
+  new RegExp(`^v1/projects/${UUID}/readme/versions$`),
+  new RegExp(`^v1/projects/${UUID}/readme/versions/[1-9][0-9]{0,8}/restore$`),
   /^v1\/auth\/providers$/,
   /^v1\/auth\/(google|github)\/(start|callback)$/,
   /^v1\/me\/identities$/,
@@ -116,10 +123,14 @@ export async function proxyToApi(
 
   let body: ArrayBuffer | undefined;
   if (request.method !== "GET" && request.method !== "HEAD") {
+    const limit =
+      request.method === "PUT" && README_SAVE_PATH.test(path)
+        ? README_REQUEST_BYTES
+        : MAX_REQUEST_BYTES;
     const declared = Number(request.headers.get("content-length") ?? "0");
-    if (declared > MAX_REQUEST_BYTES) return problem(413, "payload_too_large");
+    if (declared > limit) return problem(413, "payload_too_large");
     body = await request.arrayBuffer();
-    if (body.byteLength > MAX_REQUEST_BYTES) return problem(413, "payload_too_large");
+    if (body.byteLength > limit) return problem(413, "payload_too_large");
   }
 
   const doFetch = options.fetchImpl ?? fetch;

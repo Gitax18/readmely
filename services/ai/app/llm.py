@@ -21,7 +21,8 @@ from app.config import WorkerSettings
 
 BASE_URL = "https://api.openai.com/v1"
 MAX_RESPONSE_BYTES = 1 << 20
-MAX_OUTPUT_TOKENS = 2_000
+MAX_OUTPUT_TOKENS = 4_000  # the most any call may ask for
+DEFAULT_OUTPUT_TOKENS = 2_000
 
 # Errors a retry cannot fix, and errors it might.
 PERMANENT = {"llm_not_configured", "llm_auth", "llm_bad_request", "llm_refused", "spend_cap_reached"}
@@ -81,7 +82,7 @@ class LlmClient:
         user: str,
         schema_name: str,
         schema: dict[str, Any],
-        max_output_tokens: int = MAX_OUTPUT_TOKENS,
+        max_output_tokens: int = DEFAULT_OUTPUT_TOKENS,
     ) -> tuple[dict[str, Any], Usage]:
         """Ask the fast model for a JSON object that matches `schema`."""
         if self._key is None:
