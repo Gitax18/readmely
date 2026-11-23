@@ -8,6 +8,7 @@ import {
   type Me,
   type Session,
 } from "./account-schema";
+import { projectListSchema, projectSchema, type Project } from "./project-schema";
 import type { Provider } from "./providers";
 import { readLimited } from "./read-limited";
 
@@ -112,4 +113,40 @@ export async function fetchIdentities(
   if (res === null || res.status === 401) return null;
   const parsed = identityListSchema.safeParse(res.json);
   return parsed.success ? parsed.data.identities : null;
+}
+
+/** The signed-in user's projects, or null when they cannot be loaded. */
+export async function fetchProjects(
+  baseUrl: string,
+  sessionToken: string,
+  options: Options = {},
+): Promise<Project[] | null> {
+  const res = await getJson(baseUrl, "/v1/projects", sessionToken, options);
+  if (res === null || res.status === 401) return null;
+  const parsed = projectListSchema.safeParse(res.json);
+  return parsed.success ? parsed.data.projects : null;
+}
+
+/** One of the user's projects; "missing" when it does not exist or is not theirs. */
+export async function fetchProject(
+  baseUrl: string,
+  sessionToken: string,
+  id: string,
+  options: Options = {},
+): Promise<Project | "missing" | null> {
+  const doFetch = options.fetchImpl ?? fetch;
+  try {
+    const response = await doFetch(`${baseUrl}/v1/projects/${encodeURIComponent(id)}`, {
+      cache: "no-store",
+      redirect: "error",
+      headers: { Accept: "application/json", Cookie: `${SESSION_COOKIE}=${sessionToken}` },
+      signal: AbortSignal.timeout(options.timeoutMs ?? FETCH_TIMEOUT_MS),
+    });
+    if (response.status === 404) return "missing";
+    if (!response.ok) return null;
+    const parsed = projectSchema.safeParse(JSON.parse(await readLimited(response, MAX_BODY_BYTES)));
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
 }

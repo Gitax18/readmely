@@ -25,6 +25,12 @@ export type Failure =
   | { ok: false; kind: "forbidden" }
   | { ok: false; kind: "not_found" }
   | { ok: false; kind: "conflict" }
+  | { ok: false; kind: "repository_not_found" }
+  | { ok: false; kind: "repository_too_large" }
+  | { ok: false; kind: "github_unavailable" }
+  | { ok: false; kind: "already_added" }
+  | { ok: false; kind: "project_limit" }
+  | { ok: false; kind: "analysis_running" }
   | { ok: false; kind: "unavailable" };
 
 export type Result<T> = ({ ok: true } & T) | Failure;
@@ -32,7 +38,7 @@ export type Result<T> = ({ ok: true } & T) | Failure;
 const BASE = "/api/v1";
 const DEFAULT_RETRY_SECONDS = 60;
 
-async function request(
+export async function request(
   fetchImpl: typeof fetch,
   method: string,
   path: string,
@@ -54,7 +60,7 @@ async function request(
   }
 }
 
-async function failure(res: Response | null): Promise<Failure> {
+export async function failure(res: Response | null): Promise<Failure> {
   if (res === null) return { ok: false, kind: "unavailable" };
   let code = "";
   try {
@@ -73,14 +79,28 @@ async function failure(res: Response | null): Promise<Failure> {
   }
   if (res.status === 401) return { ok: false, kind: "unauthenticated" };
   if (res.status === 403) return { ok: false, kind: "forbidden" };
+  if (res.status === 404 && code === "repository_not_found") {
+    return { ok: false, kind: "repository_not_found" };
+  }
   if (res.status === 404) return { ok: false, kind: "not_found" };
+  if (res.status === 409 && code === "already_added") return { ok: false, kind: "already_added" };
+  if (res.status === 409 && code === "project_limit") return { ok: false, kind: "project_limit" };
+  if (res.status === 409 && code === "analysis_running") {
+    return { ok: false, kind: "analysis_running" };
+  }
   if (res.status === 409) return { ok: false, kind: "conflict" };
+  if (res.status === 503 && code === "github_unavailable") {
+    return { ok: false, kind: "github_unavailable" };
+  }
+  if (res.status === 400 && code === "repository_too_large") {
+    return { ok: false, kind: "repository_too_large" };
+  }
   if (res.status === 400 && code === "invalid_code") return { ok: false, kind: "invalid_code" };
   if (res.status === 400) return { ok: false, kind: "invalid_request" };
   return { ok: false, kind: "unavailable" };
 }
 
-async function parsed<T>(res: Response, schema: z.ZodType<T>): Promise<T | null> {
+export async function parsed<T>(res: Response, schema: z.ZodType<T>): Promise<T | null> {
   try {
     const result = schema.safeParse(await res.json());
     return result.success ? result.data : null;

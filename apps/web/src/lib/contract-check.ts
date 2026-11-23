@@ -8,6 +8,7 @@ import type {
   Session,
   User,
 } from "./account-schema";
+import type { Project, ProjectJob, RepositoryPreview } from "./project-schema";
 import type { Report } from "./status-schema";
 
 /**
@@ -42,4 +43,16 @@ export const providersMatchContract: SameShape<
 export const authorizationUrlMatchesContract: SameShape<
   AuthorizationUrl,
   publicComponents["schemas"]["AuthorizationUrl"]
+> = true;
+
+// The project endpoints.
+export const projectJobMatchesContract: SameShape<
+  ProjectJob,
+  publicComponents["schemas"]["ProjectJob"]
+> = true;
+export const projectMatchesContract: SameShape<Project, publicComponents["schemas"]["Project"]> =
+  true;
+export const repositoryPreviewMatchesContract: SameShape<
+  RepositoryPreview,
+  publicComponents["schemas"]["RepositoryPreview"]
 > = true;
