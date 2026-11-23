@@ -316,6 +316,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/projects/{id}/context-pack": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The context pack for AI coding tools, in every preset
+         * @description Files that tell a coding tool what the repository is and how to work in it (CLAUDE.md, AGENTS.md, a Cursor rule, a generic CONTEXT.md), built from the last analysis. Deterministic: it costs no credits and makes no model call. It includes the summary when one has been written. 404 until a first analysis has finished, and for someone else's project.
+         */
+        get: operations["getContextPack"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/auth/providers": {
         parameters: {
             query?: never;
@@ -637,6 +657,26 @@ export interface components {
         };
         CreditHistory: {
             entries: components["schemas"]["CreditEntry"][];
+        };
+        ContextPack: {
+            commit_sha: string;
+            /** @description Whether the written summary is part of the pack. */
+            with_summary: boolean;
+            presets: components["schemas"]["ContextPackPreset"][];
+        };
+        ContextPackPreset: {
+            /** @enum {string} */
+            id: "claude" | "agents" | "cursor" | "generic";
+            label: string;
+            description: string;
+            /** @description A rough count (four characters to a token). */
+            tokens: number;
+            files: components["schemas"]["ContextPackFile"][];
+        };
+        ContextPackFile: {
+            /** @description Where the file belongs, relative to the repository root. */
+            path: string;
+            content: string;
         };
         ProjectList: {
             projects: components["schemas"]["Project"][];
@@ -1510,6 +1550,32 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProjectAnalysis"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    getContextPack: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The pack. */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContextPack"];
                 };
             };
             401: components["responses"]["Unauthenticated"];
