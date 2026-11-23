@@ -55,6 +55,12 @@ type Config struct {
 	TrustedProxies []netip.Prefix // peers whose X-Forwarded-For is believed (the web server)
 	Mailer         string         // MailerLog or MailerFile
 	MailDir        string         // where MailerFile writes
+
+	// Provider sign-in (Phase 2b). Each pair is optional; with neither value the provider is off.
+	GoogleClientID     string
+	GoogleClientSecret string // never logged
+	GitHubClientID     string
+	GitHubClientSecret string // never logged
 }
 
 // Load reads and validates the full configuration needed by the API.
@@ -102,6 +108,7 @@ func Load(getenv func(string) string) (Config, error) {
 	}
 
 	c.loadAuth(getenv, &errs)
+	c.loadOAuth(getenv, &errs)
 
 	if len(errs) > 0 {
 		return Config{}, errors.Join(errs...)
@@ -157,6 +164,50 @@ func (c *Config) loadAuth(getenv func(string) string, errs *[]error) {
 	if c.Mailer == MailerFile && c.MailDir == "" {
 		*errs = append(*errs, fieldError("MAIL_DIR", errors.New("is required when MAILER=file")))
 	}
+}
+
+// loadOAuth reads the provider credentials. A provider is on only when both its id and secret
+// are set; one without the other is a mistake worth stopping for, not a quietly disabled button.
+func (c *Config) loadOAuth(getenv func(string) string, errs *[]error) {
+	pair := func(idName, secretName string) (string, string) {
+		id, secret := value(getenv, idName, ""), value(getenv, secretName, "")
+		switch {
+		case id == "" && secret == "":
+			return "", ""
+		case id == "":
+			*errs = append(*errs, fieldError(idName, errors.New("is required when "+secretName+" is set")))
+		case secret == "":
+			*errs = append(*errs, fieldError(secretName, errors.New("is required when "+idName+" is set")))
+		default:
+			if err := validateCredential(id); err != nil {
+				*errs = append(*errs, fieldError(idName, err))
+			}
+			if err := validateCredential(secret); err != nil {
+				*errs = append(*errs, fieldError(secretName, err))
+			}
+		}
+		return id, secret
+	}
+	c.GoogleClientID, c.GoogleClientSecret = pair("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET")
+	c.GitHubClientID, c.GitHubClientSecret = pair("GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET")
+}
+
+// validateCredential accepts what providers issue (letters, digits and . _ - ~ + / =) and refuses
+// spaces, quotes, control characters and the .env.example placeholder. Never echoes the value.
+func validateCredential(v string) error {
+	if len(v) < 8 || len(v) > 256 {
+		return errors.New("must be 8 to 256 characters")
+	}
+	if strings.Contains(strings.ToLower(v), "change-me") {
+		return errors.New("is still the placeholder from .env.example")
+	}
+	for _, r := range v {
+		ok := r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("._-~+/=", r)
+		if !ok {
+			return errors.New("contains a character a provider credential does not use")
+		}
+	}
+	return nil
 }
 
 // validateOrigin accepts scheme://host[:port] and nothing else. Production needs https.
