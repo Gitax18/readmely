@@ -1,4 +1,5 @@
 import { failure, parsed, request, type Result } from "./browser-api";
+import { contextPackSchema, type ContextPack } from "./context-pack-schema";
 import { projectAnalysisSchema, type ProjectAnalysis } from "./analysis-schema";
 import {
   projectListSchema,
@@ -16,6 +17,7 @@ export interface ProjectsApi {
   get(id: string): Promise<Result<{ project: Project }>>;
   analyse(csrf: string, id: string): Promise<Result<{ project: Project }>>;
   analysis(id: string): Promise<Result<{ analysis: ProjectAnalysis }>>;
+  contextPack(id: string): Promise<Result<{ pack: ContextPack }>>;
   remove(csrf: string, id: string): Promise<Result<object>>;
 }
 
@@ -60,6 +62,16 @@ export function createProjectsApi(
       if (res?.status !== 200) return failure(res);
       const analysis = await parsed(res, projectAnalysisSchema);
       return analysis ? { ok: true, analysis } : { ok: false, kind: "unavailable" };
+    },
+    async contextPack(id) {
+      const res = await request(
+        fetchImpl,
+        "GET",
+        `/projects/${encodeURIComponent(id)}/context-pack`,
+      );
+      if (res?.status !== 200) return failure(res);
+      const pack = await parsed(res, contextPackSchema);
+      return pack ? { ok: true, pack } : { ok: false, kind: "unavailable" };
     },
     async remove(csrf, id) {
       const res = await request(fetchImpl, "DELETE", `/projects/${encodeURIComponent(id)}`, {

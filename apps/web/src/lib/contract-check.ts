@@ -9,6 +9,7 @@ import type {
   User,
 } from "./account-schema";
 import type { ProjectAnalysis, ProjectFacts, ProjectSummary } from "./analysis-schema";
+import type { ContextPack, ContextPackPreset } from "./context-pack-schema";
 import type { CreditBalance, CreditEntry } from "./credit-schema";
 import type { Project, ProjectJob, RepositoryPreview } from "./project-schema";
 import type { Report } from "./status-schema";
@@ -79,4 +80,12 @@ export const creditEntryMatchesContract: SameShape<
 export const projectSummaryMatchesContract: SameShape<
   ProjectSummary,
   publicComponents["schemas"]["ProjectSummary"]
+> = true;
+export const contextPackMatchesContract: SameShape<
+  ContextPack,
+  publicComponents["schemas"]["ContextPack"]
+> = true;
+export const contextPackPresetMatchesContract: SameShape<
+  ContextPackPreset,
+  publicComponents["schemas"]["ContextPackPreset"]
 > = true;
