@@ -358,9 +358,13 @@ func parity(code, spec []string) (undocumented, unimplemented []string) {
 
 // planned lists operations that are in a spec (contracts come first) before their handler exists.
 // Implementing one means deleting it from this list; the test below fails until you do, and fails
-// if an entry is not in the spec, so the list cannot rot. It is empty now that the account
-// endpoints exist (Phase 2a step 4); the next feature to add a contract first uses it again.
-var planned = map[string][]string{}
+// if an entry is not in the spec, so the list cannot rot. Phase 2b step 1 lists the provider routes; step 4 empties it again.
+var planned = map[string][]string{
+	"core-public": {
+		"GET /v1/auth/providers", "GET /v1/auth/{provider}/start", "GET /v1/auth/{provider}/callback",
+		"GET /v1/me/identities", "POST /v1/me/identities/{provider}/start", "DELETE /v1/me/identities/{provider}",
+	},
+}
 
 // publicRouter is the public listener as main wires it. The account routes only need to be
 // registered here: nothing in these tests reaches a handler that touches a database.

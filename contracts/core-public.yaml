@@ -265,6 +265,183 @@ paths:
         default:
           $ref: '#/components/responses/UnexpectedError'
 
+  /v1/auth/providers:
+    get:
+      operationId: listAuthProviders
+      summary: Which sign-in providers are configured
+      description: Providers without credentials are off and never listed. The login page shows a button for each one listed.
+      responses:
+        '200':
+          description: The configured providers, possibly none.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthProviders'
+              example:
+                providers: [google, github]
+        default:
+          $ref: '#/components/responses/UnexpectedError'
+  /v1/auth/{provider}/start:
+    get:
+      operationId: startOAuthLogin
+      summary: Begin signing in with a provider
+      description: >-
+        Redirects the browser to the provider's authorization page and sets a short-lived cookie that
+        binds the attempt to this browser. 404 when the provider is unknown or not configured.
+      parameters:
+        - $ref: '#/components/parameters/Provider'
+      responses:
+        '302':
+          description: Redirect to the provider.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Location:
+              $ref: '#/components/headers/Location'
+            Set-Cookie:
+              $ref: '#/components/headers/OAuthCookie'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        default:
+          $ref: '#/components/responses/UnexpectedError'
+  /v1/auth/{provider}/callback:
+    get:
+      operationId: finishOAuthLogin
+      summary: The provider sends the browser back here
+      description: >-
+        Always answers with a redirect. Success goes to /account with the session cookie set; every
+        failure goes to /login?error=CODE, where CODE is one of access_denied, invalid_state,
+        no_verified_email, provider_conflict, identity_in_use, unsupported_email, provider_error,
+        account_unavailable. Nothing the provider sends is ever shown or logged.
+      parameters:
+        - $ref: '#/components/parameters/Provider'
+        - name: code
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 2048
+        - name: state
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 256
+        - name: error
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 128
+      responses:
+        '302':
+          description: Redirect to /account or /login?error=CODE. Clears the attempt cookie; on success also sets the session cookie.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Location:
+              $ref: '#/components/headers/Location'
+            Set-Cookie:
+              $ref: '#/components/headers/OAuthCookie'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        default:
+          $ref: '#/components/responses/UnexpectedError'
+  /v1/me/identities:
+    get:
+      operationId: listIdentities
+      summary: The signed-in user's connected provider accounts
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Connected accounts, at most one per provider.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdentityList'
+              example:
+                identities:
+                  - provider: google
+                    email: ada@example.com
+                    created_at: '2026-11-23T09:30:00Z'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        default:
+          $ref: '#/components/responses/UnexpectedError'
+  /v1/me/identities/{provider}/start:
+    post:
+      operationId: startConnectIdentity
+      summary: Begin connecting a provider account to this user
+      description: >-
+        A POST with the CSRF token, never a GET, so another site cannot make a victim attach the
+        attacker's provider account. Returns the provider's authorization URL; the page navigates to it.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/Provider'
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '200':
+          description: Where to send the browser. Also sets the attempt cookie.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Set-Cookie:
+              $ref: '#/components/headers/OAuthCookie'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthorizationUrl'
+              example:
+                authorization_url: https://accounts.google.com/o/oauth2/v2/auth?client_id=example
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        default:
+          $ref: '#/components/responses/UnexpectedError'
+  /v1/me/identities/{provider}:
+    delete:
+      operationId: disconnectIdentity
+      summary: Disconnect a provider account from this user
+      description: Always allowed, because email codes keep working. 404 when that provider is not connected.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/Provider'
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '204':
+          description: Disconnected.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/UnexpectedError'
+
 components:
   headers:
     RequestId:
@@ -280,7 +457,65 @@ components:
       required: true
       schema:
         type: string
+    Location:
+      description: Where the browser is sent next.
+      required: true
+      schema:
+        type: string
+        maxLength: 2048
+    OAuthCookie:
+      description: >-
+        The sign-in attempt cookie: set at the start (Max-Age=600), cleared by the callback. Always
+        __Host-rm_oauth=...; Path=/; Secure; HttpOnly; SameSite=Lax. The callback may also set the session cookie.
+      required: true
+      schema:
+        type: string
   schemas:
+    Provider:
+      type: string
+      enum: [google, github]
+    AuthProviders:
+      type: object
+      required: [providers]
+      additionalProperties: false
+      properties:
+        providers:
+          type: array
+          maxItems: 2
+          items:
+            $ref: '#/components/schemas/Provider'
+    Identity:
+      type: object
+      required: [provider, email, created_at]
+      additionalProperties: false
+      properties:
+        provider:
+          $ref: '#/components/schemas/Provider'
+        email:
+          type: string
+          description: The address the provider reported when the account was connected.
+        created_at:
+          type: string
+          format: date-time
+    IdentityList:
+      type: object
+      required: [identities]
+      additionalProperties: false
+      properties:
+        identities:
+          type: array
+          maxItems: 2
+          items:
+            $ref: '#/components/schemas/Identity'
+    AuthorizationUrl:
+      type: object
+      required: [authorization_url]
+      additionalProperties: false
+      properties:
+        authorization_url:
+          type: string
+          format: uri
+          maxLength: 2048
     Error:
       type: object
       description: >-
@@ -435,6 +670,12 @@ components:
       description: >-
         Opaque 256-bit token. Set with Secure, HttpOnly, SameSite=Lax, Path=/ and no Domain. Only its hash is stored.
   parameters:
+    Provider:
+      name: provider
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/Provider'
     CsrfToken:
       name: X-CSRF-Token
       in: header
@@ -491,6 +732,18 @@ components:
             $ref: '#/components/schemas/Error'
           example:
             error: forbidden
+            request_id: 6P5E3ETHKJKOTOXXMXCEJGDW6I
+    Conflict:
+      description: The request conflicts with the current state, such as a provider that is already connected (conflict).
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: conflict
             request_id: 6P5E3ETHKJKOTOXXMXCEJGDW6I
     NotFound:
       description: No such resource for this user (not_found).
