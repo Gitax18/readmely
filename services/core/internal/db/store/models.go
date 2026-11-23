@@ -153,6 +153,17 @@ type ProjectSummary struct {
 	UpdatedAt time.Time
 }
 
+type ReadmeVersion struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	Version   int32
+	Content   string
+	Source    string
+	Template  *string
+	JobID     *uuid.UUID
+	CreatedAt time.Time
+}
+
 type Session struct {
 	ID            uuid.UUID
 	UserID        uuid.UUID

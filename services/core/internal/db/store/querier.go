@@ -11,6 +11,9 @@ import (
 )
 
 type Querier interface {
+	// Adds the next version. With a base version, it adds only if that is still the newest (no rows
+	// otherwise), so an edit made on top of an out-of-date copy is refused instead of overwriting.
+	AddReadmeVersion(ctx context.Context, arg AddReadmeVersionParams) (ReadmeVersion, error)
 	// One guess at the open, unexpired, not-yet-exhausted code for an address. Every guess counts;
 	// the right one also closes the challenge, so it works once. Returns no row when there is no
 	// usable code; closed_at is set when the guess was right. Concurrent guesses are serialised by
@@ -75,11 +78,15 @@ type Querier interface {
 	GetJob(ctx context.Context, arg GetJobParams) (Job, error)
 	// The newest job of a kind for a project, for the project page and the dashboard.
 	GetLatestProjectJob(ctx context.Context, arg GetLatestProjectJobParams) (Job, error)
+	// A project's README versions. Callers check the project belongs to the user first (GetProject);
+	// these are keyed by project.
+	GetLatestReadme(ctx context.Context, projectID uuid.UUID) (ReadmeVersion, error)
 	GetProject(ctx context.Context, arg GetProjectParams) (Project, error)
 	// What an analysis stores and the project page reads. Every read is scoped to the owner through
 	// the project, so someone else's project finds nothing.
 	GetProjectFacts(ctx context.Context, arg GetProjectFactsParams) (ProjectFact, error)
 	GetProjectSummary(ctx context.Context, arg GetProjectSummaryParams) (ProjectSummary, error)
+	GetReadmeVersion(ctx context.Context, arg GetReadmeVersionParams) (ReadmeVersion, error)
 	// The live session for a cookie, with its user. Ended sessions and suspended users find nothing.
 	GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (GetSessionByTokenHashRow, error)
 	GetUser(ctx context.Context, id uuid.UUID) (User, error)
@@ -95,6 +102,7 @@ type Querier interface {
 	ListProjectHubs(ctx context.Context, arg ListProjectHubsParams) ([]ListProjectHubsRow, error)
 	ListProjectJobs(ctx context.Context, arg ListProjectJobsParams) ([]Job, error)
 	ListProjects(ctx context.Context, arg ListProjectsParams) ([]Project, error)
+	ListReadmeVersions(ctx context.Context, projectID uuid.UUID) ([]ListReadmeVersionsRow, error)
 	ListUserIdentities(ctx context.Context, userID uuid.UUID) ([]OauthIdentity, error)
 	ListUserSessions(ctx context.Context, userID uuid.UUID) ([]Session, error)
 	MarkUserEmailVerified(ctx context.Context, id uuid.UUID) (User, error)
