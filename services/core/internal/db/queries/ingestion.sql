@@ -28,3 +28,14 @@ DELETE FROM graph_nodes WHERE project_id = @project_id;
 INSERT INTO project_facts (project_id, commit_sha, facts)
 VALUES (@project_id, @commit_sha, @facts)
 ON CONFLICT (project_id) DO UPDATE SET commit_sha = EXCLUDED.commit_sha, facts = EXCLUDED.facts, analysed_at = now();
+
+-- name: ListProjectHubs :many
+-- The nodes other files import most. Scoped to the owner through the project.
+SELECT n.kind, n.key, count(*)::int AS imported_by
+FROM graph_edges e
+JOIN graph_nodes n ON n.id = e.to_node
+JOIN projects p ON p.id = e.project_id
+WHERE e.project_id = @project_id AND p.user_id = @user_id AND n.kind <> 'external'
+GROUP BY n.kind, n.key
+ORDER BY imported_by DESC, n.key
+LIMIT 10;

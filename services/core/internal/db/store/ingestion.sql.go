@@ -108,6 +108,49 @@ func (q *Queries) ListProjectFiles(ctx context.Context, arg ListProjectFilesPara
 	return items, nil
 }
 
+const listProjectHubs = `-- name: ListProjectHubs :many
+SELECT n.kind, n.key, count(*)::int AS imported_by
+FROM graph_edges e
+JOIN graph_nodes n ON n.id = e.to_node
+JOIN projects p ON p.id = e.project_id
+WHERE e.project_id = $1 AND p.user_id = $2 AND n.kind <> 'external'
+GROUP BY n.kind, n.key
+ORDER BY imported_by DESC, n.key
+LIMIT 10
+`
+
+type ListProjectHubsParams struct {
+	ProjectID uuid.UUID
+	UserID    uuid.UUID
+}
+
+type ListProjectHubsRow struct {
+	Kind       string
+	Key        string
+	ImportedBy int32
+}
+
+// The nodes other files import most. Scoped to the owner through the project.
+func (q *Queries) ListProjectHubs(ctx context.Context, arg ListProjectHubsParams) ([]ListProjectHubsRow, error) {
+	rows, err := q.db.Query(ctx, listProjectHubs, arg.ProjectID, arg.UserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListProjectHubsRow{}
+	for rows.Next() {
+		var i ListProjectHubsRow
+		if err := rows.Scan(&i.Kind, &i.Key, &i.ImportedBy); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setProjectCommit = `-- name: SetProjectCommit :exec
 UPDATE projects SET commit_sha = $1 WHERE id = $2 AND user_id = $3
 `

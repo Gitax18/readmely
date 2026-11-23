@@ -85,6 +85,8 @@ type Querier interface {
 	GrantCredits(ctx context.Context, arg GrantCreditsParams) (CreditLedger, error)
 	ListCreditEntries(ctx context.Context, arg ListCreditEntriesParams) ([]CreditLedger, error)
 	ListProjectFiles(ctx context.Context, arg ListProjectFilesParams) ([]ListProjectFilesRow, error)
+	// The nodes other files import most. Scoped to the owner through the project.
+	ListProjectHubs(ctx context.Context, arg ListProjectHubsParams) ([]ListProjectHubsRow, error)
 	ListProjectJobs(ctx context.Context, arg ListProjectJobsParams) ([]Job, error)
 	ListProjects(ctx context.Context, arg ListProjectsParams) ([]Project, error)
 	ListUserIdentities(ctx context.Context, userID uuid.UUID) ([]OauthIdentity, error)
