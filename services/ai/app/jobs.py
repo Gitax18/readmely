@@ -17,7 +17,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
-JobKind = Literal["ingest", "summarise", "generate_readme", "generate_diagram", "build_context_pack"]
+JobKind = Literal["ingest", "summarise", "generate_readme", "readme_section", "generate_diagram", "build_context_pack"]
 JobStatus = Literal["queued", "running", "succeeded", "failed", "cancelled"]
 
 

@@ -20,11 +20,13 @@ from app import logs, meter, queue
 from app.config import ConfigError, WorkerSettings
 from app.db import Database
 from app.llm import LlmClient, LlmError
+from app.readme import generate_readme, regenerate_section
 from app.summarise import summarise
 
 logger = logging.getLogger("app.worker")
 
-KINDS = ["summarise"]
+HANDLERS = {"summarise": summarise, "generate_readme": generate_readme, "readme_section": regenerate_section}
+KINDS = list(HANDLERS)
 LEASE_SECONDS = 60.0
 POLL_SECONDS = 1.0
 ERROR_SLEEP_SECONDS = 5.0
@@ -89,9 +91,12 @@ async def run_job(db: Database, llm: LlmClient, settings: WorkerSettings, job: d
     code: str | None = None
     permanent = False
     try:
-        await summarise(db, llm, settings, job, report)
+        await HANDLERS[job["kind"]](db, llm, settings, job, report)
     except LlmError as exc:
-        code, permanent = exc.code, exc.permanent or exc.code in {"analysis_missing", "stale_analysis"}
+        code, permanent = (
+            exc.code,
+            exc.permanent or exc.code in {"analysis_missing", "stale_analysis", "readme_missing", "section_missing"},
+        )
     except Exception:
         logger.exception("job crashed", extra=log)
         code = "internal_error"

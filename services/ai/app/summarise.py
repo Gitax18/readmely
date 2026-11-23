@@ -10,24 +10,21 @@ from __future__ import annotations
 
 import json
 import secrets
-from collections.abc import Awaitable, Callable
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field
 
 from app import meter
 from app.config import WorkerSettings
 from app.db import Database
-from app.llm import MAX_OUTPUT_TOKENS, LlmClient, LlmError, LlmUsageError
-
-Report = Callable[[str, int], Awaitable[None]]
+from app.llm import LlmClient, LlmError
+from app.structured import Report, structured_call
 
 README_CHARS = 6_000
 EXCERPT_CHARS = 2_500
 MAX_EXCERPTS = 8
 MAX_PATHS_LISTED = 150
-ATTEMPTS = 2
 
 SYSTEM = """You write short, accurate summaries of software repositories for developers.
 
@@ -193,48 +190,18 @@ async def summarise(
     """Run one summary job. Raises LlmError for anything the caller should record and settle."""
     if not llm.configured:
         raise LlmError("llm_not_configured")
-    job_id, user_id, project_id = job["id"], job["user_id"], job["project_id"]
+    job_id, project_id = job["id"], job["project_id"]
     if project_id is None:
         raise LlmError("analysis_missing")
     await report("reading", 15)
     material, commit_sha, known_paths = await _gather(db, project_id)
     if job["payload"].get("commit_sha") != commit_sha:
         raise LlmError("stale_analysis")  # the project was analysed again since this job was queued
-    prompt = build_prompt(material)
-
-    cap_micro = int(settings.llm_daily_cap_usd * 1_000_000)
-    total_cost = 0
-    summary: Summary | None = None
-    last_error = "llm_invalid_output"
-    for attempt in range(ATTEMPTS):
-        async with db.connection() as conn:
-            spent = await meter.spent_today_micro_usd(conn)
-        if spent + llm.worst_case_micro_usd(len(SYSTEM) + len(prompt), MAX_OUTPUT_TOKENS) > cap_micro:
-            raise LlmError("spend_cap_reached")
-        await report("writing", 40 + attempt * 20)
-        usage = None
-        try:
-            raw, usage = await llm.json_call(system=SYSTEM, user=prompt, schema_name="project_summary", schema=SCHEMA)
-            summary = check(raw, known_paths)
-            status, code = "ok", None
-        except LlmUsageError as exc:
-            usage, status, code, last_error = exc.usage, "error", exc.code, exc.code
-        except ValidationError:
-            status, code, last_error = "error", "llm_invalid_output", "llm_invalid_output"
-        except LlmError as exc:
-            status, code, last_error = "error", exc.code, exc.code
-            if exc.permanent or exc.code != "llm_invalid_output":
-                await _record(db, _call_of(user_id, job_id, llm, None, status, code))
-                raise
-        await _record(db, _call_of(user_id, job_id, llm, usage, status, code))
-        total_cost += usage.cost_micro_usd if usage else 0
-        if summary is not None:
-            break
-        if last_error == "llm_refused":
-            raise LlmError("llm_refused")
-    if summary is None:
-        raise LlmError(last_error)
-
+    summary, cost = await structured_call(
+        db, llm, settings, job,
+        purpose="project_summary", system=SYSTEM, prompt=build_prompt(material),
+        schema_name="project_summary", schema=SCHEMA, validate=lambda raw: check(raw, known_paths), report=report,
+    )  # fmt: skip
     await report("saving", 90)
     async with db.connection() as conn:
         await conn.execute(
@@ -243,25 +210,4 @@ async def summarise(
             "summary = EXCLUDED.summary",
             (project_id, commit_sha, llm.model, summary.model_dump_json()),
         )
-        await meter.settle(conn, job_id, total_cost)
-
-
-async def _record(db: Database, call: meter.Call) -> None:
-    async with db.connection() as conn:
-        await meter.record_call(conn, call)
-
-
-def _call_of(user_id: UUID, job_id: UUID, llm: LlmClient, usage: Any, status: str, code: str | None) -> meter.Call:  # noqa: PLR0913, PLR0917
-    return meter.Call(
-        user_id=user_id,
-        job_id=job_id,
-        model=usage.model if usage else llm.model,
-        tier="fast",
-        purpose="project_summary",
-        input_tokens=usage.input_tokens if usage else 0,
-        output_tokens=usage.output_tokens if usage else 0,
-        cost_micro_usd=usage.cost_micro_usd if usage else 0,
-        status=status,
-        error_code=code,
-        duration_ms=usage.duration_ms if usage else 0,
-    )
+        await meter.settle(conn, job_id, cost)
