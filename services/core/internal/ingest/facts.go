@@ -372,6 +372,10 @@ func isTestPath(lower, base string) bool {
 		strings.Contains(base, ".test.") || strings.Contains(base, ".spec.") {
 		return true
 	}
+	// A root-level test.js, test.ts, tests.py and the like.
+	if stem, _, ok := strings.Cut(base, "."); ok && (stem == "test" || stem == "tests") && !strings.Contains(lower, "/") {
+		return true
+	}
 	for _, seg := range strings.Split(lower, "/") {
 		if seg == "tests" || seg == "__tests__" || seg == "test" || seg == "spec" {
 			return true

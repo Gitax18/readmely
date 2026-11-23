@@ -59,12 +59,12 @@ function Findings({ analysis }: { analysis: ProjectAnalysis }) {
               <li key={l.name} className="flex items-center gap-3 text-sm">
                 <span className="w-28 shrink-0">{l.name}</span>
                 <div
-                  className="bg-muted h-2 flex-1 overflow-hidden rounded-full"
+                  className="bg-border h-2 flex-1 overflow-hidden rounded-full"
                   role="img"
                   aria-label={`${l.name} ${l.percent} percent`}
                 >
                   <div
-                    className="bg-primary h-full"
+                    className="bg-foreground h-full"
                     style={{ width: `${Math.max(2, Math.min(100, l.percent))}%` }}
                   />
                 </div>
@@ -105,7 +105,7 @@ function Findings({ analysis }: { analysis: ProjectAnalysis }) {
           <ul className="flex flex-col gap-1">
             {f.commands.map((c) => (
               <li key={`${c.source}:${c.name}`} className="text-sm">
-                <code className="bg-muted rounded px-1.5 py-0.5 text-xs">{c.name}</code>
+                <code className="border-border rounded border px-1.5 py-0.5 text-xs">{c.name}</code>
               </li>
             ))}
           </ul>
@@ -201,7 +201,7 @@ function CodeList({ items, inline = false }: { items: string[]; inline?: boolean
     <ul className={inline ? "flex flex-wrap gap-2" : "flex flex-col gap-1"}>
       {items.map((i) => (
         <li key={i}>
-          <code className="bg-muted rounded px-1.5 py-0.5 text-xs break-all">{i}</code>
+          <code className="border-border rounded border px-1.5 py-0.5 text-xs break-all">{i}</code>
         </li>
       ))}
     </ul>
