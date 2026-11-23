@@ -336,6 +336,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/projects/{id}/diagram": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The project's architecture diagram and the state of any job drawing it
+         * @description The diagram is null until one has been generated. The job is the newest diagram job, so the page can show progress or why one failed.
+         */
+        get: operations["getDiagram"];
+        put?: never;
+        /**
+         * Draw an architecture diagram from the analysis
+         * @description Holds 15 credits and queues the job; it is charged what the model calls cost and the rest is returned, or refunded in full if it fails. 409 not_analysed before a first analysis, 409 diagram_running while one is being drawn, 402 insufficient_credits.
+         */
+        post: operations["generateDiagram"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/projects/{id}/readme": {
         parameters: {
             query?: never;
@@ -763,6 +787,23 @@ export interface components {
             path: string;
             content: string;
         };
+        GenerateDiagramRequest: {
+            /** @description Optional note on what to emphasise, for example "the background worker". May be empty. */
+            focus?: string;
+        };
+        Diagram: {
+            title: string;
+            /** @description An SVG drawn by our own renderer. Show it as an image (an img element), never inline in the page. */
+            svg: string;
+            node_count: number;
+            /** Format: date-time */
+            created_at: string;
+        };
+        DiagramState: {
+            diagram: components["schemas"]["Diagram"] | null;
+            /** @description The newest diagram job. A failed one carries why (insufficient_credits, spend_cap_reached, llm_not_configured, diagram_unusable and so on); its credits are refunded. */
+            job: components["schemas"]["ProjectJob"] | null;
+        };
         GenerateReadmeRequest: {
             /** @enum {string} */
             template: "standard" | "minimal" | "detailed";
@@ -774,8 +815,8 @@ export interface components {
         };
         RegenerateSectionRequest: {
             heading: string;
-            /** @description Optional, for example "shorter" or "add Docker steps". May be empty. */
-            instruction: string;
+            /** @description Optional, for example "shorter" or "add Docker steps". */
+            instruction?: string;
         };
         Readme: {
             version: number;
@@ -1735,6 +1776,70 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    getDiagram: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The state. */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiagramState"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    generateDiagram: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The csrf_token from GET /v1/me, bound to the current session. Required on every state-changing request that has a session. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GenerateDiagramRequest"];
+            };
+        };
+        responses: {
+            /** @description The job is queued. */
+            202: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectJob"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            402: components["responses"]["PaymentRequired"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["RateLimited"];
             default: components["responses"]["UnexpectedError"];
         };
     };

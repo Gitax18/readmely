@@ -370,6 +370,24 @@ type CreditHistory struct {
 	Entries []CreditEntry `json:"entries"`
 }
 
+// Diagram defines model for Diagram.
+type Diagram struct {
+	CreatedAt time.Time `json:"created_at"`
+	NodeCount int       `json:"node_count"`
+
+	// Svg An SVG drawn by our own renderer. Show it as an image (an img element), never inline in the page.
+	Svg   string `json:"svg"`
+	Title string `json:"title"`
+}
+
+// DiagramState defines model for DiagramState.
+type DiagramState struct {
+	Diagram *Diagram `json:"diagram"`
+
+	// Job The newest diagram job. A failed one carries why (insufficient_credits, spend_cap_reached, llm_not_configured, diagram_unusable and so on); its credits are refunded.
+	Job *ProjectJob `json:"job"`
+}
+
 // Error The generic error body. Details never appear here; they go to the log only. The Go API sends not_found, method_not_allowed and internal_error. The AI service also sends unauthorized, payload_too_large and invalid_request.
 type Error struct {
 	// Error A stable machine-readable code.
@@ -379,6 +397,12 @@ type Error struct {
 
 	// RequestId Example: 6P5E3ETHKJKOTOXXMXCEJGDW6I
 	RequestId string `json:"request_id"`
+}
+
+// GenerateDiagramRequest defines model for GenerateDiagramRequest.
+type GenerateDiagramRequest struct {
+	// Focus Optional note on what to emphasise, for example "the background worker". May be empty.
+	Focus *string `json:"focus,omitempty"`
 }
 
 // GenerateReadmeRequest defines model for GenerateReadmeRequest.
@@ -613,8 +637,8 @@ type ReadmeVersions struct {
 type RegenerateSectionRequest struct {
 	Heading string `json:"heading"`
 
-	// Instruction Optional, for example "shorter" or "add Docker steps". May be empty.
-	Instruction string `json:"instruction"`
+	// Instruction Optional, for example "shorter" or "add Docker steps".
+	Instruction *string `json:"instruction,omitempty"`
 }
 
 // RepositoryPreview defines model for RepositoryPreview.
@@ -801,6 +825,12 @@ type AnalyseProjectParams struct {
 	XCSRFToken CsrfToken `json:"X-CSRF-Token"`
 }
 
+// GenerateDiagramParams defines parameters for GenerateDiagram.
+type GenerateDiagramParams struct {
+	// XCSRFToken The csrf_token from GET /v1/me, bound to the current session. Required on every state-changing request that has a session.
+	XCSRFToken CsrfToken `json:"X-CSRF-Token"`
+}
+
 // GenerateReadmeParams defines parameters for GenerateReadme.
 type GenerateReadmeParams struct {
 	// XCSRFToken The csrf_token from GET /v1/me, bound to the current session. Required on every state-changing request that has a session.
@@ -842,6 +872,9 @@ type CreateProjectJSONRequestBody = RepositoryUrlRequest
 
 // PreviewRepositoryJSONRequestBody defines body for PreviewRepository for application/json ContentType.
 type PreviewRepositoryJSONRequestBody = RepositoryUrlRequest
+
+// GenerateDiagramJSONRequestBody defines body for GenerateDiagram for application/json ContentType.
+type GenerateDiagramJSONRequestBody = GenerateDiagramRequest
 
 // GenerateReadmeJSONRequestBody defines body for GenerateReadme for application/json ContentType.
 type GenerateReadmeJSONRequestBody = GenerateReadmeRequest
