@@ -14,7 +14,7 @@ test.beforeEach(async () => {
 
 test.describe("status page", () => {
   test("loads and shows everything operational", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/status");
     await expect(page).toHaveTitle("Readmely status");
     await expect(page.getByRole("heading", { level: 1, name: "Readmely status" })).toBeVisible();
     await expect(
@@ -25,14 +25,14 @@ test.describe("status page", () => {
   });
 
   test("shows each dependency at the full detail level", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/status");
     await expect(page.getByText("postgres", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("redis", { exact: true })).toBeVisible();
   });
 
   test("shows degraded when the AI service is unreachable", async ({ page }) => {
     await scenario("degraded");
-    await page.goto("/");
+    await page.goto("/status");
     await expect(
       page.getByRole("heading", { level: 2, name: "Some services are degraded" }),
     ).toBeVisible();
@@ -41,7 +41,7 @@ test.describe("status page", () => {
 
   test("shows unavailable when the API's own database is down", async ({ page }) => {
     await scenario("unavailable");
-    await page.goto("/");
+    await page.goto("/status");
     await expect(
       page.getByRole("heading", { level: 2, name: "Service unavailable" }),
     ).toBeVisible();
@@ -49,7 +49,7 @@ test.describe("status page", () => {
 
   test("shows API unreachable when the API errors", async ({ page }) => {
     await scenario("error500");
-    await page.goto("/");
+    await page.goto("/status");
     await expect(
       page.getByRole("heading", { level: 2, name: /can.t reach the readmely api/i }),
     ).toBeVisible();
@@ -58,7 +58,7 @@ test.describe("status page", () => {
   test("times out a hanging API and still renders", async ({ page }) => {
     await scenario("hang");
     const start = Date.now();
-    await page.goto("/");
+    await page.goto("/status");
     await expect(
       page.getByRole("heading", { level: 2, name: /can.t reach the readmely api/i }),
     ).toBeVisible();
@@ -68,7 +68,7 @@ test.describe("status page", () => {
   test("refuses malformed and oversized API responses", async ({ page }) => {
     for (const name of ["malformed", "huge"]) {
       await scenario(name);
-      await page.goto("/");
+      await page.goto("/status");
       await expect(
         page.getByRole("heading", { level: 2, name: /invalid response/i }),
       ).toBeVisible();
@@ -79,7 +79,7 @@ test.describe("status page", () => {
     await scenario("xss");
     const dialogs: string[] = [];
     page.on("dialog", (d) => dialogs.push(d.message()));
-    await page.goto("/");
+    await page.goto("/status");
     await expect(page.getByRole("heading", { level: 2, name: /invalid response/i })).toBeVisible();
     expect(
       await page.evaluate(() => (window as unknown as { __pwned?: number }).__pwned),
@@ -89,7 +89,7 @@ test.describe("status page", () => {
   });
 
   test("has sensible semantics and conveys status in text", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/status");
     await expect(page.locator("html")).toHaveAttribute("lang", "en");
     await expect(page.getByRole("main")).toHaveCount(1);
     await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
@@ -110,13 +110,13 @@ test.describe("coarse detail (production default)", () => {
     page,
     request,
   }) => {
-    await page.goto(COARSE);
+    await page.goto(`${COARSE}/status`);
     await expect(
       page.getByRole("heading", { level: 2, name: "All systems operational" }),
     ).toBeVisible();
     await expect(page.getByText("AI service")).toBeVisible();
 
-    const raw = await (await request.get(COARSE)).text();
+    const raw = await (await request.get(`${COARSE}/status`)).text();
     expect(raw).not.toMatch(/postgres|redis/i);
     expect(await page.content()).not.toMatch(/postgres|redis/i);
   });
@@ -161,7 +161,7 @@ test.describe("security headers", () => {
     });
     page.on("pageerror", (e) => problems.push(e.message));
 
-    await page.goto("/");
+    await page.goto("/status");
     await expect(
       page.getByRole("heading", { level: 2, name: "All systems operational" }),
     ).toBeVisible();

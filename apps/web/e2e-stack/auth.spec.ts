@@ -13,6 +13,9 @@ async function signIn(page: Page, email: string) {
   const code = await latestCode(email);
   await page.getByLabel("6-digit code").fill(code);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  // An emailed code lands on the dashboard; the account page is one click away.
+  await expect(page).toHaveURL(/\/dashboard$/);
+  await page.goto("/account");
   await expect(page).toHaveURL(/\/account$/);
 }
 
@@ -97,7 +100,7 @@ test.describe("signed out", () => {
 
     await page.getByLabel("6-digit code").fill(code);
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
-    await expect(page).toHaveURL(/\/account$/);
+    await expect(page).toHaveURL(/\/dashboard$/);
   });
 });
 
@@ -127,7 +130,8 @@ test.describe("signing in", () => {
     await expect(page).toHaveURL(/\/account$/);
     await expect(page.getByText(email)).toBeVisible();
     await page.goto("/login");
-    await expect(page).toHaveURL(/\/account$/);
+    await expect(page).toHaveURL(/\/dashboard$/);
+    await page.goto("/account");
 
     // Rename: persists across a reload.
     await page.getByLabel("Display name").fill("Ada Lovelace");

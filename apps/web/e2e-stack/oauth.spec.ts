@@ -36,6 +36,8 @@ async function signIn(page: Page, email: string) {
   await expect(page.getByLabel("6-digit code")).toBeVisible();
   await page.getByLabel("6-digit code").fill(await latestCode(email));
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page).toHaveURL(/\/dashboard$/);
+  await page.goto("/account");
   await expect(page).toHaveURL(/\/account$/);
 }
 
@@ -195,7 +197,7 @@ test.describe("connected accounts", () => {
     await expect(alerts(page).filter({ hasText: /already connected to another/i })).toBeVisible();
     // An unknown code is not carried over, and shows nothing.
     await page.goto("/login?error=made_up");
-    await expect(page).toHaveURL(/\/account$/);
+    await expect(page).toHaveURL(/\/dashboard$/);
     await expect(alerts(page)).toHaveCount(0);
   });
 
