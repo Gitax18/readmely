@@ -145,15 +145,39 @@ func (s *SMTPMailer) compose(to string, m Message) ([]byte, error) {
 	h("Date", time.Now().UTC().Format(time.RFC1123Z))
 	h("Message-ID", fmt.Sprintf("<%x@%s>", id, domain))
 	h("MIME-Version", "1.0")
-	h("Content-Type", `text/plain; charset="utf-8"`)
-	h("Content-Transfer-Encoding", "quoted-printable")
+	if m.HTML == "" {
+		h("Content-Type", `text/plain; charset="utf-8"`)
+		h("Content-Transfer-Encoding", "quoted-printable")
+		b.WriteString("\r\n")
+		if err := writeQP(&b, m.Text); err != nil {
+			return nil, err
+		}
+		return b.Bytes(), nil
+	}
+	// Both versions: clients show the last part they can draw, so plain text goes first.
+	boundary := fmt.Sprintf("readmely-%x", id)
+	h("Content-Type", fmt.Sprintf(`multipart/alternative; boundary="%s"`, boundary))
 	b.WriteString("\r\n")
-	qp := quotedprintable.NewWriter(&b)
-	if _, err := qp.Write([]byte(strings.ReplaceAll(m.Text, "\r\n", "\n"))); err != nil {
-		return nil, fmt.Errorf("smtp: %w", err)
+	for _, part := range []struct{ kind, body string }{{"text/plain", m.Text}, {"text/html", m.HTML}} {
+		b.WriteString("--" + boundary + "\r\n")
+		fmt.Fprintf(&b, "Content-Type: %s; charset=\"utf-8\"\r\n", part.kind)
+		b.WriteString("Content-Transfer-Encoding: quoted-printable\r\n\r\n")
+		if err := writeQP(&b, part.body); err != nil {
+			return nil, err
+		}
+		b.WriteString("\r\n")
+	}
+	b.WriteString("--" + boundary + "--\r\n")
+	return b.Bytes(), nil
+}
+
+func writeQP(b *bytes.Buffer, body string) error {
+	qp := quotedprintable.NewWriter(b)
+	if _, err := qp.Write([]byte(strings.ReplaceAll(body, "\r\n", "\n"))); err != nil {
+		return fmt.Errorf("smtp: %w", err)
 	}
 	if err := qp.Close(); err != nil {
-		return nil, fmt.Errorf("smtp: %w", err)
+		return fmt.Errorf("smtp: %w", err)
 	}
-	return b.Bytes(), nil
+	return nil
 }

@@ -41,12 +41,14 @@ const (
 	secret    = "test-secret-test-secret-test-secret-0123"
 )
 
-// capture is a Mailer that keeps what it was asked to send.
+// capture is a Mailer that keeps what it was asked to send. Welcome emails are kept apart, so the
+// counts the tests make of codes and alerts are not changed by a new account being greeted.
 type capture struct {
-	mu   sync.Mutex
-	msgs []mail.Message
-	gate chan struct{} // when set, Send blocks until it is closed
-	in   chan struct{} // signalled when a Send starts
+	mu       sync.Mutex
+	msgs     []mail.Message
+	welcomes []mail.Message
+	gate     chan struct{} // when set, Send blocks until it is closed
+	in       chan struct{} // signalled when a Send starts
 }
 
 func (c *capture) Send(ctx context.Context, m mail.Message) error {
@@ -65,8 +67,26 @@ func (c *capture) Send(ctx context.Context, m mail.Message) error {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if m.Subject == "Welcome to Readmely" {
+		c.welcomes = append(c.welcomes, m)
+		return nil
+	}
 	c.msgs = append(c.msgs, m)
 	return nil
+}
+
+// welcomed is how many welcome emails went to the address, after giving the queue a moment.
+func (c *capture) welcomed(email string) int {
+	time.Sleep(150 * time.Millisecond)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	n := 0
+	for _, m := range c.welcomes {
+		if m.To == email {
+			n++
+		}
+	}
+	return n
 }
 
 func (c *capture) to(email string) []mail.Message {

@@ -23,6 +23,8 @@ ENV NODE_ENV=production \
     PORT=3000
 COPY --from=build --chown=root:root /app/.next/standalone ./
 COPY --from=build --chown=root:root /app/.next/static ./.next/static
+# Files served as they are, such as the logo the emails show.
+COPY --from=build --chown=root:root /app/public ./public
 USER 65532:65532
 EXPOSE 3000
 # Distroless has no shell; this is the Node entrypoint with the script as argument.

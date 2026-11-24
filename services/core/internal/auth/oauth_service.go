@@ -14,7 +14,6 @@ import (
 	"github.com/Gitax18/readmely/services/core/internal/clientip"
 	"github.com/Gitax18/readmely/services/core/internal/db/store"
 	"github.com/Gitax18/readmely/services/core/internal/githubaccess"
-	"github.com/Gitax18/readmely/services/core/internal/mail"
 	"github.com/Gitax18/readmely/services/core/internal/oauth"
 	"github.com/Gitax18/readmely/services/core/internal/ratelimit"
 )
@@ -337,6 +336,7 @@ func isUnique(err error, constraint string) bool {
 type loginOutcome struct {
 	in        *LoggedIn
 	attached  bool // an existing account just gained this provider
+	created   bool // the account was created by this sign-in
 	newDevice bool
 }
 
@@ -349,7 +349,9 @@ func (s *Service) finishLogin(ctx context.Context, c Callback, account, email, n
 		switch {
 		case err == nil:
 			label := providerLabel(c.Provider)
-			if out.attached {
+			if out.created {
+				s.welcome(out.in.User)
+			} else if out.attached {
 				s.alertConnected(ctx, out.in.User, label, email, c.UserAgent)
 			} else if out.newDevice {
 				s.alertNewDevice(ctx, out.in.User, label, c.UserAgent)
@@ -425,7 +427,7 @@ func (s *Service) loginTx(ctx context.Context, c Callback, account, email, name 
 			if _, err := q.CreateIdentity(ctx, store.CreateIdentityParams{UserID: user.ID, Provider: c.Provider, ProviderUserID: account, Email: email}); err != nil {
 				return err
 			}
-			out.attached = existed
+			out.attached, out.created = existed, !existed
 		default:
 			return err
 		}
@@ -639,7 +641,13 @@ func (s *Service) alert(ctx context.Context, user store.User, subject, text stri
 		s.logger.InfoContext(ctx, "alert dropped", "reason", "per-user hourly cap", "user_id", user.ID)
 		return
 	}
-	s.mail.Enqueue(mail.Message{To: user.Email, Subject: subject, Text: text})
+	s.mail.Enqueue(s.brand.Notice(user.Email, subject, "Security notice", subject, text))
+}
+
+// welcome greets a new account once, right after it is created. Account creation is already
+// limited by the sign-in limits, so it needs no limit of its own.
+func (s *Service) welcome(user store.User) {
+	s.mail.Enqueue(s.brand.Welcome(user.Email, user.DisplayName, WelcomeCredits))
 }
 
 func (s *Service) alertConnected(ctx context.Context, user store.User, label, providerEmail, userAgent string) {

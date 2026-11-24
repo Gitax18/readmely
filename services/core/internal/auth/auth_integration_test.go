@@ -88,6 +88,9 @@ func TestNewAddressSignsInAndGetsAnAccount(t *testing.T) {
 	if got := decodeMap(t, me)["user"].(map[string]any)["email"]; got != "ada@example.com" {
 		t.Errorf("email = %v", got)
 	}
+	if n := e.mail.welcomed("ada@example.com"); n != 1 {
+		t.Errorf("a new account was sent %d welcome emails, want 1", n)
+	}
 }
 
 // Scenario 2: the same mailbox in other spellings is one account, and a second sign-in
@@ -108,6 +111,9 @@ func TestExistingAddressSignsInWithoutDuplicates(t *testing.T) {
 	}
 	if got := countRows(t, e, `SELECT count(*) FROM sessions`); got != 2 {
 		t.Errorf("sessions = %d, want 2", got)
+	}
+	if n := e.mail.welcomed("ada@example.com"); n != 1 {
+		t.Errorf("signing in again sent %d welcome emails in all, want 1", n)
 	}
 	// "+tag" is a different mailbox and stays a different account.
 	e.resetLimits()
