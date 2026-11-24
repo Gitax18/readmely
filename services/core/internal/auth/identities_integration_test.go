@@ -220,6 +220,21 @@ func TestAProviderAccountBelongsToOneUser(t *testing.T) {
 	}
 }
 
+// awaitSubject waits until an email to the address has a subject containing the text.
+func (e *env) awaitSubject(to, text string) {
+	e.t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		for _, m := range e.mail.to(to) {
+			if strings.Contains(m.Subject, text) {
+				return
+			}
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	e.t.Fatalf("no email to %s with %q in its subject arrived", to, text)
+}
+
 // Scenario 11.
 func TestDisconnect(t *testing.T) {
 	t.Parallel()
@@ -227,6 +242,9 @@ func TestDisconnect(t *testing.T) {
 	l := e.signIn("ada@example.com", "")
 	e.connect(l, "google", ada("g-1"))
 	e.connect(l, "github", ada("583231"))
+	// Alerts are sent through a queue that delivers in order, so once the last "connected" alert is here
+	// everything earlier is too, and none of it is counted as new below.
+	e.awaitSubject("ada@example.com", "GitHub connected")
 	before := len(e.mail.to("ada@example.com"))
 
 	path := "/v1/me/identities/google"
@@ -253,14 +271,8 @@ func TestDisconnect(t *testing.T) {
 	if rec := l.send(e, "DELETE", path, ""); rec.Code != 404 {
 		t.Errorf("disconnecting twice = %d, want 404", rec.Code)
 	}
-	// The same Google account now creates a link to the account again through the email match, because it
-	// is verified: it is not a lockout and not a merge.
-	// Email codes always still work.
-	e.resetLimits()
-	again := e.signIn("ada@example.com", "")
-	if again.userID != l.userID {
-		t.Error("email sign-in reached another account")
-	}
+	// The alert is queued, so wait for it before signing in: otherwise the next email to arrive can be the
+	// alert, and signIn would read it as the sign-in code.
 	mails := e.awaitMails("ada@example.com", before+1)
 	var found bool
 	for _, m := range mails {
@@ -270,6 +282,14 @@ func TestDisconnect(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("no disconnect alert in %q", mails)
+	}
+	// The same Google account now creates a link to the account again through the email match, because it
+	// is verified: it is not a lockout and not a merge.
+	// Email codes always still work.
+	e.resetLimits()
+	again := e.signIn("ada@example.com", "")
+	if again.userID != l.userID {
+		t.Error("email sign-in reached another account")
 	}
 }
 
