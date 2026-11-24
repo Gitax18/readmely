@@ -101,7 +101,9 @@ async def run_job(db: Database, llm: LlmClient, settings: WorkerSettings, job: d
     except LlmError as exc:
         code, permanent = (
             exc.code,
-            exc.permanent or exc.code in {"analysis_missing", "stale_analysis", "readme_missing", "section_missing"},
+            exc.permanent
+            or exc.code
+            in {"analysis_missing", "stale_analysis", "readme_missing", "section_missing", "no_database_files"},
         )
     except Exception:
         logger.exception("job crashed", extra=log)

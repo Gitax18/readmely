@@ -78,14 +78,17 @@ type Querier interface {
 	// The connected account for a provider's stable id, with its user (the caller checks the status).
 	GetIdentityByProviderAccount(ctx context.Context, arg GetIdentityByProviderAccountParams) (GetIdentityByProviderAccountRow, error)
 	GetJob(ctx context.Context, arg GetJobParams) (Job, error)
+	// The newest diagram job of one kind. A job's kind is in its payload; jobs queued before kinds
+	// existed have none and are architecture jobs.
+	GetLatestDiagramJob(ctx context.Context, arg GetLatestDiagramJobParams) (Job, error)
 	// The newest job of a kind for a project, for the project page and the dashboard.
 	GetLatestProjectJob(ctx context.Context, arg GetLatestProjectJobParams) (Job, error)
 	// A project's README versions. Callers check the project belongs to the user first (GetProject);
 	// these are keyed by project.
 	GetLatestReadme(ctx context.Context, projectID uuid.UUID) (ReadmeVersion, error)
 	GetProject(ctx context.Context, arg GetProjectParams) (Project, error)
-	// A project's diagram. Callers check the project belongs to the user first (GetProject).
-	GetProjectDiagram(ctx context.Context, projectID uuid.UUID) (ProjectDiagram, error)
+	// A project's diagrams, one per kind. Callers check the project belongs to the user first (GetProject).
+	GetProjectDiagram(ctx context.Context, arg GetProjectDiagramParams) (ProjectDiagram, error)
 	// What an analysis stores and the project page reads. Every read is scoped to the owner through
 	// the project, so someone else's project finds nothing.
 	GetProjectFacts(ctx context.Context, arg GetProjectFactsParams) (ProjectFact, error)

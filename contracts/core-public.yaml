@@ -654,17 +654,20 @@ paths:
           $ref: '#/components/responses/NotFound'
         default:
           $ref: '#/components/responses/UnexpectedError'
-  /v1/projects/{id}/diagram:
+  /v1/projects/{id}/diagrams/{kind}:
     get:
       operationId: getDiagram
-      summary: The project's architecture diagram and the state of any job drawing it
+      summary: The project's diagram of one kind and the state of any job drawing it
       description: >-
-        The diagram is null until one has been generated. The job is the newest diagram job, so the page
-        can show progress or why one failed.
+        A project has at most one diagram of each kind: `architecture` (the main parts and how they talk) and
+        `database` (an entity relationship diagram drawn from the schema and SQL files). The diagram is null
+        until one has been generated. The job is the newest job that draws this kind, so the page can show
+        progress or why one failed. An unknown kind is 404.
       security:
         - sessionCookie: []
       parameters:
         - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/DiagramKind'
       responses:
         '200':
           description: The state.
@@ -683,15 +686,17 @@ paths:
           $ref: '#/components/responses/UnexpectedError'
     post:
       operationId: generateDiagram
-      summary: Draw an architecture diagram from the analysis
+      summary: Draw a diagram of one kind from the analysis
       description: >-
-        Holds 15 credits and queues the job; it is charged what the model calls cost and the rest is
+        The database kind reads the repository's SQL, migration and model files; a repository with none
+        yields a failed job (no_database_files) and a refund. Holds 15 credits and queues the job; it is charged what the model calls cost and the rest is
         returned, or refunded in full if it fails. 409 not_analysed before a first analysis, 409
         diagram_running while one is being drawn, 402 insufficient_credits.
       security:
         - sessionCookie: []
       parameters:
         - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/DiagramKind'
         - $ref: '#/components/parameters/CsrfToken'
       requestBody:
         required: true
@@ -2102,6 +2107,13 @@ components:
       schema:
         type: string
         format: uuid
+    DiagramKind:
+      name: kind
+      in: path
+      required: true
+      schema:
+        type: string
+        enum: [architecture, database]
     Provider:
       name: provider
       in: path

@@ -201,6 +201,8 @@ export function diagramFailureText(code: string | null): string {
       return "Readmely has reached its limit for AI work today. Try again tomorrow. Nothing was charged.";
     case "llm_not_configured":
       return "AI drawing is not switched on for this server. Nothing was charged.";
+    case "no_database_files":
+      return "No SQL, migration or schema files were found in this repository, so there was nothing to draw a database from. Nothing was charged.";
     case "llm_invalid_output":
     case "diagram_unusable":
       return "The diagram did not come out clean enough to show. Nothing was charged. Try again.";

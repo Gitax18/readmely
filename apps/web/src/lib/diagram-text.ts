@@ -13,4 +13,52 @@ export function svgSize(svg: string): { width: number; height: number } | null {
 }
 
 export const DIAGRAM_COST = 15;
+
+/** The two diagrams a project can have, one of each. */
+export type DiagramKind = "architecture" | "database";
+
+export const DIAGRAM_KINDS: readonly DiagramKind[] = ["architecture", "database"];
+
+/** Everything on the diagram card that differs between the two kinds. */
+export const KIND_TEXT: Record<
+  DiagramKind,
+  {
+    tab: string;
+    region: string;
+    file: string;
+    unit: string;
+    title: string;
+    again: string;
+    about: string;
+    hint: string;
+    field: string;
+    button: string;
+  }
+> = {
+  architecture: {
+    tab: "Architecture",
+    region: "Architecture diagram",
+    file: "architecture",
+    unit: "parts",
+    title: "Draw your architecture diagram",
+    again: "Draw a new diagram",
+    about: "A picture of the main parts and how they talk to each other, drawn from the analysis.",
+    hint: 'Optional, for example "the background worker".',
+    field: "Anything it should emphasise?",
+    button: "Draw my diagram",
+  },
+  database: {
+    tab: "Database (ER)",
+    region: "Database diagram",
+    file: "database",
+    unit: "tables",
+    title: "Draw your database diagram",
+    again: "Draw a new database diagram",
+    about:
+      "An entity relationship diagram: the tables and how they point at each other, read from the SQL, migration and schema files in the repository.",
+    hint: 'Optional, for example "users and billing".',
+    field: "Which tables matter most?",
+    button: "Draw my database",
+  },
+};
 export const ZOOM_STEPS = [0.5, 0.75, 1, 1.5, 2] as const;

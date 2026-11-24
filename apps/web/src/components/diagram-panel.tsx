@@ -12,7 +12,14 @@ import { Message } from "@/components/ui/message";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { DiagramState } from "@/lib/diagram-schema";
-import { DIAGRAM_COST, ZOOM_STEPS, svgDataUrl, svgSize } from "@/lib/diagram-text";
+import {
+  DIAGRAM_COST,
+  KIND_TEXT,
+  ZOOM_STEPS,
+  svgDataUrl,
+  svgSize,
+  type DiagramKind,
+} from "@/lib/diagram-text";
 import { diagramFailureText, diagramStepLabel, projectFailureText } from "@/lib/project-text";
 import type { ProjectsApi } from "@/lib/projects-api";
 import { cn } from "@/lib/utils";
@@ -34,16 +41,19 @@ function save(blob: Blob, name: string) {
   URL.revokeObjectURL(url);
 }
 
-/** The architecture diagram: draw it, look at it (zoom, fit, drag to pan), download it, draw it again. */
+/** One kind of diagram: draw it, look at it (zoom, fit, drag to pan), download it, draw it again. */
 export function DiagramPanel({
   api,
   projectId,
   csrf,
+  kind = "architecture",
 }: {
   api: ProjectsApi;
   projectId: string;
   csrf: string;
+  kind?: DiagramKind;
 }) {
+  const text = KIND_TEXT[kind];
   const router = useRouter();
   const [load, setLoad] = useState<Load>({ kind: "loading" });
   const [focus, setFocus] = useState("");
@@ -56,20 +66,20 @@ export function DiagramPanel({
 
   useEffect(() => {
     let live = true;
-    void api.diagram(projectId).then((res) => {
+    void api.diagram(projectId, kind).then((res) => {
       if (!live) return;
       setLoad(res.ok ? { kind: "ready", state: res.state } : { kind: "error" });
     });
     return () => {
       live = false;
     };
-  }, [api, projectId]);
+  }, [api, projectId, kind]);
 
   const state = load.kind === "ready" ? load.state : null;
   const working = state !== null && isWorking(state);
 
   usePolling(working, async () => {
-    const res = await api.diagram(projectId);
+    const res = await api.diagram(projectId, kind);
     if (!res.ok) return;
     setLoad({ kind: "ready", state: res.state });
     if (!isWorking(res.state)) router.refresh(); // the credit balance changed
@@ -79,21 +89,21 @@ export function DiagramPanel({
     if (busy) return;
     setBusy(true);
     setError(null);
-    const res = await api.generateDiagram(csrf, projectId, focus.trim());
+    const res = await api.generateDiagram(csrf, projectId, kind, focus.trim());
     setBusy(false);
     if (!res.ok) {
       if (res.kind === "unauthenticated") router.replace("/login");
       else setError(projectFailureText(res));
       return;
     }
-    const next = await api.diagram(projectId);
+    const next = await api.diagram(projectId, kind);
     if (next.ok) setLoad({ kind: "ready", state: next.state });
     router.refresh();
   }
 
   function downloadSvg() {
     if (state?.diagram)
-      save(new Blob([state.diagram.svg], { type: "image/svg+xml" }), "architecture.svg");
+      save(new Blob([state.diagram.svg], { type: "image/svg+xml" }), `${text.file}.svg`);
   }
 
   function downloadPng() {
@@ -110,7 +120,7 @@ export function DiagramPanel({
       if (!ctx) return;
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       canvas.toBlob((blob) => {
-        if (blob) save(blob, "architecture.png");
+        if (blob) save(blob, `${text.file}.png`);
       }, "image/png");
     };
     img.src = svgDataUrl(d.svg);
@@ -177,7 +187,9 @@ export function DiagramPanel({
           <div className="border-border flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
               <span className="text-sm font-semibold">{d.title}</span>
-              <span className="text-muted-foreground text-xs">{d.node_count} parts</span>
+              <span className="text-muted-foreground text-xs">
+                {d.node_count} {text.unit}
+              </span>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <div
@@ -211,7 +223,7 @@ export function DiagramPanel({
           <div
             ref={viewport}
             role="region"
-            aria-label="Architecture diagram"
+            aria-label={text.region}
             tabIndex={0}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
@@ -250,17 +262,12 @@ export function DiagramPanel({
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
               <Network className="text-accent size-4" aria-hidden />
-              {d ? "Draw a new diagram" : "Draw your architecture diagram"}
+              {d ? text.again : text.title}
             </CardTitle>
-            <CardDescription>
-              A picture of the main parts and how they talk to each other, drawn from the analysis.
-            </CardDescription>
+            <CardDescription>{text.about}</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
-            <Field
-              label={d ? "Draw it again" : "Anything it should emphasise?"}
-              hint={'Optional, for example "the background worker".'}
-            >
+            <Field label={d ? "Draw it again" : text.field} hint={text.hint}>
               {(field) => (
                 <Input
                   {...field}
@@ -273,7 +280,7 @@ export function DiagramPanel({
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
               <Button variant="accent" size="lg" busy={busy} onClick={() => void generate()}>
                 <Sparkles aria-hidden />
-                {d ? "Draw a new diagram" : "Draw my diagram"}
+                {d ? text.again : text.button}
               </Button>
               <span className="text-muted-foreground text-xs">
                 Up to {DIAGRAM_COST} credits; you pay what it costs and the rest is returned.
