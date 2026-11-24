@@ -10,8 +10,8 @@ The shortest safe path from today (sign-in is done) to a first release of Readme
 |---|---|
 | Approval | You approve this roadmap and the brief once. After that each phase is built on its own branch without a separate plan sign-off. |
 | When I stop | Only for a decision that is yours: money, accounts, credentials, hosting, product wording. Section 6 lists them with a recommendation and the phase that needs each. |
-| Tests | No new tests are written while version 1 is built. The existing suite and every CI gate stay and must pass; `main` still needs a green `ci-ok`. A test-backfill step in Phase 9 covers the security-critical code. |
-| Coverage gates | The web gate (90% lines) and the Python gate (`fail_under = 90`) would fail on code without tests. They are lowered in one clearly labelled commit (`ci: lower the coverage gates while version 1 is built`) and restored in Phase 9. |
+| Tests | No new tests are written while version 1 is built. The existing suite and every CI gate stay and must pass; `main` still needs a green `ci-ok`. A test-backfill step in Phase 10 covers the security-critical code. |
+| Coverage gates | The web gate (90% lines) and the Python gate (`fail_under = 90`) would fail on code without tests. They are lowered in one clearly labelled commit (`ci: lower the coverage gates while version 1 is built`) and restored in Phase 10. |
 | Still enforced | Linters, type checks, `make gen-check`, the contract check, dependency audits, the secret scan, image scans, and the commit-message check. Contracts-first stays: it is cheap and it keeps Go, Python and TypeScript in agreement. |
 | Verification | Instead of tests, I run each feature in the real stack (`make up-app`) and drive it in a browser before opening the pull request, and the PR body lists what I checked. |
 | Git | One branch and one pull request per phase, typed commits (`feat(core): ...`), no work-in-progress messages, a PR body with Summary and "How I checked it". Merge commits, as so far. A recruiter reading the history should be able to follow the product being built. |
@@ -36,7 +36,8 @@ Sizes are relative (S, M, L), not calendar estimates. Each phase ends with somet
 | 6 | Context pack | M | Download a context pack for an AI coding tool | `feat/context-pack` |
 | 7 | README | L | Generate, edit and download a README (first full demo) | `feat/readme` |
 | 8 | Overview diagram | L | Generate and download an architecture diagram | `feat/diagram` |
-| 9 | Release | M | Use it on the internet at your own domain | `feat/release` |
+| 9 | UI improvement | L | Use a finished-looking app: landing page, design system and every screen redone | `feat/ui-redesign` |
+| 10 | Release | M | Use it on the internet at your own domain | `feat/release` |
 
 Dependencies are linear except that 6 and 7 could swap; the context pack goes first because the README writer reads from it. Phase 7 is the first demo you can show someone, so it is the milestone to protect.
 
@@ -48,7 +49,7 @@ Dependencies are linear except that 6 and 7 could swap; the context pack goes fi
 | 3 | Done (PR #19) | Progress is polled every two seconds instead of streamed with server-sent events: the same-origin bridge buffers responses and caps their size, so a stream would need a second path out of the web server. A `POST /v1/projects/preview` endpoint checks a repository before anything is created. Signing in still lands on `/account`; the post-login destination moves to the dashboard with the landing page in Phase 9. The worker's analysis steps are a placeholder until Phase 4. |
 | 4 | Done (PR #20) | Parsing: Go uses the standard library parser; Python, JavaScript and TypeScript are read line by line with patterns instead of tree-sitter, which needs native code in the worker image and adds little for what the facts and the graph use. The repository is read from a GitHub archive pinned to one commit, in memory, so there is no clone and nothing from it touches the disk, which is why no extra sandbox layer was needed beyond the existing locked-down container. Coverage gates for the web app are 55/50/50/55 while tests are skipped. |
 | 5 | Done (PR #22) | Split in two: credits shipped first (PR #21: a one-time grant of 100, balance and history, `/usage`) and the model client second. One OpenAI provider with a configurable model and price (default `gpt-4o-mini`), so there is no fallback provider. The summary is one structured call per analysis (README, facts, entry points and the most imported files go in; headline, overview, how it works and key files come out) instead of per-file and per-directory summaries. **Cut for now:** pgvector retrieval and `chunks`, because the summary needs no embeddings; they return in Phase 6 if the context pack needs them. One credit is half a US cent: analysis holds 10 credits and is settled to what the call cost, at least 1. A $3 daily cap (`LLM_DAILY_CAP_USD`) stops all calls. The summary arrives after the analysis, which is ready at once; the page shows it is being written, or why it was not. |
-| 6 | Done (PR #23) | Deterministic, with no model call: the pack is built from the facts, the file list and the summary when there is one, so it is instant and costs no credits (the brief proposed 5). It is built when asked rather than stored, so there are no `documents`, `document_versions` or `artifacts` tables, no object storage and no signed links yet; those arrive with the README, which is edited and versioned. The ZIP is made in the browser so nothing binary crosses the same-origin bridge. It is a card on the project page rather than its own route. The web coverage gates are now 35/30/35/35 until Phase 9 restores them. |
+| 6 | Done (PR #23) | Deterministic, with no model call: the pack is built from the facts, the file list and the summary when there is one, so it is instant and costs no credits (the brief proposed 5). It is built when asked rather than stored, so there are no `documents`, `document_versions` or `artifacts` tables, no object storage and no signed links yet; those arrive with the README, which is edited and versioned. The ZIP is made in the browser so nothing binary crosses the same-origin bridge. It is a card on the project page rather than its own route. The web coverage gates are now 35/30/35/35 until Phase 10 restores them. |
 | 7 | Done (PR #24) | One structured call writes the README as sections (title, tagline, then heading and body each) and the document is assembled in code, so the model cannot add headings of its own or change the structure; three layouts (standard, minimal, detailed). Writing one holds 15 credits and a section rewrite 2, each settled to what the calls cost. Edits, rewrites and restores all add a numbered version; saving against an out-of-date version is refused. Editing is a plain Markdown box beside a live preview that renders no raw HTML or images. The health score is a fixed ten-item checklist of structure (not quality). **Not done:** a rewrite that picks a section by position, and sharing the README by link. The web bridge now accepts PUT, with a larger body on the README path only. Spend cap, refunds and prompt-injection handling are the shared path from Phase 5 and were exercised with a mocked provider; no real OpenAI call has been made yet. |
 | 8 | Built, in review | The model returns a small typed graph (3 to 9 parts, closed vocabularies for part and arrow kinds) and never coordinates, colours or markup; any part or arrow that cites no real file of the project is dropped. **Changed from the plan:** no Node layout sidecar or ELK. A small layered layout, our own SVG renderer and the geometric lint run in the Python worker (a long arrow reserves space in the columns it crosses; a call and its reply are drawn apart), because one service fewer is worth more than ELK's polish for a graph of this size. The lint checks overlaps, text overflow, colliding labels and size; it retries once with more room, and a drawing that still fails is not shown and the credits come back. The SVG is shown through an img element, never inline. **Not done:** a `artifacts` table and server-side PNG (one current diagram per project in `project_diagrams`; PNG is made in the browser), insert-into-README, pan, groups. Drawing holds 15 credits, settled to the call cost. Verified with a mocked provider only. |
 
@@ -142,11 +143,22 @@ Dependencies are linear except that 6 and 7 could swap; the context pack goes fi
 **Cut:** the vision critique pass, detail diagrams per sub-flow, D2 and Mermaid export, hand editing.
 **Done when:** a known repository produces a diagram with no overlapping boxes, and a malformed model answer is repaired or rejected rather than rendered.
 
-### Phase 9 · Release
+### Phase 9 · UI improvement
+
+**Goal:** the whole app looks and feels like one finished product, built from one design system, instead of stacked cards in plain black and white. Details, screen list and component list: [phase-9-ui.md](phase-9-ui.md).
+
+- **Order of work:** settle the screen list, then the design system (tokens, type, theme), then the shared components, then each screen in turn: public pages first, then the signed-in app.
+- **Product:** the landing page (hero, how it works, a real sample, trust, pricing, FAQ), `/status` moved off `/`, `/privacy` and `/terms`, a 404 page, error and loading states, the project page split into tabs with one route each, mobile layouts for every screen, favicon and social card.
+- **Behaviour changes that come with it:** signing in with an emailed code lands on `/dashboard` (provider sign-in still lands on `/account`, which the Go API hard-codes and the connect flow shares); `/` shows the landing page for everyone.
+- **Libraries:** Radix primitives for accessible parts (tabs, accordion, menus, radio groups, tooltips) and Motion for animation; no new backend work.
+
+**Cut:** any change to the API, new features, payments UI.
+**Done when:** every screen in the plan is built in both themes and at phone width, the existing checks pass, and each screen has been driven in a browser.
+
+### Phase 10 · Release
 
 **Goal:** it is on the internet, and the repository looks like a product built with care.
 
-- **Product:** landing page (hero, how it works, a real sample output, FAQ), `/privacy` and `/terms`, a 404 page, loading and error boundaries, mobile layouts for every screen, favicon and social card.
 - **Operations:** production mailer (so sign-in works), hosting, TLS and domain, a `docker compose` production file with the sandbox settings, backups for Postgres, structured logs, an uptime check, and the production values for `WEB_BEHIND_PROXY` and `TRUSTED_PROXIES`.
 - **Hardening:** restore the coverage gates, backfill tests for the code where a bug is a security bug (ownership checks, the sandbox rules, secret redaction, credit accounting), a security review of the branch, dependency and image audits, and the audit items still open from November (F17 to F23).
 - **Repository:** a README with screenshots and an architecture diagram generated by Readmely itself, a short architecture write-up, and the plans folder left in place as the design history.
@@ -161,7 +173,7 @@ Dependencies are linear except that 6 and 7 could swap; the context pack goes fi
 | Untrusted repositories | Cloning arbitrary code is the biggest attack surface | The sandbox rules in Phase 4 are not skipped to save time |
 | Diagram quality | The hardest feature; a bad diagram damages the demo | It is last, so a slip delays the release by one phase, not the README |
 | Large repositories | Slow analysis and high cost | Size and file caps in Phase 3 and 4; clear "too large" message |
-| No tests | Regressions are found by hand | Existing suite stays green; the Phase 9 backfill; I drive each feature in a browser before every pull request |
+| No tests | Regressions are found by hand | Existing suite stays green; the Phase 10 backfill; I drive each feature in a browser before every pull request |
 
 ## 6. Decisions that are yours
 
@@ -171,8 +183,8 @@ Dependencies are linear except that 6 and 7 could swap; the context pack goes fi
 | 2 | **LLM accounts:** an OpenAI key and an xAI key (decision D8), with a monthly budget | Start with one provider and a low cap; the second is a fallback | Phase 5 |
 | 3 | **Free grant size** | 100 credits at sign-up (about two full projects, see the brief) | Phase 5 |
 | 4 | **Hosting** | One DigitalOcean droplet with Docker Compose and Caddy for TLS; simplest to run and to explain | Phase 4 (sandbox) and 9 |
-| 5 | **Production mailer** | **Built** (`MAILER=smtp`, tried first with Brevo's free relay, 300 emails a day; any SMTP relay works). Still yours: the Brevo account, an SMTP key in your `.env`, a verified sender, and the sender domain's SPF/DKIM records once you have a domain | Phase 9 |
-| 6 | **Domain name** | Any; needed for the Google and GitHub sign-in callbacks in production | Phase 9 |
-| 7 | **Real sign-in providers** | Register the Google client and GitHub OAuth App (README, "Sign in with Google or GitHub") for the demo | Phase 9 |
+| 5 | **Production mailer** | **Built** (`MAILER=smtp`, tried first with Brevo's free relay, 300 emails a day; any SMTP relay works). Still yours: the Brevo account, an SMTP key in your `.env`, a verified sender, and the sender domain's SPF/DKIM records once you have a domain | Phase 10 |
+| 6 | **Domain name** | Any; needed for the Google and GitHub sign-in callbacks in production | Phase 10 |
+| 7 | **Real sign-in providers** | Register the Google client and GitHub OAuth App (README, "Sign in with Google or GitHub") for the demo | Phase 10 |
 | 8 | **Private repositories** in version 1 | No, public only; add the GitHub App in 1.1 | Now |
 | 9 | **Product copy and name** on the landing page | I draft it, you edit | Phase 9 |

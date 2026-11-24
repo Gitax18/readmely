@@ -1,10 +1,24 @@
 "use client";
 
+import {
+  Boxes,
+  CheckCircle2,
+  FileCode2,
+  MinusCircle,
+  ShieldCheck,
+  ShieldAlert,
+  Terminal,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { usePolling } from "@/components/projects-view";
 import { Badge } from "@/components/ui/badge";
+import { Bar } from "@/components/ui/bar";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Code } from "@/components/ui/code";
+import { Message } from "@/components/ui/message";
 import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { ProjectAnalysis } from "@/lib/analysis-schema";
 import type { ProjectsApi } from "@/lib/projects-api";
 import {
@@ -64,68 +78,136 @@ export function AnalysisPanel({
   });
 
   if (state.kind === "loading") {
-    return <p className="text-muted-foreground text-sm">Loading what we found…</p>;
-  }
-  if (state.kind === "error") {
     return (
-      <p className="text-muted-foreground text-sm">
-        We could not load the results. Try reloading the page.
-      </p>
+      <div role="status" aria-label="Loading what we found" className="flex flex-col gap-4">
+        <Skeleton className="h-44 w-full rounded-card" />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Skeleton className="h-32 rounded-card" />
+          <Skeleton className="h-32 rounded-card" />
+        </div>
+      </div>
     );
   }
+  if (state.kind === "error") {
+    return <Message tone="error">We could not load the results. Try reloading the page.</Message>;
+  }
   return <Findings analysis={state.analysis} />;
+}
+
+function Panel({
+  title,
+  icon,
+  children,
+  className,
+}: {
+  title: string;
+  icon?: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <Card className={className}>
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-sm [&>svg]:size-4 [&>svg]:text-accent">
+          {icon}
+          {title}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">{children}</CardContent>
+    </Card>
+  );
 }
 
 function SummarySection({ analysis }: { analysis: ProjectAnalysis }) {
   const { summary, summary_job: job } = analysis;
   if (summary) {
     return (
-      <Section title="What this project does">
-        <p className="text-sm font-medium">{summary.headline}</p>
-        <p className="text-sm">{summary.overview}</p>
-        <ul className="list-disc pl-5 text-sm">
-          {summary.how_it_works.map((step) => (
-            <li key={step}>{step}</li>
-          ))}
-        </ul>
-        {summary.components.length > 0 ? (
-          <ul className="flex flex-col gap-1">
-            {summary.components.map((c) => (
-              <li key={c.path} className="text-sm">
-                <code className="border-border rounded border px-1.5 py-0.5 text-xs break-all">
-                  {c.path}
-                </code>{" "}
-                <span className="text-muted-foreground">{c.role}</span>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-        <p className="text-muted-foreground text-xs">
-          Written by an AI model from the analysis. It can be wrong; check it against the code.
-        </p>
-      </Section>
+      <Card className="border-accent/25">
+        <CardHeader className="pb-3">
+          <div className="text-accent text-[11px] font-bold tracking-[0.12em] uppercase">
+            What this project does
+          </div>
+          <CardTitle className="text-xl leading-snug">{summary.headline}</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-5">
+          <p className="text-muted-foreground max-w-[75ch] text-sm leading-relaxed">
+            {summary.overview}
+          </p>
+          {summary.how_it_works.length > 0 ? (
+            <div className="flex flex-col gap-2">
+              <h3 className="text-sm font-semibold">How it works</h3>
+              <ol className="flex flex-col gap-2">
+                {summary.how_it_works.map((step, i) => (
+                  <li key={step} className="flex gap-3 text-sm">
+                    <span className="bg-accent-soft text-accent grid size-5 shrink-0 place-items-center rounded-full font-mono text-[10px] font-semibold">
+                      {i + 1}
+                    </span>
+                    <span className="text-muted-foreground">{step}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          ) : null}
+          {summary.components.length > 0 ? (
+            <div className="flex flex-col gap-2">
+              <h3 className="text-sm font-semibold">Key files</h3>
+              <ul className="flex flex-col gap-2">
+                {summary.components.map((c) => (
+                  <li
+                    key={c.path}
+                    className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm"
+                  >
+                    <Code>{c.path}</Code>
+                    <span className="text-muted-foreground">{c.role}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          <p className="text-faint text-xs">
+            Written by an AI model from the analysis. It can be wrong; check it against the code.
+          </p>
+        </CardContent>
+      </Card>
     );
   }
   if (job && ["queued", "running"].includes(job.status)) {
     return (
-      <Section title="What this project does">
-        <div className="flex flex-col gap-2" aria-live="polite">
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">What this project does</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-2" aria-live="polite">
           <Progress value={job.progress} label="Summary progress" />
-          <span className="text-sm">{summaryStepLabel(job.step)}…</span>
-        </div>
-      </Section>
+          <span className="text-muted-foreground text-sm">{summaryStepLabel(job.step)}…</span>
+        </CardContent>
+      </Card>
     );
   }
   if (job && job.status === "failed") {
     return (
-      <Section title="What this project does">
-        <p role="status" className="text-muted-foreground text-sm">
-          {summaryFailureText(job.error_code)}
-        </p>
-      </Section>
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">What this project does</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p role="status" className="text-muted-foreground text-sm">
+            {summaryFailureText(job.error_code)}
+          </p>
+        </CardContent>
+      </Card>
     );
   }
   return null;
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="border-border bg-card rounded-xl border px-4 py-3">
+      <dt className="text-faint text-[11px] font-semibold tracking-wide uppercase">{label}</dt>
+      <dd className="mt-0.5 font-mono text-sm font-medium break-all">{value}</dd>
+    </div>
+  );
 }
 
 function Findings({ analysis }: { analysis: ProjectAnalysis }) {
@@ -139,120 +221,132 @@ function Findings({ analysis }: { analysis: ProjectAnalysis }) {
   return (
     <div className="flex flex-col gap-4">
       <SummarySection analysis={analysis} />
-      <p className="text-muted-foreground text-xs">
-        Commit {analysis.commit_sha.slice(0, 7)} · {formatCount(f.totals.files)} files ·{" "}
-        {formatCount(f.totals.lines)} lines · {formatSize(Math.ceil(f.totals.bytes / 1024))}
-        {f.license ? ` · ${f.license} licence` : ""}
-      </p>
 
-      {f.languages.length > 0 ? (
-        <Section title="Languages">
-          <ul className="flex flex-col gap-1.5">
-            {f.languages.map((l) => (
-              <li key={l.name} className="flex items-center gap-3 text-sm">
-                <span className="w-28 shrink-0">{l.name}</span>
-                <div
-                  className="bg-border h-2 flex-1 overflow-hidden rounded-full"
-                  role="img"
-                  aria-label={`${l.name} ${l.percent} percent`}
-                >
-                  <div
-                    className="bg-foreground h-full"
-                    style={{ width: `${Math.max(2, Math.min(100, l.percent))}%` }}
-                  />
-                </div>
-                <span className="text-muted-foreground w-12 text-right text-xs">{l.percent}%</span>
-              </li>
-            ))}
-          </ul>
-        </Section>
-      ) : null}
+      <dl className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+        <Stat label="Commit" value={analysis.commit_sha.slice(0, 7)} />
+        <Stat label="Files" value={formatCount(f.totals.files)} />
+        <Stat label="Lines" value={formatCount(f.totals.lines)} />
+        <Stat label="Size" value={formatSize(Math.ceil(f.totals.bytes / 1024))} />
+        <Stat label="Licence" value={f.license || "None found"} />
+      </dl>
 
-      <Section title="Built with">
-        <Chips items={f.frameworks} empty="No frameworks recognised." />
-        {f.package_managers.length > 0 ? (
-          <p className="text-muted-foreground text-xs">
-            Package managers: {f.package_managers.join(", ")}
-          </p>
-        ) : null}
-      </Section>
-
-      <Section title="Project health">
-        <div className="flex flex-wrap gap-2">
-          {checks.map(([label, ok]) => (
-            <Badge key={label} tone={ok ? "ok" : "neutral"}>
-              {label}: {ok ? "found" : "not found"}
-            </Badge>
-          ))}
-        </div>
-      </Section>
-
-      {f.entry_points.length > 0 ? (
-        <Section title="Where it starts">
-          <CodeList items={f.entry_points} />
-        </Section>
-      ) : null}
-
-      {f.commands.length > 0 ? (
-        <Section title="Commands">
-          <ul className="flex flex-col gap-1">
-            {f.commands.map((c) => (
-              <li key={`${c.source}:${c.name}`} className="text-sm">
-                <code className="border-border rounded border px-1.5 py-0.5 text-xs">{c.name}</code>
-              </li>
-            ))}
-          </ul>
-        </Section>
-      ) : null}
-
-      {f.services.length > 0 ? (
-        <Section title="Services">
-          <Chips items={f.services} empty="" />
-        </Section>
-      ) : null}
-
-      {f.env_vars.length > 0 ? (
-        <Section title="Settings it reads">
-          <CodeList items={f.env_vars} inline />
-        </Section>
-      ) : null}
-
-      {analysis.hubs.length > 0 ? (
-        <Section title="Most imported">
-          <ul className="flex flex-col gap-1">
-            {analysis.hubs.map((h) => (
-              <li key={`${h.kind}:${h.key}`} className="flex justify-between gap-3 text-sm">
-                <code className="text-xs break-all">{h.key}</code>
-                <span className="text-muted-foreground shrink-0 text-xs">
-                  by {formatCount(h.imported_by)}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </Section>
-      ) : null}
-
-      <Section title="Secrets">
-        {f.secrets.count === 0 ? (
-          <p className="text-sm">None found.</p>
-        ) : (
-          <div className="flex flex-col gap-2">
-            <p role="status" className="text-bad text-sm">
-              {formatCount(f.secrets.count)} secret-like value
-              {f.secrets.count === 1 ? "" : "s"} found and removed before anything was stored. If
-              they are real, rotate them: they are in your repository&apos;s history.
-            </p>
-            <ul className="flex flex-col gap-1">
-              {f.secrets.locations.slice(0, 10).map((s) => (
-                <li key={`${s.path}:${s.line}:${s.rule}`} className="text-xs">
-                  {secretRuleLabel(s.rule)} · <code className="break-all">{s.path}</code>, line{" "}
-                  {s.line}
+      <div className="grid gap-4 md:grid-cols-2">
+        {f.languages.length > 0 ? (
+          <Panel title="Languages" icon={<FileCode2 aria-hidden />}>
+            <ul className="flex flex-col gap-2.5">
+              {f.languages.map((l) => (
+                <li key={l.name} className="flex items-center gap-3 text-sm">
+                  <span className="w-24 shrink-0 truncate">{l.name}</span>
+                  <div role="img" aria-label={`${l.name} ${l.percent} percent`} className="flex-1">
+                    <Bar percent={Math.max(2, l.percent)} />
+                  </div>
+                  <span className="text-muted-foreground w-12 text-right font-mono text-xs">
+                    {l.percent}%
+                  </span>
                 </li>
               ))}
             </ul>
-          </div>
+          </Panel>
+        ) : null}
+
+        <Panel title="Built with" icon={<Boxes aria-hidden />}>
+          <Chips items={f.frameworks} empty="No frameworks recognised." />
+          {f.package_managers.length > 0 ? (
+            <p className="text-muted-foreground text-xs">
+              Package managers: {f.package_managers.join(", ")}
+            </p>
+          ) : null}
+        </Panel>
+
+        <Panel title="Project health" icon={<CheckCircle2 aria-hidden />}>
+          <ul className="grid grid-cols-2 gap-2">
+            {checks.map(([label, ok]) => (
+              <li key={label}>
+                <Badge tone={ok ? "ok" : "neutral"} className="w-full justify-start">
+                  {ok ? (
+                    <CheckCircle2 className="size-3.5" aria-hidden />
+                  ) : (
+                    <MinusCircle className="size-3.5" aria-hidden />
+                  )}
+                  {label}: {ok ? "found" : "not found"}
+                </Badge>
+              </li>
+            ))}
+          </ul>
+        </Panel>
+
+        {f.entry_points.length > 0 ? (
+          <Panel title="Where it starts">
+            <CodeList items={f.entry_points} />
+          </Panel>
+        ) : null}
+
+        {f.commands.length > 0 ? (
+          <Panel title="Commands" icon={<Terminal aria-hidden />}>
+            <ul className="flex flex-col gap-1.5">
+              {f.commands.map((c) => (
+                <li key={`${c.source}:${c.name}`}>
+                  <Code>{c.name}</Code>
+                </li>
+              ))}
+            </ul>
+          </Panel>
+        ) : null}
+
+        {f.services.length > 0 ? (
+          <Panel title="Services">
+            <Chips items={f.services} empty="" />
+          </Panel>
+        ) : null}
+
+        {f.env_vars.length > 0 ? (
+          <Panel title="Settings it reads">
+            <CodeList items={f.env_vars} inline />
+          </Panel>
+        ) : null}
+
+        {analysis.hubs.length > 0 ? (
+          <Panel title="Most imported">
+            <ul className="flex flex-col gap-2">
+              {analysis.hubs.map((h) => (
+                <li
+                  key={`${h.kind}:${h.key}`}
+                  className="flex items-baseline justify-between gap-3 text-sm"
+                >
+                  <Code>{h.key}</Code>
+                  <span className="text-muted-foreground shrink-0 text-xs">
+                    by {formatCount(h.imported_by)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </Panel>
+        ) : null}
+      </div>
+
+      <Panel
+        title="Secrets"
+        icon={f.secrets.count === 0 ? <ShieldCheck aria-hidden /> : <ShieldAlert aria-hidden />}
+      >
+        {f.secrets.count === 0 ? (
+          <p className="text-sm">None found.</p>
+        ) : (
+          <>
+            <Message tone="error">
+              {formatCount(f.secrets.count)} secret-like value{f.secrets.count === 1 ? "" : "s"}{" "}
+              found and removed before anything was stored. If they are real, rotate them: they are
+              in your repository&apos;s history.
+            </Message>
+            <ul className="flex flex-col gap-1.5">
+              {f.secrets.locations.slice(0, 10).map((s) => (
+                <li key={`${s.path}:${s.line}:${s.rule}`} className="text-xs">
+                  {secretRuleLabel(s.rule)} · <Code>{s.path}</Code>, line {s.line}
+                </li>
+              ))}
+            </ul>
+          </>
         )}
-      </Section>
+      </Panel>
 
       {f.skipped.count > 0 ? (
         <p className="text-muted-foreground text-xs">
@@ -264,15 +358,6 @@ function Findings({ analysis }: { analysis: ProjectAnalysis }) {
         </p>
       ) : null}
     </div>
-  );
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="flex flex-col gap-2">
-      <h3 className="text-sm font-medium">{title}</h3>
-      {children}
-    </section>
   );
 }
 
@@ -291,10 +376,10 @@ function Chips({ items, empty }: { items: string[]; empty: string }) {
 
 function CodeList({ items, inline = false }: { items: string[]; inline?: boolean }) {
   return (
-    <ul className={inline ? "flex flex-wrap gap-2" : "flex flex-col gap-1"}>
+    <ul className={inline ? "flex flex-wrap gap-2" : "flex flex-col gap-1.5"}>
       {items.map((i) => (
         <li key={i}>
-          <code className="border-border rounded border px-1.5 py-0.5 text-xs break-all">{i}</code>
+          <Code>{i}</Code>
         </li>
       ))}
     </ul>

@@ -147,7 +147,7 @@ describe("LoginForm: code step", () => {
     await screen.findByLabelText(/6-digit code/i);
     typeInto(/6-digit code/i, "013842");
     fireEvent.click(screen.getByRole("button", { name: /^sign in$/i }));
-    await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/account"));
+    await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/dashboard"));
     expect(router.refresh).toHaveBeenCalled();
   });
 

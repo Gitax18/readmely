@@ -1,50 +1,73 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { AppHeader } from "@/components/app-header";
+import { Plus } from "lucide-react";
+import { LOW_CREDITS } from "@/components/app-header";
+import { AppShell } from "@/components/layout/app-shell";
+import { PageHeader } from "@/components/layout/page-header";
 import { ProjectsView } from "@/components/projects-view";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Message } from "@/components/ui/message";
 import { fetchProjects } from "@/lib/account-client";
 import { requireUser } from "@/lib/require-user";
+import { UnavailableScreen } from "@/components/layout/unavailable";
 
 export const metadata: Metadata = { title: "Projects · Readmely" };
 export const dynamic = "force-dynamic";
 
+/** The most projects one account can hold. */
+const PROJECT_LIMIT = 10;
+
 export default async function DashboardPage() {
   const user = await requireUser();
-  if (user.unavailable) return <Unavailable />;
+  if (user.unavailable) return <UnavailableScreen title="Projects unavailable" />;
   const projects = await fetchProjects(user.env.apiPublicUrl, user.token);
+  const count = projects?.length ?? 0;
+  const full = count >= PROJECT_LIMIT;
 
   return (
-    <main className="mx-auto flex max-w-4xl flex-col gap-6 p-6 sm:p-10">
-      <AppHeader active="projects" email={user.me.user.email} credits={user.credits} />
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">Your projects</h1>
-        {projects && projects.length > 0 ? (
-          <Link
-            href="/projects/new"
-            className="bg-foreground text-background inline-flex h-10 items-center rounded-md px-4 text-sm font-medium hover:opacity-90"
-          >
-            New project
+    <AppShell
+      active="projects"
+      email={user.me.user.email}
+      credits={user.credits}
+      csrf={user.me.csrf_token}
+    >
+      <PageHeader
+        title="Projects"
+        description={projects ? `${count} of ${PROJECT_LIMIT} projects` : undefined}
+        actions={
+          full ? (
+            <Button disabled>
+              <Plus aria-hidden /> New project
+            </Button>
+          ) : projects && projects.length > 0 ? (
+            <Link href="/projects/new" className={buttonVariants({ variant: "primary" })}>
+              <Plus aria-hidden /> New project
+            </Link>
+          ) : null
+        }
+      />
+      {full ? (
+        <Message tone="info">
+          You have {PROJECT_LIMIT} projects, the most for now. Delete one to add another.
+        </Message>
+      ) : null}
+      {typeof user.credits === "number" && user.credits < LOW_CREDITS ? (
+        <Message tone="warn">
+          {user.credits === 0
+            ? "You are out of credits. "
+            : `You have ${user.credits} credit${user.credits === 1 ? "" : "s"} left. `}
+          <Link href="/usage" className="font-semibold underline underline-offset-2">
+            See what each action costs
           </Link>
-        ) : null}
-      </div>
+        </Message>
+      ) : null}
       {projects === null ? (
-        <p role="alert" className="text-muted-foreground text-sm">
+        <Message tone="error">
           We could not load your projects just now. Reload the page in a moment.
-        </p>
+        </Message>
       ) : (
         <ProjectsView initial={projects} />
       )}
-    </main>
-  );
-}
-
-function Unavailable() {
-  return (
-    <main className="mx-auto flex max-w-md flex-col gap-4 p-6 sm:p-10">
-      <h1 className="text-2xl font-semibold">Projects unavailable</h1>
-      <p role="alert" className="text-muted-foreground text-sm">
-        We could not reach Readmely just now. Reload the page in a moment.
-      </p>
-    </main>
+    </AppShell>
   );
 }
