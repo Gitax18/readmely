@@ -207,14 +207,17 @@ jobs:
         run: |
           set -euo pipefail
           for _ in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:3000/ | grep -q "All systems operational"; then
+            # Read the whole page first: `grep -q` exits at the first match, which makes curl fail
+            # with "(23) Failure writing output" and, under pipefail, the whole pipeline.
+            page="$(curl -fsS http://127.0.0.1:3000/status || true)"
+            if grep -q "All systems operational" <<<"$page"; then
               echo "status page: all systems operational"
               exit 0
             fi
             sleep 2
           done
           echo "the status page never reported all systems operational" >&2
-          curl -sS http://127.0.0.1:3000/ | head -c 2000 >&2 || true
+          curl -sS http://127.0.0.1:3000/status | head -c 2000 >&2 || true
           exit 1
       - name: Sign-in and provider routes work in a real browser against the running stack
         run: |
