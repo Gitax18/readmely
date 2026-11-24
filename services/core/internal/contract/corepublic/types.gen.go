@@ -291,6 +291,60 @@ func (e ReadmeVersionInfoTemplate) Valid() bool {
 	}
 }
 
+// Defines values for DiagramKind.
+const (
+	DiagramKindArchitecture DiagramKind = "architecture"
+	DiagramKindDatabase     DiagramKind = "database"
+)
+
+// Valid indicates whether the value is a known member of the DiagramKind enum.
+func (e DiagramKind) Valid() bool {
+	switch e {
+	case DiagramKindArchitecture:
+		return true
+	case DiagramKindDatabase:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetDiagramParamsKind.
+const (
+	GetDiagramParamsKindArchitecture GetDiagramParamsKind = "architecture"
+	GetDiagramParamsKindDatabase     GetDiagramParamsKind = "database"
+)
+
+// Valid indicates whether the value is a known member of the GetDiagramParamsKind enum.
+func (e GetDiagramParamsKind) Valid() bool {
+	switch e {
+	case GetDiagramParamsKindArchitecture:
+		return true
+	case GetDiagramParamsKindDatabase:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GenerateDiagramParamsKind.
+const (
+	GenerateDiagramParamsKindArchitecture GenerateDiagramParamsKind = "architecture"
+	GenerateDiagramParamsKindDatabase     GenerateDiagramParamsKind = "database"
+)
+
+// Valid indicates whether the value is a known member of the GenerateDiagramParamsKind enum.
+func (e GenerateDiagramParamsKind) Valid() bool {
+	switch e {
+	case GenerateDiagramParamsKindArchitecture:
+		return true
+	case GenerateDiagramParamsKindDatabase:
+		return true
+	default:
+		return false
+	}
+}
+
 // Accepted defines model for Accepted.
 type Accepted struct {
 	Status AcceptedStatus `json:"status"`
@@ -748,6 +802,9 @@ type VerifyEmailLoginRequest struct {
 // CsrfToken defines model for CsrfToken.
 type CsrfToken = string
 
+// DiagramKind defines model for DiagramKind.
+type DiagramKind string
+
 // ProjectId defines model for ProjectId.
 type ProjectId = openapi_types.UUID
 
@@ -872,11 +929,17 @@ type AnalyseProjectParams struct {
 	XCSRFToken CsrfToken `json:"X-CSRF-Token"`
 }
 
+// GetDiagramParamsKind defines parameters for GetDiagram.
+type GetDiagramParamsKind string
+
 // GenerateDiagramParams defines parameters for GenerateDiagram.
 type GenerateDiagramParams struct {
 	// XCSRFToken The csrf_token from GET /v1/me, bound to the current session. Required on every state-changing request that has a session.
 	XCSRFToken CsrfToken `json:"X-CSRF-Token"`
 }
+
+// GenerateDiagramParamsKind defines parameters for GenerateDiagram.
+type GenerateDiagramParamsKind string
 
 // GenerateReadmeParams defines parameters for GenerateReadme.
 type GenerateReadmeParams struct {

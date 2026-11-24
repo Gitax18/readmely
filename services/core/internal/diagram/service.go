@@ -1,4 +1,5 @@
-// Package diagram serves a project's architecture diagram and queues the AI worker job that draws it.
+// Package diagram serves a project's diagrams (its architecture, and its database as an entity
+// relationship diagram) and queues the AI worker job that draws them.
 package diagram
 
 import (
@@ -29,7 +30,14 @@ const (
 
 	maxFocus    = 200
 	maxAttempts = 2
+
+	// KindArchitecture and KindDatabase are the diagrams a project can have, one of each.
+	KindArchitecture = "architecture"
+	KindDatabase     = "database"
 )
+
+// ValidKind reports whether name is a diagram kind.
+func ValidKind(name string) bool { return name == KindArchitecture || name == KindDatabase }
 
 var ruleGenerate = ratelimit.Rule{Name: "diagram_generate_user", Max: 10, Window: time.Hour}
 
@@ -73,19 +81,22 @@ func (s *Service) project(ctx context.Context, q *store.Queries, userID, id uuid
 	return p, err
 }
 
-// Get returns the current diagram and the newest diagram job.
-func (s *Service) Get(ctx context.Context, userID, id uuid.UUID) (State, error) {
+// Get returns the current diagram of a kind and the newest job that draws that kind.
+func (s *Service) Get(ctx context.Context, userID, id uuid.UUID, kind string) (State, error) {
+	if !ValidKind(kind) {
+		return State{}, ErrInvalid
+	}
 	if _, err := s.project(ctx, s.q, userID, id); err != nil {
 		return State{}, err
 	}
 	var out State
-	switch d, err := s.q.GetProjectDiagram(ctx, id); {
+	switch d, err := s.q.GetProjectDiagram(ctx, store.GetProjectDiagramParams{ProjectID: id, Kind: kind}); {
 	case err == nil:
 		out.Diagram = &d
 	case !errors.Is(err, pgx.ErrNoRows):
 		return State{}, fmt.Errorf("get diagram: %w", err)
 	}
-	switch j, err := s.q.GetLatestProjectJob(ctx, store.GetLatestProjectJobParams{ProjectID: &id, UserID: userID, Kind: Kind}); {
+	switch j, err := s.q.GetLatestDiagramJob(ctx, store.GetLatestDiagramJobParams{ProjectID: &id, UserID: userID, DiagramKind: kind}); {
 	case err == nil:
 		out.Job = &j
 	case !errors.Is(err, pgx.ErrNoRows):
@@ -94,10 +105,10 @@ func (s *Service) Get(ctx context.Context, userID, id uuid.UUID) (State, error) 
 	return out, nil
 }
 
-// Generate holds credits and queues a job that draws the diagram from the analysis.
-func (s *Service) Generate(ctx context.Context, userID, id uuid.UUID, focus string) (store.Job, error) {
+// Generate holds credits and queues a job that draws a diagram of the given kind from the analysis.
+func (s *Service) Generate(ctx context.Context, userID, id uuid.UUID, kind, focus string) (store.Job, error) {
 	focus = strings.TrimSpace(focus)
-	if utf8.RuneCountInString(focus) > maxFocus || strings.ContainsRune(focus, 0) {
+	if !ValidKind(kind) || utf8.RuneCountInString(focus) > maxFocus || strings.ContainsRune(focus, 0) {
 		return store.Job{}, ErrInvalid
 	}
 	d, err := s.limiter.Allow(ctx, ratelimit.Check{Rule: ruleGenerate, Subject: userID.String()})
@@ -107,7 +118,7 @@ func (s *Service) Generate(ctx context.Context, userID, id uuid.UUID, focus stri
 	if !d.Allowed {
 		return store.Job{}, &RateLimitedError{RetryAfter: d.RetryAfter}
 	}
-	body, err := json.Marshal(map[string]string{"focus": focus})
+	body, err := json.Marshal(map[string]string{"focus": focus, "kind": kind})
 	if err != nil {
 		return store.Job{}, err
 	}

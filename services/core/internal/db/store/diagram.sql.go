@@ -11,14 +11,61 @@ import (
 	"github.com/google/uuid"
 )
 
-const getProjectDiagram = `-- name: GetProjectDiagram :one
-
-SELECT id, project_id, title, svg, node_count, commit_sha, job_id, created_at FROM project_diagrams WHERE project_id = $1
+const getLatestDiagramJob = `-- name: GetLatestDiagramJob :one
+SELECT id, user_id, project_id, kind, payload, status, attempts, max_attempts, run_after, locked_by, lease_expires_at, idempotency_key, error_code, created_at, updated_at, finished_at, step, progress FROM jobs
+WHERE project_id = $1 AND user_id = $2 AND kind = 'generate_diagram'
+  AND COALESCE(payload ->> 'kind', 'architecture') = $3::text
+ORDER BY created_at DESC, id DESC
+LIMIT 1
 `
 
-// A project's diagram. Callers check the project belongs to the user first (GetProject).
-func (q *Queries) GetProjectDiagram(ctx context.Context, projectID uuid.UUID) (ProjectDiagram, error) {
-	row := q.db.QueryRow(ctx, getProjectDiagram, projectID)
+type GetLatestDiagramJobParams struct {
+	ProjectID   *uuid.UUID
+	UserID      uuid.UUID
+	DiagramKind string
+}
+
+// The newest diagram job of one kind. A job's kind is in its payload; jobs queued before kinds
+// existed have none and are architecture jobs.
+func (q *Queries) GetLatestDiagramJob(ctx context.Context, arg GetLatestDiagramJobParams) (Job, error) {
+	row := q.db.QueryRow(ctx, getLatestDiagramJob, arg.ProjectID, arg.UserID, arg.DiagramKind)
+	var i Job
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.ProjectID,
+		&i.Kind,
+		&i.Payload,
+		&i.Status,
+		&i.Attempts,
+		&i.MaxAttempts,
+		&i.RunAfter,
+		&i.LockedBy,
+		&i.LeaseExpiresAt,
+		&i.IdempotencyKey,
+		&i.ErrorCode,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.FinishedAt,
+		&i.Step,
+		&i.Progress,
+	)
+	return i, err
+}
+
+const getProjectDiagram = `-- name: GetProjectDiagram :one
+
+SELECT id, project_id, title, svg, node_count, commit_sha, job_id, created_at, kind FROM project_diagrams WHERE project_id = $1 AND kind = $2::text
+`
+
+type GetProjectDiagramParams struct {
+	ProjectID uuid.UUID
+	Kind      string
+}
+
+// A project's diagrams, one per kind. Callers check the project belongs to the user first (GetProject).
+func (q *Queries) GetProjectDiagram(ctx context.Context, arg GetProjectDiagramParams) (ProjectDiagram, error) {
+	row := q.db.QueryRow(ctx, getProjectDiagram, arg.ProjectID, arg.Kind)
 	var i ProjectDiagram
 	err := row.Scan(
 		&i.ID,
@@ -29,6 +76,7 @@ func (q *Queries) GetProjectDiagram(ctx context.Context, projectID uuid.UUID) (P
 		&i.CommitSha,
 		&i.JobID,
 		&i.CreatedAt,
+		&i.Kind,
 	)
 	return i, err
 }

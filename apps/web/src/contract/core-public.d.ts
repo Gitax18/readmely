@@ -336,7 +336,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/projects/{id}/diagram": {
+    "/v1/projects/{id}/diagrams/{kind}": {
         parameters: {
             query?: never;
             header?: never;
@@ -344,14 +344,14 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * The project's architecture diagram and the state of any job drawing it
-         * @description The diagram is null until one has been generated. The job is the newest diagram job, so the page can show progress or why one failed.
+         * The project's diagram of one kind and the state of any job drawing it
+         * @description A project has at most one diagram of each kind: `architecture` (the main parts and how they talk) and `database` (an entity relationship diagram drawn from the schema and SQL files). The diagram is null until one has been generated. The job is the newest job that draws this kind, so the page can show progress or why one failed. An unknown kind is 404.
          */
         get: operations["getDiagram"];
         put?: never;
         /**
-         * Draw an architecture diagram from the analysis
-         * @description Holds 15 credits and queues the job; it is charged what the model calls cost and the rest is returned, or refunded in full if it fails. 409 not_analysed before a first analysis, 409 diagram_running while one is being drawn, 402 insufficient_credits.
+         * Draw a diagram of one kind from the analysis
+         * @description The database kind reads the repository's SQL, migration and model files; a repository with none yields a failed job (no_database_files) and a refund. Holds 15 credits and queues the job; it is charged what the model calls cost and the rest is returned, or refunded in full if it fails. 409 not_analysed before a first analysis, 409 diagram_running while one is being drawn, 402 insufficient_credits.
          */
         post: operations["generateDiagram"];
         delete?: never;
@@ -1148,6 +1148,7 @@ export interface components {
     };
     parameters: {
         ProjectId: string;
+        DiagramKind: "architecture" | "database";
         Provider: components["schemas"]["Provider"];
         /** @description The csrf_token from GET /v1/me, bound to the current session. Required on every state-changing request that has a session. */
         CsrfToken: string;
@@ -1871,6 +1872,7 @@ export interface operations {
             header?: never;
             path: {
                 id: components["parameters"]["ProjectId"];
+                kind: components["parameters"]["DiagramKind"];
             };
             cookie?: never;
         };
@@ -1900,6 +1902,7 @@ export interface operations {
             };
             path: {
                 id: components["parameters"]["ProjectId"];
+                kind: components["parameters"]["DiagramKind"];
             };
             cookie?: never;
         };

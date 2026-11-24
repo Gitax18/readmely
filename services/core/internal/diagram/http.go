@@ -25,8 +25,8 @@ func NewHandler(svc *Service) *Handler { return &Handler{svc: svc} }
 
 // Routes registers the diagram routes inside the session group.
 func (h *Handler) Routes(r chi.Router) {
-	r.Get("/projects/{id}/diagram", h.get)
-	r.Post("/projects/{id}/diagram", h.generate)
+	r.Get("/projects/{id}/diagrams/{kind}", h.get)
+	r.Post("/projects/{id}/diagrams/{kind}", h.generate)
 }
 
 func (h *Handler) fail(w http.ResponseWriter, r *http.Request, err error) {
@@ -66,12 +66,26 @@ func projectID(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
 	return id, true
 }
 
+// kindOf reads the {kind} part of the path; anything that is not a diagram kind is a plain 404.
+func kindOf(w http.ResponseWriter, r *http.Request) (string, bool) {
+	kind := chi.URLParam(r, "kind")
+	if !ValidKind(kind) {
+		httpx.WriteError(w, r, http.StatusNotFound, "not_found")
+		return "", false
+	}
+	return kind, true
+}
+
 func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 	id, ok := projectID(w, r)
 	if !ok {
 		return
 	}
-	st, err := h.svc.Get(r.Context(), auth.PrincipalFrom(r).User.ID, id)
+	kind, ok := kindOf(w, r)
+	if !ok {
+		return
+	}
+	st, err := h.svc.Get(r.Context(), auth.PrincipalFrom(r).User.ID, id, kind)
 	if err != nil {
 		h.fail(w, r, err)
 		return
@@ -100,6 +114,10 @@ func (h *Handler) generate(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	kind, ok := kindOf(w, r)
+	if !ok {
+		return
+	}
 	var req struct {
 		Focus string `json:"focus"`
 	}
@@ -113,7 +131,7 @@ func (h *Handler) generate(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, http.StatusBadRequest, "invalid_request")
 		return
 	}
-	job, err := h.svc.Generate(r.Context(), auth.PrincipalFrom(r).User.ID, id, req.Focus)
+	job, err := h.svc.Generate(r.Context(), auth.PrincipalFrom(r).User.ID, id, kind, req.Focus)
 	if err != nil {
 		h.fail(w, r, err)
 		return

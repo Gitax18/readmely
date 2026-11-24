@@ -151,6 +151,7 @@ type ProjectDiagram struct {
 	CommitSha string
 	JobID     *uuid.UUID
 	CreatedAt time.Time
+	Kind      string
 }
 
 type ProjectFact struct {
