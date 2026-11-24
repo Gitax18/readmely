@@ -53,9 +53,23 @@ jobs:
       - uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2.1.7
         id: ecr
 
+      # ECR tags are immutable, so an image for this commit can be pushed only once. Redeploying a
+      # commit (a retry, or a rollback to an older one still kept by ECR) reuses what is there.
+      - name: Find images already in ECR
+        id: have
+        env:
+          SHA: ${{ steps.rev.outputs.sha }}
+        run: |
+          for repo in api ingest migrate ai; do
+            if aws ecr describe-images --repository-name "readmely/${repo}" --image-ids "imageTag=${SHA}" >/dev/null 2>&1; then
+              echo "${repo}=true" >> "$GITHUB_OUTPUT"; echo "readmely/${repo}:${SHA} exists, not rebuilding"
+            fi
+          done
+
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - name: Build and push api
+        if: steps.have.outputs.api != 'true'
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
@@ -69,6 +83,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=core
 
       - name: Build and push ingest
+        if: steps.have.outputs.ingest != 'true'
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
@@ -81,6 +96,7 @@ jobs:
           cache-from: type=gha,scope=core
 
       - name: Build and push migrate
+        if: steps.have.outputs.migrate != 'true'
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
@@ -93,6 +109,7 @@ jobs:
           cache-from: type=gha,scope=core
 
       - name: Build and push ai
+        if: steps.have.outputs.ai != 'true'
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
