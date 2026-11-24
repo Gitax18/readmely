@@ -413,6 +413,38 @@ type GenerateReadmeRequest struct {
 // GenerateReadmeRequestTemplate defines model for GenerateReadmeRequest.Template.
 type GenerateReadmeRequestTemplate string
 
+// GitHubAccess defines model for GitHubAccess.
+type GitHubAccess struct {
+	// Connected GitHub is connected to this user.
+	Connected bool `json:"connected"`
+
+	// Enabled The server can ask for and keep the permission.
+	Enabled bool `json:"enabled"`
+
+	// Granted A token that reads private repositories is stored for this user.
+	Granted bool `json:"granted"`
+}
+
+// GitHubRepository defines model for GitHubRepository.
+type GitHubRepository struct {
+	// Added Already a project of this user.
+	Added         bool   `json:"added"`
+	DefaultBranch string `json:"default_branch"`
+	Description   string `json:"description"`
+	Name          string `json:"name"`
+	Owner         string `json:"owner"`
+	Private       bool   `json:"private"`
+	SizeKb        int    `json:"size_kb"`
+
+	// TooLarge Over the size limit, so it cannot be added.
+	TooLarge bool `json:"too_large"`
+}
+
+// GitHubRepositoryList defines model for GitHubRepositoryList.
+type GitHubRepositoryList struct {
+	Repositories []GitHubRepository `json:"repositories"`
+}
+
 // Hub defines model for Hub.
 type Hub struct {
 	ImportedBy int     `json:"imported_by"`
@@ -457,6 +489,9 @@ type Project struct {
 	DefaultBranch string             `json:"default_branch"`
 	Description   string             `json:"description"`
 	Id            openapi_types.UUID `json:"id"`
+
+	// IsPrivate True when the repository was read with the person's own GitHub access, so it may be private.
+	IsPrivate bool `json:"is_private"`
 
 	// Job Null until the first analysis is requested.
 	Job *ProjectJob `json:"job"`
@@ -773,6 +808,18 @@ type ConfirmAccountDeletionParams struct {
 
 // StartAccountDeletionParams defines parameters for StartAccountDeletion.
 type StartAccountDeletionParams struct {
+	// XCSRFToken The csrf_token from GET /v1/me, bound to the current session. Required on every state-changing request that has a session.
+	XCSRFToken CsrfToken `json:"X-CSRF-Token"`
+}
+
+// RemoveGitHubAccessParams defines parameters for RemoveGitHubAccess.
+type RemoveGitHubAccessParams struct {
+	// XCSRFToken The csrf_token from GET /v1/me, bound to the current session. Required on every state-changing request that has a session.
+	XCSRFToken CsrfToken `json:"X-CSRF-Token"`
+}
+
+// StartGitHubAccessParams defines parameters for StartGitHubAccess.
+type StartGitHubAccessParams struct {
 	// XCSRFToken The csrf_token from GET /v1/me, bound to the current session. Required on every state-changing request that has a session.
 	XCSRFToken CsrfToken `json:"X-CSRF-Token"`
 }

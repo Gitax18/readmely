@@ -5,6 +5,7 @@
 package config
 
 import (
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -53,6 +54,9 @@ type Config struct {
 	ShutdownTimeout time.Duration
 
 	GitHubAPIToken string // optional; never logged
+	// GitHubTokenKey seals people's GitHub tokens (64 hex characters). Empty switches private
+	// repositories off. Never logged.
+	GitHubTokenKey string
 
 	// Sign-in (Phase 2a).
 	AuthCodeKey    string         // HMAC key for login codes and CSRF tokens; never logged
@@ -120,6 +124,8 @@ func Load(getenv func(string) string) (Config, error) {
 
 	c.loadAuth(getenv, &errs)
 	c.loadOAuth(getenv, &errs)
+
+	c.loadGitHubTokenKey(getenv, &errs)
 
 	// Optional: lets the API read public repository details at GitHub's higher rate limit.
 	c.GitHubAPIToken = value(getenv, "GITHUB_API_TOKEN", "")
@@ -431,8 +437,25 @@ func LoadWorker(getenv func(string) string) (Config, error) {
 	} else if err := validateURL(c.DatabaseURL, "postgres", "postgresql"); err != nil {
 		errs = append(errs, fieldError("DATABASE_URL", err))
 	}
+	c.loadGitHubTokenKey(getenv, &errs)
 	if len(errs) > 0 {
 		return Config{}, errors.Join(errs...)
 	}
 	return c, nil
+}
+
+// loadGitHubTokenKey reads the optional key that seals GitHub tokens: 32 bytes as 64 hex characters
+// (openssl rand -hex 32). The same key must reach the API and the analysis worker.
+func (c *Config) loadGitHubTokenKey(getenv func(string) string, errs *[]error) {
+	c.GitHubTokenKey = value(getenv, "GITHUB_TOKEN_KEY", "")
+	if c.GitHubTokenKey == "" {
+		return
+	}
+	if len(c.GitHubTokenKey) != 64 {
+		*errs = append(*errs, fieldError("GITHUB_TOKEN_KEY", errors.New("must be 64 hex characters (generate with: openssl rand -hex 32)")))
+		return
+	}
+	if _, err := hex.DecodeString(c.GitHubTokenKey); err != nil {
+		*errs = append(*errs, fieldError("GITHUB_TOKEN_KEY", errors.New("must be hex (generate with: openssl rand -hex 32)")))
+	}
 }

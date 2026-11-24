@@ -93,6 +93,7 @@ func TestAccountAPIDocumentsItsSecurityRules(t *testing.T) {
 	}
 	sort.Strings(seen)
 	want := []string{
+		"DELETE /v1/me/github/access",
 		"DELETE /v1/me/identities/{provider}",
 		"DELETE /v1/me/sessions",
 		"DELETE /v1/me/sessions/{id}",
@@ -103,6 +104,8 @@ func TestAccountAPIDocumentsItsSecurityRules(t *testing.T) {
 		"GET /v1/me",
 		"GET /v1/me/credits",
 		"GET /v1/me/credits/history",
+		"GET /v1/me/github/access",
+		"GET /v1/me/github/repos",
 		"GET /v1/me/identities",
 		"GET /v1/me/sessions",
 		"GET /v1/projects",
@@ -118,6 +121,7 @@ func TestAccountAPIDocumentsItsSecurityRules(t *testing.T) {
 		"POST /v1/auth/logout",
 		"POST /v1/me/deletion/confirm",
 		"POST /v1/me/deletion/start",
+		"POST /v1/me/github/access/start",
 		"POST /v1/me/identities/{provider}/start",
 		"POST /v1/projects",
 		"POST /v1/projects/preview",

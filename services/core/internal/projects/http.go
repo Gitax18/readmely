@@ -37,6 +37,7 @@ func (h *Handler) Routes(r chi.Router) {
 	r.Post("/projects/{id}/analyse", h.analyse)
 	r.Get("/projects/{id}/analysis", h.analysis)
 	r.Get("/projects/{id}/context-pack", h.contextPack)
+	r.Get("/me/github/repos", h.githubRepos)
 }
 
 func decode(r *http.Request, v any) bool {
@@ -67,6 +68,8 @@ func (h *Handler) fail(w http.ResponseWriter, r *http.Request, err error) {
 		httpx.WriteError(w, r, http.StatusServiceUnavailable, "github_unavailable")
 	case errors.Is(err, ErrAlreadyAdded):
 		httpx.WriteError(w, r, http.StatusConflict, "already_added")
+	case errors.Is(err, ErrAccessRequired):
+		httpx.WriteError(w, r, http.StatusConflict, "conflict")
 	case errors.Is(err, ErrLimit):
 		httpx.WriteError(w, r, http.StatusConflict, "project_limit")
 	case errors.Is(err, ErrRunning):
@@ -173,7 +176,7 @@ func projectBody(v View) corepublic.Project {
 	body := corepublic.Project{
 		Id: p.ID, Name: p.Name, Owner: deref(p.RepoOwner), Repo: deref(p.RepoName),
 		Description: deref(p.RepoDescription), DefaultBranch: deref(p.DefaultBranch),
-		SizeKb: int(p.RepoSizeKb.Int32), Status: corepublic.ProjectStatus(p.Status),
+		SizeKb: int(p.RepoSizeKb.Int32), IsPrivate: p.IsPrivate, Status: corepublic.ProjectStatus(p.Status),
 		CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt,
 	}
 	if v.Job != nil {
@@ -249,4 +252,20 @@ func (h *Handler) contextPack(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, contextPackBody(p))
+}
+
+func (h *Handler) githubRepos(w http.ResponseWriter, r *http.Request) {
+	repos, err := h.svc.GitHubRepos(r.Context(), auth.PrincipalFrom(r).User.ID)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	out := make([]corepublic.GitHubRepository, 0, len(repos))
+	for _, g := range repos {
+		out = append(out, corepublic.GitHubRepository{
+			Owner: g.Owner, Name: g.Name, Description: g.Description, DefaultBranch: g.DefaultBranch,
+			SizeKb: g.SizeKB, Private: g.Private, Added: g.Added, TooLarge: g.TooLarge,
+		})
+	}
+	httpx.WriteJSON(w, http.StatusOK, corepublic.GitHubRepositoryList{Repositories: out})
 }

@@ -81,6 +81,10 @@ func (h *Handler) oauthCallback(w http.ResponseWriter, r *http.Request) {
 		redirect(w, "/login?error="+url.QueryEscape(res.ErrCode))
 		return
 	}
+	if res.Next != "" {
+		redirect(w, res.Next)
+		return
+	}
 	redirect(w, "/account")
 }
 
@@ -114,6 +118,33 @@ func (h *Handler) disconnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.svc.DisconnectIdentity(r.Context(), principal(r), provider, r.UserAgent()); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) githubAccess(w http.ResponseWriter, r *http.Request) {
+	st, err := h.svc.GitHubAccess(r.Context(), principal(r))
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, corepublic.GitHubAccess{Enabled: st.Enabled, Connected: st.Connected, Granted: st.Granted})
+}
+
+func (h *Handler) startGitHubAccess(w http.ResponseWriter, r *http.Request) {
+	authURL, binding, err := h.svc.StartGitHubAccess(r.Context(), principal(r), h.addr.Addr(r))
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	setOAuthCookie(w, binding)
+	httpx.WriteJSON(w, http.StatusOK, corepublic.AuthorizationUrl{AuthorizationUrl: authURL})
+}
+
+func (h *Handler) removeGitHubAccess(w http.ResponseWriter, r *http.Request) {
+	if err := h.svc.RemoveGitHubAccess(r.Context(), principal(r)); err != nil {
 		h.fail(w, r, err)
 		return
 	}

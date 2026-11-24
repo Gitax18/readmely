@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,6 +23,7 @@ import (
 	"github.com/Gitax18/readmely/services/core/internal/contextpack"
 	"github.com/Gitax18/readmely/services/core/internal/db/store"
 	"github.com/Gitax18/readmely/services/core/internal/github"
+	"github.com/Gitax18/readmely/services/core/internal/githubaccess"
 	"github.com/Gitax18/readmely/services/core/internal/ratelimit"
 )
 
@@ -42,6 +44,7 @@ var (
 	rulePreview = ratelimit.Rule{Name: "project_preview_user", Max: 30, Window: time.Hour}
 	ruleCreate  = ratelimit.Rule{Name: "project_create_user", Max: 10, Window: time.Hour}
 	ruleAnalyse = ratelimit.Rule{Name: "project_analyse_user", Max: 20, Window: time.Hour}
+	ruleRepos   = ratelimit.Rule{Name: "github_repos_user", Max: 30, Window: 10 * time.Minute}
 )
 
 // Errors the handlers turn into the documented answers.
@@ -54,6 +57,8 @@ var (
 	ErrLimit        = errors.New("project limit reached")
 	ErrRunning      = errors.New("analysis already running")
 	ErrNotFound     = errors.New("project not found")
+	// ErrAccessRequired means the person has not granted GitHub access, or GitHub no longer accepts it.
+	ErrAccessRequired = errors.New("github access required")
 )
 
 // RateLimitedError carries how long the caller should wait.
@@ -66,6 +71,12 @@ type Repos interface {
 	Repository(ctx context.Context, ref github.Ref) (github.Repository, error)
 }
 
+// UserRepos reads repositories as one person, with the token they granted.
+type UserRepos interface {
+	Repos
+	ListRepositories(ctx context.Context) ([]github.Repository, error)
+}
+
 // Service is the project logic. It has no HTTP in it.
 type Service struct {
 	pool    *pgxpool.Pool
@@ -73,11 +84,43 @@ type Service struct {
 	limiter *ratelimit.Limiter
 	repos   Repos
 	logger  *slog.Logger
+
+	// Private repositories: the stored tokens and a way to act as a person. Both nil when off.
+	access  *githubaccess.Store
+	forUser func(token string) UserRepos
 }
 
 // NewService wires the service.
 func NewService(pool *pgxpool.Pool, limiter *ratelimit.Limiter, repos Repos, logger *slog.Logger) *Service {
 	return &Service{pool: pool, q: store.New(pool), limiter: limiter, repos: repos, logger: logger}
+}
+
+// EnablePrivate lets people add their private repositories: the person's stored token is used
+// when a repository is not public, and to list what they can see.
+func (s *Service) EnablePrivate(access *githubaccess.Store, forUser func(token string) UserRepos) {
+	s.access, s.forUser = access, forUser
+}
+
+// userClient returns a GitHub client acting as the person, or ok=false when they have not granted access.
+func (s *Service) userClient(ctx context.Context, userID uuid.UUID) (UserRepos, bool, error) {
+	if s.access == nil || s.forUser == nil {
+		return nil, false, nil
+	}
+	token, err := s.access.Token(ctx, userID)
+	if errors.Is(err, githubaccess.ErrNone) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, fmt.Errorf("projects: %w", err)
+	}
+	return s.forUser(token), true, nil
+}
+
+// dropAccess forgets a token GitHub no longer accepts, so the screen offers to grant it again.
+func (s *Service) dropAccess(ctx context.Context, userID uuid.UUID) {
+	if err := s.access.Remove(ctx, userID); err != nil {
+		s.logger.ErrorContext(ctx, "remove rejected github token", "error", err)
+	}
 }
 
 // View is a project with its latest analysis job (nil before the first analysis).
@@ -97,13 +140,27 @@ func (s *Service) allow(ctx context.Context, rule ratelimit.Rule, userID uuid.UU
 	return nil
 }
 
-// lookup parses the address and asks GitHub, enforcing the size limit.
-func (s *Service) lookup(ctx context.Context, rawURL string) (github.Repository, error) {
+// lookup parses the address and asks GitHub, enforcing the size limit. A repository that is not
+// public is asked for again with the person's own token, if they granted one.
+func (s *Service) lookup(ctx context.Context, userID uuid.UUID, rawURL string) (github.Repository, error) {
 	ref, err := github.ParseURL(rawURL)
 	if err != nil {
 		return github.Repository{}, ErrInvalidURL
 	}
 	repo, err := s.repos.Repository(ctx, ref)
+	if errors.Is(err, github.ErrNotFound) {
+		uc, ok, uerr := s.userClient(ctx, userID)
+		if uerr != nil {
+			return github.Repository{}, uerr
+		}
+		if ok {
+			repo, err = uc.Repository(ctx, ref)
+			if errors.Is(err, github.ErrUnauthorized) {
+				s.dropAccess(ctx, userID)
+				err = github.ErrNotFound
+			}
+		}
+	}
 	if err != nil {
 		return github.Repository{}, err
 	}
@@ -118,7 +175,7 @@ func (s *Service) Preview(ctx context.Context, userID uuid.UUID, rawURL string) 
 	if err := s.allow(ctx, rulePreview, userID); err != nil {
 		return github.Repository{}, err
 	}
-	return s.lookup(ctx, rawURL)
+	return s.lookup(ctx, userID, rawURL)
 }
 
 // Create adds the repository as a project (status draft).
@@ -133,7 +190,7 @@ func (s *Service) Create(ctx context.Context, userID uuid.UUID, rawURL string) (
 	if n >= MaxProjects {
 		return View{}, ErrLimit
 	}
-	repo, err := s.lookup(ctx, rawURL)
+	repo, err := s.lookup(ctx, userID, rawURL)
 	if err != nil {
 		return View{}, err
 	}
@@ -149,6 +206,7 @@ func (s *Service) Create(ctx context.Context, userID uuid.UUID, rawURL string) (
 		RepoDescription: &repo.Description,
 		DefaultBranch:   &repo.DefaultBranch,
 		RepoSizeKb:      pgtype.Int4{Int32: int32(repo.SizeKB), Valid: true}, //nolint:gosec // bounded by MaxRepoKB
+		IsPrivate:       repo.Private,
 	})
 	if err != nil {
 		var pg *pgconn.PgError
@@ -357,4 +415,49 @@ func (s *Service) ContextPack(ctx context.Context, userID, id uuid.UUID) (Contex
 		}
 	}
 	return ContextPack{CommitSHA: a.CommitSHA, WithSummary: in.Summary != nil, Presets: contextpack.Build(in)}, nil
+}
+
+// GitHubRepo is one repository the person's GitHub access can see.
+type GitHubRepo struct {
+	github.Repository
+	Added    bool // already one of their projects
+	TooLarge bool // over the size limit
+}
+
+// GitHubRepos lists the repositories the person's granted access can see, marking those already
+// added. Without access (or when GitHub no longer accepts the token) it is ErrAccessRequired.
+func (s *Service) GitHubRepos(ctx context.Context, userID uuid.UUID) ([]GitHubRepo, error) {
+	if err := s.allow(ctx, ruleRepos, userID); err != nil {
+		return nil, err
+	}
+	uc, ok, err := s.userClient(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, ErrAccessRequired
+	}
+	repos, err := uc.ListRepositories(ctx)
+	if errors.Is(err, github.ErrUnauthorized) {
+		s.dropAccess(ctx, userID)
+		return nil, ErrAccessRequired
+	}
+	if err != nil {
+		return nil, err
+	}
+	mine, err := s.q.ListProjects(ctx, store.ListProjectsParams{UserID: userID, RowLimit: listLimit})
+	if err != nil {
+		return nil, fmt.Errorf("list github repos: %w", err)
+	}
+	added := make(map[string]bool, len(mine))
+	for _, p := range mine {
+		if p.RepoOwner != nil && p.RepoName != nil {
+			added[strings.ToLower(*p.RepoOwner+"/"+*p.RepoName)] = true
+		}
+	}
+	out := make([]GitHubRepo, 0, len(repos))
+	for _, r := range repos {
+		out = append(out, GitHubRepo{Repository: r, Added: added[strings.ToLower(r.String())], TooLarge: r.SizeKB > MaxRepoKB})
+	}
+	return out, nil
 }

@@ -23,6 +23,7 @@ import (
 	"github.com/Gitax18/readmely/services/core/internal/credits"
 	"github.com/Gitax18/readmely/services/core/internal/diagram"
 	"github.com/Gitax18/readmely/services/core/internal/github"
+	"github.com/Gitax18/readmely/services/core/internal/githubaccess"
 	"github.com/Gitax18/readmely/services/core/internal/health"
 	"github.com/Gitax18/readmely/services/core/internal/logging"
 	"github.com/Gitax18/readmely/services/core/internal/mail"
@@ -30,6 +31,7 @@ import (
 	"github.com/Gitax18/readmely/services/core/internal/projects"
 	"github.com/Gitax18/readmely/services/core/internal/ratelimit"
 	"github.com/Gitax18/readmely/services/core/internal/readme"
+	"github.com/Gitax18/readmely/services/core/internal/secretbox"
 	"github.com/Gitax18/readmely/services/core/internal/server"
 	"github.com/Gitax18/readmely/services/core/internal/status"
 )
@@ -107,10 +109,25 @@ func run(ctx context.Context, args []string, getenv func(string) string, stdout,
 	if cfg.GitHubClientID != "" {
 		providers[oauth.GitHub] = oauth.NewGitHub(cfg.GitHubClientID, cfg.GitHubClientSecret, nil)
 	}
-	authService.EnableOAuth(auth.OAuthConfig{Providers: providers, Store: oauth.NewStore(rdb, "rm:"), WebOrigin: cfg.WebOrigin})
+	// Private repositories need the key that seals people's GitHub tokens; without it the feature is off.
+	var access *githubaccess.Store
+	if cfg.GitHubTokenKey != "" {
+		box, err := secretbox.NewFromHex(cfg.GitHubTokenKey)
+		if err != nil {
+			logger.Error("invalid GITHUB_TOKEN_KEY", "error", err)
+			return 2
+		}
+		access = githubaccess.New(pool, box)
+	}
+	authService.EnableOAuth(auth.OAuthConfig{Providers: providers, Store: oauth.NewStore(rdb, "rm:"), WebOrigin: cfg.WebOrigin, Access: access})
 	logger.Info("provider sign-in", "providers", authService.Providers())
 	authHandler := auth.NewHandler(authService, clientip.New(cfg.TrustedProxies), cfg.WebOrigin, logger)
-	projectHandler := projects.NewHandler(projects.NewService(pool, ratelimit.New(rdb, "rm:rl:"), github.NewClient(cfg.GitHubAPIToken), logger))
+	githubClient := github.NewClient(cfg.GitHubAPIToken)
+	projectService := projects.NewService(pool, ratelimit.New(rdb, "rm:rl:"), githubClient, logger)
+	if access != nil {
+		projectService.EnablePrivate(access, func(token string) projects.UserRepos { return githubClient.WithToken(token) })
+	}
+	projectHandler := projects.NewHandler(projectService)
 	authHandler.AddRoutes(projectHandler.Routes)
 	authHandler.AddRoutes(credits.NewHandler(pool).Routes)
 	authHandler.AddRoutes(diagram.NewHandler(diagram.NewService(pool, ratelimit.New(rdb, "rm:rl:"))).Routes)

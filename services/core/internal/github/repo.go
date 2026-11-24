@@ -1,4 +1,5 @@
-// Package github reads public repository details from GitHub's REST API. It talks to one fixed
+// Package github reads repository details from GitHub's REST API: public ones with the server's
+// token, and a person's own (private ones too) with the token they granted. It talks to one fixed
 // host, follows no redirects, and keeps every response small, like the sign-in provider clients.
 package github
 
@@ -26,6 +27,8 @@ var (
 	ErrInvalidURL  = errors.New("not a github.com repository address")
 	ErrNotFound    = errors.New("repository not found or not public")
 	ErrUnavailable = errors.New("github is not answering")
+	// ErrUnauthorized means GitHub refused the person's token: it was revoked or has expired.
+	ErrUnauthorized = errors.New("github refused the token")
 )
 
 var (
@@ -75,6 +78,8 @@ type Repository struct {
 	Description   string
 	DefaultBranch string
 	SizeKB        int
+	// Private is true for a repository only the person's own token can see.
+	Private bool
 }
 
 // Client reads from the GitHub API. The token is optional: it only raises the rate limit.
@@ -83,6 +88,7 @@ type Client struct {
 	archive *http.Client // downloads; its time limit is the caller's context
 	base    string
 	token   string
+	asUser  bool // the token is a person's own: private repositories are allowed
 }
 
 // NewClient returns a client for api.github.com.
@@ -98,8 +104,17 @@ func NewClient(token string) *Client {
 	}
 }
 
-// Repository returns the public repository, or ErrNotFound when it does not exist or is private
-// (GitHub answers both the same way to a request without access).
+// WithToken returns a client that acts as the person who granted the token: it can read their
+// private repositories. The original client is not changed.
+func (c *Client) WithToken(token string) *Client {
+	cp := *c
+	cp.token = token
+	cp.asUser = true
+	return &cp
+}
+
+// Repository returns the repository, or ErrNotFound when it does not exist or, for a client without
+// a person's token, is private (GitHub answers both the same way to a request without access).
 func (c *Client) Repository(ctx context.Context, ref Ref) (Repository, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
 		c.base+"/repos/"+url.PathEscape(ref.Owner)+"/"+url.PathEscape(ref.Name), nil)
@@ -118,41 +133,57 @@ func (c *Client) Repository(ctx context.Context, ref Ref) (Repository, error) {
 	}
 	defer func() { _ = res.Body.Close() }()
 	switch {
+	case res.StatusCode == http.StatusUnauthorized && c.asUser:
+		return Repository{}, ErrUnauthorized
 	case res.StatusCode == http.StatusNotFound || res.StatusCode == http.StatusGone || res.StatusCode == http.StatusUnavailableForLegalReasons:
 		return Repository{}, ErrNotFound
 	case res.StatusCode != http.StatusOK:
 		// Includes rate limiting (403/429) and server errors.
 		return Repository{}, ErrUnavailable
 	}
-	var body struct {
-		Private       bool                   `json:"private"`
-		FullName      string                 `json:"full_name"`
-		Name          string                 `json:"name"`
-		Owner         struct{ Login string } `json:"owner"`
-		Description   *string                `json:"description"`
-		DefaultBranch string                 `json:"default_branch"`
-		Size          int                    `json:"size"`
-	}
+	var body repoBody
 	if err := json.NewDecoder(io.LimitReader(res.Body, maxResponse)).Decode(&body); err != nil {
 		return Repository{}, ErrUnavailable
 	}
-	if body.Private {
+	if body.Private && !c.asUser {
 		return Repository{}, ErrNotFound
 	}
-	// Use what GitHub says the repository is called (case, renames), but only if it is well formed.
-	if !ownerRe.MatchString(body.Owner.Login) || !nameRe.MatchString(body.Name) || !safeBranch(body.DefaultBranch) || body.Size < 0 {
+	repo, ok := body.repository()
+	if !ok {
 		return Repository{}, ErrUnavailable
 	}
+	return repo, nil
+}
+
+// repoBody is the part of GitHub's repository object that is read.
+type repoBody struct {
+	Private       bool                   `json:"private"`
+	Name          string                 `json:"name"`
+	Owner         struct{ Login string } `json:"owner"`
+	Description   *string                `json:"description"`
+	DefaultBranch string                 `json:"default_branch"`
+	Size          int                    `json:"size"`
+	Archived      bool                   `json:"archived"`
+	Disabled      bool                   `json:"disabled"`
+}
+
+// repository turns what GitHub says into a Repository, using its spelling of the name (case,
+// renames) but only when every part is well formed.
+func (b repoBody) repository() (Repository, bool) {
+	if !ownerRe.MatchString(b.Owner.Login) || !nameRe.MatchString(b.Name) || b.Name == "." || b.Name == ".." || !safeBranch(b.DefaultBranch) || b.Size < 0 {
+		return Repository{}, false
+	}
 	desc := ""
-	if body.Description != nil {
-		desc = cleanDescription(*body.Description)
+	if b.Description != nil {
+		desc = cleanDescription(*b.Description)
 	}
 	return Repository{
-		Ref:           Ref{Owner: body.Owner.Login, Name: body.Name},
+		Ref:           Ref{Owner: b.Owner.Login, Name: b.Name},
 		Description:   desc,
-		DefaultBranch: body.DefaultBranch,
-		SizeKB:        body.Size,
-	}, nil
+		DefaultBranch: b.DefaultBranch,
+		SizeKB:        b.Size,
+		Private:       b.Private,
+	}, true
 }
 
 // cleanDescription drops control characters and caps the length, so a description can be shown

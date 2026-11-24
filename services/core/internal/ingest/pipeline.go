@@ -16,6 +16,7 @@ import (
 
 	"github.com/Gitax18/readmely/services/core/internal/db/store"
 	"github.com/Gitax18/readmely/services/core/internal/github"
+	"github.com/Gitax18/readmely/services/core/internal/githubaccess"
 	"github.com/Gitax18/readmely/services/core/internal/projects"
 	"github.com/Gitax18/readmely/services/core/internal/worker"
 )
@@ -24,6 +25,8 @@ import (
 type Pipeline struct {
 	Pool   *pgxpool.Pool
 	GitHub *github.Client
+	// Access holds the owners' tokens for private repositories; nil when that is switched off.
+	Access *githubaccess.Store
 }
 
 // analysisTimeout bounds the whole run, download included.
@@ -49,14 +52,23 @@ func (p *Pipeline) Handle(ctx context.Context, job store.Job, report worker.Repo
 	}
 	ref := github.Ref{Owner: *proj.RepoOwner, Name: *proj.RepoName}
 
-	report("fetching", 8)
-	sha, err := p.GitHub.CommitSHA(ctx, ref, *proj.DefaultBranch)
-	if err != nil {
-		return githubFailure(err)
+	// A private repository is read with its owner's token, and only the owner's.
+	gh := p.GitHub
+	if proj.IsPrivate {
+		var failure error
+		if gh, failure = p.ownerClient(ctx, job.UserID); failure != nil {
+			return failure
+		}
 	}
-	body, err := p.GitHub.Archive(ctx, ref, sha)
+
+	report("fetching", 8)
+	sha, err := gh.CommitSHA(ctx, ref, *proj.DefaultBranch)
 	if err != nil {
-		return githubFailure(err)
+		return p.githubFailure(ctx, job.UserID, proj.IsPrivate, err)
+	}
+	body, err := gh.Archive(ctx, ref, sha)
+	if err != nil {
+		return p.githubFailure(ctx, job.UserID, proj.IsPrivate, err)
 	}
 	files, stats, err := Extract(body)
 	_ = body.Close()
@@ -108,6 +120,34 @@ func (p *Pipeline) Handle(ctx context.Context, job store.Job, report worker.Repo
 		return err
 	}
 	return nil
+}
+
+// ownerClient is the GitHub client acting as the project's owner. Without a usable token the job
+// fails for good with a code that tells the person to grant access again.
+func (p *Pipeline) ownerClient(ctx context.Context, userID uuid.UUID) (*github.Client, error) {
+	need := &worker.Failure{Code: "github_access_required", Err: githubaccess.ErrNone, Permanent: true}
+	if p.Access == nil {
+		return nil, need
+	}
+	token, err := p.Access.Token(ctx, userID)
+	if errors.Is(err, githubaccess.ErrNone) {
+		return nil, need
+	}
+	if err != nil {
+		return nil, err
+	}
+	return p.GitHub.WithToken(token), nil
+}
+
+func (p *Pipeline) githubFailure(ctx context.Context, userID uuid.UUID, private bool, err error) error {
+	if errors.Is(err, github.ErrUnauthorized) {
+		// GitHub no longer accepts the token: forget it so the screen offers to grant it again.
+		if private && p.Access != nil {
+			_ = p.Access.Remove(context.WithoutCancel(ctx), userID)
+		}
+		return &worker.Failure{Code: "github_access_required", Err: err, Permanent: true}
+	}
+	return githubFailure(err)
 }
 
 func githubFailure(err error) error {

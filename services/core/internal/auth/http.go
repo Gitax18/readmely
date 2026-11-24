@@ -72,6 +72,9 @@ func (h *Handler) Mount(r chi.Router) {
 			r.Get("/me/identities", h.listIdentities)
 			r.Post("/me/identities/{provider}/start", h.startConnect)
 			r.Delete("/me/identities/{provider}", h.disconnect)
+			r.Get("/me/github/access", h.githubAccess)
+			r.Post("/me/github/access/start", h.startGitHubAccess)
+			r.Delete("/me/github/access", h.removeGitHubAccess)
 			for _, extra := range h.extras {
 				extra(r)
 			}

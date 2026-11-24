@@ -49,6 +49,7 @@ type Querier interface {
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	DeleteAllUserSessions(ctx context.Context, userID uuid.UUID) (int64, error)
 	DeleteEndedSessions(ctx context.Context) (int64, error)
+	DeleteGitHubAccess(ctx context.Context, userID uuid.UUID) (int64, error)
 	// Challenges are kept for @retention_days for abuse review (requested_ip), then removed.
 	DeleteOldLoginChallenges(ctx context.Context, retentionDays int32) (int64, error)
 	// Sign out everywhere else: every session of the user except the one making the request.
@@ -72,6 +73,7 @@ type Querier interface {
 	// repository, one that is too large). Only the worker holding the job can.
 	FailJob(ctx context.Context, arg FailJobParams) (Job, error)
 	GetCreditBalance(ctx context.Context, userID uuid.UUID) (int64, error)
+	GetGitHubAccess(ctx context.Context, userID uuid.UUID) (GithubAccess, error)
 	// Provider sign-in (plans/phase-2b-oauth-login.md). Identities are keyed by the provider's own id.
 	// The connected account for a provider's stable id, with its user (the caller checks the status).
 	GetIdentityByProviderAccount(ctx context.Context, arg GetIdentityByProviderAccountParams) (GetIdentityByProviderAccountRow, error)
@@ -128,6 +130,9 @@ type Querier interface {
 	// Slides the idle expiry, at most once per @min_interval_seconds, never past the absolute expiry.
 	TouchSession(ctx context.Context, arg TouchSessionParams) (int64, error)
 	UpdateUserDisplayName(ctx context.Context, arg UpdateUserDisplayNameParams) (User, error)
+	// A person's sealed GitHub token (plans/phase-9b-private-repos.md). The caller seals and opens it;
+	// these queries only move bytes, always scoped to one user.
+	UpsertGitHubAccess(ctx context.Context, arg UpsertGitHubAccessParams) error
 	UpsertProjectFacts(ctx context.Context, arg UpsertProjectFactsParams) error
 	// The account for an address that just proved it receives mail: created on first sign-in,
 	// and marked verified either way.

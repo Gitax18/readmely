@@ -25,7 +25,7 @@ func (q *Queries) CountUserProjects(ctx context.Context, userID uuid.UUID) (int6
 
 const createProject = `-- name: CreateProject :one
 
-INSERT INTO projects (user_id, name) VALUES ($1, $2) RETURNING id, user_id, name, status, created_at, updated_at, repo_owner, repo_name, repo_description, default_branch, repo_size_kb, commit_sha
+INSERT INTO projects (user_id, name) VALUES ($1, $2) RETURNING id, user_id, name, status, created_at, updated_at, repo_owner, repo_name, repo_description, default_branch, repo_size_kb, commit_sha, is_private
 `
 
 type CreateProjectParams struct {
@@ -51,14 +51,15 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 		&i.DefaultBranch,
 		&i.RepoSizeKb,
 		&i.CommitSha,
+		&i.IsPrivate,
 	)
 	return i, err
 }
 
 const createRepositoryProject = `-- name: CreateRepositoryProject :one
-INSERT INTO projects (user_id, name, repo_owner, repo_name, repo_description, default_branch, repo_size_kb)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, user_id, name, status, created_at, updated_at, repo_owner, repo_name, repo_description, default_branch, repo_size_kb, commit_sha
+INSERT INTO projects (user_id, name, repo_owner, repo_name, repo_description, default_branch, repo_size_kb, is_private)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, user_id, name, status, created_at, updated_at, repo_owner, repo_name, repo_description, default_branch, repo_size_kb, commit_sha, is_private
 `
 
 type CreateRepositoryProjectParams struct {
@@ -69,6 +70,7 @@ type CreateRepositoryProjectParams struct {
 	RepoDescription *string
 	DefaultBranch   *string
 	RepoSizeKb      pgtype.Int4
+	IsPrivate       bool
 }
 
 // A project for a GitHub repository. A unique violation on (user, repository) means it is already added.
@@ -81,6 +83,7 @@ func (q *Queries) CreateRepositoryProject(ctx context.Context, arg CreateReposit
 		arg.RepoDescription,
 		arg.DefaultBranch,
 		arg.RepoSizeKb,
+		arg.IsPrivate,
 	)
 	var i Project
 	err := row.Scan(
@@ -96,6 +99,7 @@ func (q *Queries) CreateRepositoryProject(ctx context.Context, arg CreateReposit
 		&i.DefaultBranch,
 		&i.RepoSizeKb,
 		&i.CommitSha,
+		&i.IsPrivate,
 	)
 	return i, err
 }
@@ -118,7 +122,7 @@ func (q *Queries) DeleteProject(ctx context.Context, arg DeleteProjectParams) (i
 }
 
 const getProject = `-- name: GetProject :one
-SELECT id, user_id, name, status, created_at, updated_at, repo_owner, repo_name, repo_description, default_branch, repo_size_kb, commit_sha FROM projects WHERE id = $1 AND user_id = $2
+SELECT id, user_id, name, status, created_at, updated_at, repo_owner, repo_name, repo_description, default_branch, repo_size_kb, commit_sha, is_private FROM projects WHERE id = $1 AND user_id = $2
 `
 
 type GetProjectParams struct {
@@ -142,12 +146,13 @@ func (q *Queries) GetProject(ctx context.Context, arg GetProjectParams) (Project
 		&i.DefaultBranch,
 		&i.RepoSizeKb,
 		&i.CommitSha,
+		&i.IsPrivate,
 	)
 	return i, err
 }
 
 const listProjects = `-- name: ListProjects :many
-SELECT id, user_id, name, status, created_at, updated_at, repo_owner, repo_name, repo_description, default_branch, repo_size_kb, commit_sha FROM projects
+SELECT id, user_id, name, status, created_at, updated_at, repo_owner, repo_name, repo_description, default_branch, repo_size_kb, commit_sha, is_private FROM projects
 WHERE user_id = $1
 ORDER BY created_at DESC, id DESC
 LIMIT $3 OFFSET $2
@@ -181,6 +186,7 @@ func (q *Queries) ListProjects(ctx context.Context, arg ListProjectsParams) ([]P
 			&i.DefaultBranch,
 			&i.RepoSizeKb,
 			&i.CommitSha,
+			&i.IsPrivate,
 		); err != nil {
 			return nil, err
 		}
@@ -193,7 +199,7 @@ func (q *Queries) ListProjects(ctx context.Context, arg ListProjectsParams) ([]P
 }
 
 const renameProject = `-- name: RenameProject :one
-UPDATE projects SET name = $1 WHERE id = $2 AND user_id = $3 RETURNING id, user_id, name, status, created_at, updated_at, repo_owner, repo_name, repo_description, default_branch, repo_size_kb, commit_sha
+UPDATE projects SET name = $1 WHERE id = $2 AND user_id = $3 RETURNING id, user_id, name, status, created_at, updated_at, repo_owner, repo_name, repo_description, default_branch, repo_size_kb, commit_sha, is_private
 `
 
 type RenameProjectParams struct {
@@ -218,12 +224,13 @@ func (q *Queries) RenameProject(ctx context.Context, arg RenameProjectParams) (P
 		&i.DefaultBranch,
 		&i.RepoSizeKb,
 		&i.CommitSha,
+		&i.IsPrivate,
 	)
 	return i, err
 }
 
 const setProjectStatus = `-- name: SetProjectStatus :one
-UPDATE projects SET status = $1 WHERE id = $2 AND user_id = $3 RETURNING id, user_id, name, status, created_at, updated_at, repo_owner, repo_name, repo_description, default_branch, repo_size_kb, commit_sha
+UPDATE projects SET status = $1 WHERE id = $2 AND user_id = $3 RETURNING id, user_id, name, status, created_at, updated_at, repo_owner, repo_name, repo_description, default_branch, repo_size_kb, commit_sha, is_private
 `
 
 type SetProjectStatusParams struct {
@@ -248,6 +255,7 @@ func (q *Queries) SetProjectStatus(ctx context.Context, arg SetProjectStatusPara
 		&i.DefaultBranch,
 		&i.RepoSizeKb,
 		&i.CommitSha,
+		&i.IsPrivate,
 	)
 	return i, err
 }

@@ -399,11 +399,12 @@ paths:
   /v1/projects/preview:
     post:
       operationId: previewRepository
-      summary: Look up a public GitHub repository before adding it
+      summary: Look up a GitHub repository before adding it
       description: >-
         Takes what a person pastes (https://github.com/owner/repo, with or without the scheme, ".git" or a trailing
         path) and answers with what GitHub says about it, without creating anything. Errors: invalid_request (not a
-        github.com repository address), repository_not_found (missing or private), repository_too_large (over the
+        github.com repository address), repository_not_found (missing, or private and not readable with the person's
+        granted GitHub access), repository_too_large (over the
         size limit) and github_unavailable (GitHub is not answering or is rate limiting).
       security:
         - sessionCookie: []
@@ -471,9 +472,10 @@ paths:
           $ref: '#/components/responses/UnexpectedError'
     post:
       operationId: createProject
-      summary: Add a public GitHub repository as a project
+      summary: Add a GitHub repository as a project
       description: >-
-        Checks the repository the same way as the preview, then creates the project (status draft). At most 10
+        A repository that is not public is read with the GitHub access the person granted (see /v1/me/github/access);
+        without it that is repository_not_found. Checks the repository the same way as the preview, then creates the project (status draft). At most 10
         projects per user (409 project_limit); the same repository twice is 409 already_added. Analysis starts
         with a separate request.
       security:
@@ -1118,6 +1120,131 @@ paths:
         default:
           $ref: '#/components/responses/UnexpectedError'
 
+  /v1/me/github/access:
+    get:
+      operationId: getGitHubAccess
+      summary: Whether private repositories can be read for this user
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: The state of the access.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GitHubAccess'
+              example:
+                enabled: true
+                connected: true
+                granted: false
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        default:
+          $ref: '#/components/responses/UnexpectedError'
+    delete:
+      operationId: removeGitHubAccess
+      summary: Take back the permission to read private repositories
+      description: >-
+        Deletes the stored token. Projects already added keep what was analysed; analysing a private one again
+        needs the access granted again. Removing what is not there is still 204.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '204':
+          description: Removed.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/UnexpectedError'
+  /v1/me/github/access/start:
+    post:
+      operationId: startGitHubAccess
+      summary: Begin granting permission to read private repositories
+      description: >-
+        A POST with the CSRF token, like connecting a provider. Needs GitHub connected to this user (409 conflict
+        otherwise) and the feature switched on (404 not_found when it is not). Returns GitHub's authorization URL,
+        which asks for the `repo` scope: GitHub offers no read-only scope for private repositories to an OAuth app.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '200':
+          description: Where to send the browser. Also sets the attempt cookie.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Set-Cookie:
+              $ref: '#/components/headers/OAuthCookie'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthorizationUrl'
+              example:
+                authorization_url: https://github.com/login/oauth/authorize?client_id=example
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        default:
+          $ref: '#/components/responses/UnexpectedError'
+  /v1/me/github/repos:
+    get:
+      operationId: listGitHubRepositories
+      summary: The repositories this user's GitHub access can see
+      description: >-
+        Their own, their organisations' and ones they collaborate on, most recently pushed first, at most 300.
+        Archived repositories are left out. 409 conflict when access has not been granted (or GitHub no longer
+        accepts it); 503 github_unavailable when GitHub is not answering.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: The repositories.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GitHubRepositoryList'
+              example:
+                repositories:
+                  - owner: ada
+                    name: engine
+                    description: A small analytical engine.
+                    default_branch: main
+                    size_kb: 2480
+                    private: true
+                    added: false
+                    too_large: false
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/UnexpectedError'
+        default:
+          $ref: '#/components/responses/UnexpectedError'
+
 components:
   headers:
     RequestId:
@@ -1160,6 +1287,53 @@ components:
           maxItems: 2
           items:
             $ref: '#/components/schemas/Provider'
+    GitHubAccess:
+      type: object
+      required: [enabled, connected, granted]
+      additionalProperties: false
+      properties:
+        enabled:
+          type: boolean
+          description: The server can ask for and keep the permission.
+        connected:
+          type: boolean
+          description: GitHub is connected to this user.
+        granted:
+          type: boolean
+          description: A token that reads private repositories is stored for this user.
+    GitHubRepository:
+      type: object
+      required: [owner, name, description, default_branch, size_kb, private, added, too_large]
+      additionalProperties: false
+      properties:
+        owner:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        default_branch:
+          type: string
+        size_kb:
+          type: integer
+        private:
+          type: boolean
+        added:
+          type: boolean
+          description: Already a project of this user.
+        too_large:
+          type: boolean
+          description: Over the size limit, so it cannot be added.
+    GitHubRepositoryList:
+      type: object
+      required: [repositories]
+      additionalProperties: false
+      properties:
+        repositories:
+          type: array
+          maxItems: 300
+          items:
+            $ref: '#/components/schemas/GitHubRepository'
     Identity:
       type: object
       required: [provider, email, created_at]
@@ -1340,7 +1514,7 @@ components:
           nullable: true
     Project:
       type: object
-      required: [id, name, owner, repo, description, default_branch, size_kb, status, created_at, updated_at, job]
+      required: [id, name, owner, repo, description, default_branch, size_kb, is_private, status, created_at, updated_at, job]
       additionalProperties: false
       properties:
         id:
@@ -1359,6 +1533,9 @@ components:
           type: string
         size_kb:
           type: integer
+        is_private:
+          type: boolean
+          description: True when the repository was read with the person's own GitHub access, so it may be private.
         status:
           type: string
           enum: [draft, importing, ready, failed]
