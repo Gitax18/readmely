@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { AccountView } from "@/components/account-view";
-import { AppHeader } from "@/components/app-header";
+import { AppShell } from "@/components/layout/app-shell";
+import { PageHeader } from "@/components/layout/page-header";
+import { UnavailableScreen } from "@/components/layout/unavailable";
 import {
   fetchCredits,
   fetchIdentities,
@@ -30,14 +32,7 @@ export default async function AccountPage({
   const session = await fetchSession(env.apiPublicUrl, token);
   if (session.kind === "signed_out") redirect("/login");
   if (session.kind === "error" || token === undefined) {
-    return (
-      <main className="mx-auto flex max-w-md flex-col gap-4 p-6 sm:p-10">
-        <h1 className="text-2xl font-semibold">Account unavailable</h1>
-        <p role="alert" className="text-muted-foreground text-sm">
-          We could not load your account just now. Reload the page in a moment.
-        </p>
-      </main>
-    );
+    return <UnavailableScreen title="Account unavailable" />;
   }
 
   const [sessions, identities, providers, credits] = await Promise.all([
@@ -47,9 +42,13 @@ export default async function AccountPage({
     fetchCredits(env.apiPublicUrl, token),
   ]);
   return (
-    <main className="mx-auto flex max-w-2xl flex-col gap-6 p-6 sm:p-10">
-      <AppHeader active="account" credits={credits} />
-      <h1 className="text-2xl font-semibold">Account</h1>
+    <AppShell
+      active="account"
+      email={session.me.user.email}
+      credits={credits}
+      csrf={session.me.csrf_token}
+    >
+      <PageHeader title="Account" description="Your details, connected accounts and devices." />
       <AccountView
         me={session.me}
         initialSessions={sessions ?? []}
@@ -57,6 +56,6 @@ export default async function AccountPage({
         providers={providers}
         notice={loginErrorMessage(error)}
       />
-    </main>
+    </AppShell>
   );
 }

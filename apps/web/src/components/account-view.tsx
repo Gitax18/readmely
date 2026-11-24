@@ -2,10 +2,14 @@
 
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
+import { Monitor } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { GitHubMark, GoogleMark } from "@/components/ui/brand-icons";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ConfirmPanel } from "@/components/ui/confirm-panel";
 import { Input } from "@/components/ui/input";
+import { Message } from "@/components/ui/message";
 import type { Identity, Me, Session, User } from "@/lib/account-schema";
 import { createAccountApi, type AccountApi, type Failure } from "@/lib/browser-api";
 import { PROVIDER_LABELS, PROVIDERS, type Provider } from "@/lib/providers";
@@ -224,21 +228,17 @@ export function AccountView({
 
   return (
     <div className="flex flex-col gap-6">
-      {notice ? (
-        <p role="alert" className="text-bad rounded-md border border-bad px-4 py-3 text-sm">
-          {notice}
-        </p>
-      ) : null}
+      {notice ? <Message tone="error">{notice}</Message> : null}
       <Card>
         <CardHeader>
           <CardTitle>Your account</CardTitle>
-          <p className="text-muted-foreground text-sm">
+          <CardDescription>
             Signed in as <strong className="text-foreground break-all">{user.email}</strong>
-          </p>
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={saveName} className="flex flex-col gap-3">
-            <label htmlFor="display-name" className="text-sm font-medium">
+            <label htmlFor="display-name" className="text-[13px] font-semibold">
               Display name
             </label>
             <div className="flex flex-col gap-2 sm:flex-row">
@@ -275,10 +275,10 @@ export function AccountView({
         <Card>
           <CardHeader>
             <CardTitle>Connected accounts</CardTitle>
-            <p className="text-muted-foreground text-sm">
+            <CardDescription>
               Sign in with a connected account instead of waiting for a code. An emailed code always
               works, so disconnecting never locks you out.
-            </p>
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <ul className="flex flex-col divide-y divide-border" aria-label="Connected accounts">
@@ -288,20 +288,28 @@ export function AccountView({
                 return (
                   <li key={p} className="flex flex-col gap-3 py-3">
                     <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-sm font-medium">{label}</span>
-                        <span className="text-muted-foreground text-xs">
-                          {identity ? (
-                            <>
-                              Connected as <span className="break-all">{identity.email}</span> on{" "}
-                              <time dateTime={identity.created_at}>
-                                {formatWhen(identity.created_at)}
-                              </time>
-                            </>
-                          ) : (
-                            "Not connected"
-                          )}
+                      <div className="flex items-center gap-3">
+                        <span
+                          aria-hidden
+                          className="border-border bg-card grid size-10 shrink-0 place-items-center rounded-lg border"
+                        >
+                          {p === "google" ? <GoogleMark /> : <GitHubMark />}
                         </span>
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-sm font-semibold">{label}</span>
+                          <span className="text-muted-foreground text-xs">
+                            {identity ? (
+                              <>
+                                Connected as <span className="break-all">{identity.email}</span> on{" "}
+                                <time dateTime={identity.created_at}>
+                                  {formatWhen(identity.created_at)}
+                                </time>
+                              </>
+                            ) : (
+                              "Not connected"
+                            )}
+                          </span>
+                        </div>
                       </div>
                       {identity ? (
                         confirming === p ? null : (
@@ -316,6 +324,7 @@ export function AccountView({
                         )
                       ) : (
                         <Button
+                          variant="secondary"
                           onClick={() => void connect(p)}
                           disabled={busy}
                           aria-label={`Connect ${label}`}
@@ -325,41 +334,39 @@ export function AccountView({
                       )}
                     </div>
                     {identity && confirming === p ? (
-                      <div
-                        role="group"
-                        aria-label={`Confirm disconnecting ${label}`}
-                        className="flex flex-col gap-3 rounded-md border border-border p-3"
+                      <ConfirmPanel
+                        label={`Confirm disconnecting ${label}`}
+                        actions={
+                          <>
+                            <Button
+                              variant="danger"
+                              onClick={() => void disconnect(p)}
+                              disabled={busy}
+                            >
+                              Yes, disconnect {label}
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              onClick={() => setConfirming(null)}
+                              disabled={busy}
+                            >
+                              Keep it
+                            </Button>
+                          </>
+                        }
                       >
-                        <p className="text-sm">
-                          Disconnect {label}? You can still sign in with an emailed code, and we
-                          will email you about the change.
-                        </p>
-                        <div className="flex gap-2">
-                          <Button
-                            variant="danger"
-                            onClick={() => void disconnect(p)}
-                            disabled={busy}
-                          >
-                            Yes, disconnect {label}
-                          </Button>
-                          <Button
-                            variant="secondary"
-                            onClick={() => setConfirming(null)}
-                            disabled={busy}
-                          >
-                            Keep it
-                          </Button>
-                        </div>
-                      </div>
+                        Disconnect {label}? You can still sign in with an emailed code, and we will
+                        email you about the change.
+                      </ConfirmPanel>
                     ) : null}
                   </li>
                 );
               })}
             </ul>
             {identityError ? (
-              <p role="alert" className="text-bad mt-3 text-sm">
+              <Message tone="error" className="mt-3">
                 {identityError}
-              </p>
+              </Message>
             ) : null}
           </CardContent>
         </Card>
@@ -368,24 +375,32 @@ export function AccountView({
       <Card>
         <CardHeader>
           <CardTitle>Where you are signed in</CardTitle>
-          <p className="text-muted-foreground text-sm">
+          <CardDescription>
             Sign out any device you do not recognise. Sessions end after 7 days without use, or 30
             days in all.
-          </p>
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <ul className="flex flex-col divide-y divide-border" aria-label="Active sessions">
             {sessions.map((s) => (
               <li key={s.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
-                <div className="flex flex-col gap-0.5">
-                  <span className="flex items-center gap-2 text-sm font-medium">
-                    {s.device || "Unknown device"}
-                    {s.current ? <Badge>This device</Badge> : null}
+                <div className="flex items-center gap-3">
+                  <span
+                    aria-hidden
+                    className="bg-surface-2 text-muted-foreground grid size-10 shrink-0 place-items-center rounded-lg"
+                  >
+                    <Monitor className="size-[18px]" />
                   </span>
-                  <span className="text-muted-foreground text-xs">
-                    Signed in <time dateTime={s.created_at}>{formatWhen(s.created_at)}</time>, last
-                    used <time dateTime={s.last_seen_at}>{formatWhen(s.last_seen_at)}</time>
-                  </span>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="flex flex-wrap items-center gap-2 text-sm font-semibold">
+                      {s.device || "Unknown device"}
+                      {s.current ? <Badge tone="accent">This device</Badge> : null}
+                    </span>
+                    <span className="text-muted-foreground text-xs">
+                      Signed in <time dateTime={s.created_at}>{formatWhen(s.created_at)}</time>,
+                      last used <time dateTime={s.last_seen_at}>{formatWhen(s.last_seen_at)}</time>
+                    </span>
+                  </div>
                 </div>
                 {s.current ? null : (
                   <Button
@@ -401,9 +416,9 @@ export function AccountView({
             ))}
           </ul>
           {sessionError ? (
-            <p role="alert" className="text-bad mt-3 text-sm">
+            <Message tone="error" className="mt-3">
               {sessionError}
-            </p>
+            </Message>
           ) : null}
           <div className="mt-4 flex flex-wrap gap-2">
             <Button variant="danger" onClick={() => void signOut()} disabled={busy}>
@@ -418,13 +433,13 @@ export function AccountView({
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="border-bad/30">
         <CardHeader>
-          <CardTitle>Delete account</CardTitle>
-          <p className="text-muted-foreground text-sm">
+          <CardTitle className="text-bad">Delete account</CardTitle>
+          <CardDescription>
             Removes your account, your projects and everything generated for them. This cannot be
             undone.
-          </p>
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {deleteStep === "idle" ? (
@@ -433,36 +448,34 @@ export function AccountView({
             </Button>
           ) : null}
           {deleteStep === "confirm" ? (
-            <div
-              role="group"
-              aria-label="Confirm deleting your account"
-              className="flex flex-col gap-3 rounded-md border border-border p-3"
+            <ConfirmPanel
+              label="Confirm deleting your account"
+              actions={
+                <>
+                  <Button variant="danger" onClick={() => void sendDeletionCode()} disabled={busy}>
+                    Email me a code
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      setDeleteStep("idle");
+                      setDeleteError(null);
+                    }}
+                    disabled={busy}
+                  >
+                    Keep my account
+                  </Button>
+                </>
+              }
             >
-              <p className="text-sm">
-                To make sure it is you, we will email a code to{" "}
-                <strong className="break-all">{user.email}</strong>. Nothing is deleted until you
-                enter it.
-              </p>
-              <div className="flex gap-2">
-                <Button variant="danger" onClick={() => void sendDeletionCode()} disabled={busy}>
-                  Email me a code
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={() => {
-                    setDeleteStep("idle");
-                    setDeleteError(null);
-                  }}
-                  disabled={busy}
-                >
-                  Keep my account
-                </Button>
-              </div>
-            </div>
+              To make sure it is you, we will email a code to{" "}
+              <strong className="break-all">{user.email}</strong>. Nothing is deleted until you
+              enter it.
+            </ConfirmPanel>
           ) : null}
           {deleteStep === "code" ? (
             <form onSubmit={deleteAccount} className="flex flex-col gap-3">
-              <label htmlFor="delete-code" className="text-sm font-medium">
+              <label htmlFor="delete-code" className="text-[13px] font-semibold">
                 6-digit code from your email
               </label>
               <Input
@@ -474,6 +487,7 @@ export function AccountView({
                 maxLength={6}
                 value={deleteCode}
                 onChange={(e) => setDeleteCode(e.target.value.replace(/\D/g, ""))}
+                className="h-12 max-w-56 text-center font-mono text-xl tracking-[0.4em]"
               />
               <div className="flex gap-2">
                 <Button type="submit" variant="danger" disabled={busy || deleteCode.length !== 6}>
@@ -494,9 +508,9 @@ export function AccountView({
             </form>
           ) : null}
           {deleteError ? (
-            <p role="alert" className="text-bad mt-3 text-sm">
+            <Message tone="error" className="mt-3">
               {deleteError}
-            </p>
+            </Message>
           ) : null}
         </CardContent>
       </Card>
