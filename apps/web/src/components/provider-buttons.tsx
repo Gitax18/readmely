@@ -1,5 +1,12 @@
+import { GitHubMark, GoogleMark } from "@/components/ui/brand-icons";
+import { buttonVariants } from "@/components/ui/button";
 import { PROVIDER_LABELS, type Provider } from "@/lib/providers";
 import { cn } from "@/lib/utils";
+
+const MARKS: Record<Provider, React.ReactNode> = {
+  google: <GoogleMark />,
+  github: <GitHubMark />,
+};
 
 /**
  * "Continue with ..." links, one per configured provider. Plain links, not buttons or router
@@ -14,12 +21,9 @@ export function ProviderButtons({ providers }: { providers: Provider[] }) {
         <a
           key={p}
           href={`/api/v1/auth/${p}/start`}
-          className={cn(
-            "inline-flex h-10 items-center justify-center rounded-md px-4 text-sm font-medium",
-            "border border-border bg-card text-card-foreground hover:bg-border/40",
-            "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground",
-          )}
+          className={cn(buttonVariants({ variant: "secondary", size: "lg" }), "w-full")}
         >
+          {MARKS[p]}
           Continue with {PROVIDER_LABELS[p]}
         </a>
       ))}

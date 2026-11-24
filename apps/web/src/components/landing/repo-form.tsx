@@ -4,13 +4,8 @@ import { ArrowRight, GitBranch } from "lucide-react";
 import { useRouter } from "next/navigation";
 import * as React from "react";
 import { Button } from "@/components/ui/button";
+import { GITHUB_REPO, INVALID_REPO } from "@/lib/github-url";
 import { cn } from "@/lib/utils";
-
-/** Same rule the project form applies before it asks the API: github.com/owner/repo only. */
-export const GITHUB_REPO = /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/?$/;
-
-export const INVALID_REPO =
-  "That does not look like a GitHub repository address. Use https://github.com/owner/repo.";
 
 /**
  * The hero input. A valid address goes to sign-in with the address kept, and on to creating that

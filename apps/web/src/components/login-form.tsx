@@ -2,10 +2,12 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ProviderButtons } from "@/components/provider-buttons";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Message } from "@/components/ui/message";
 import { createAccountApi, type AccountApi, type Failure } from "@/lib/browser-api";
 import type { Provider } from "@/lib/providers";
 
@@ -37,6 +39,7 @@ export function LoginForm({
   onSignedIn,
   providers = [],
   providerError = null,
+  repo = null,
 }: {
   api?: AccountApi;
   onSignedIn?: () => void;
@@ -44,6 +47,8 @@ export function LoginForm({
   providers?: Provider[];
   /** Plain-language reason a provider sign-in failed, from /login?error=. */
   providerError?: string | null;
+  /** A repository address carried over from the landing page: sign-in goes on to add it. */
+  repo?: string | null;
 }) {
   const router = useRouter();
   const [client] = useState(() => api ?? createAccountApi());
@@ -101,7 +106,7 @@ export function LoginForm({
     if (onSignedIn) {
       onSignedIn();
     } else {
-      router.replace("/account");
+      router.replace(repo ? `/projects/new?repo=${encodeURIComponent(repo)}` : "/dashboard");
       router.refresh();
     }
   }
@@ -114,47 +119,44 @@ export function LoginForm({
   }
 
   return (
-    <Card>
+    <Card className="animate-fade-up">
       <CardHeader>
-        <CardTitle>Sign in or create an account</CardTitle>
-        <p className="text-muted-foreground text-sm">
-          No password to remember. We email you a one-time code.
-        </p>
+        <CardTitle className="text-xl">Sign in or create an account</CardTitle>
+        <CardDescription>No password to remember. We email you a one-time code.</CardDescription>
       </CardHeader>
-      <CardContent>
-        {providerError ? (
-          <p role="alert" className="text-bad mb-4 text-sm">
-            {providerError}
-          </p>
-        ) : null}
+      <CardContent className="flex flex-col gap-4">
+        {providerError ? <Message tone="error">{providerError}</Message> : null}
         {step === "email" && providers.length > 0 ? (
-          <div className="mb-4 flex flex-col gap-4">
+          <>
             <ProviderButtons providers={providers} />
-            <p className="text-muted-foreground text-center text-xs">or use an emailed code</p>
-          </div>
+            <div className="text-faint flex items-center gap-3 text-xs">
+              <span className="bg-border h-px flex-1" />
+              or use an emailed code
+              <span className="bg-border h-px flex-1" />
+            </div>
+          </>
         ) : null}
         {step === "email" ? (
           <form onSubmit={sendCode} className="flex flex-col gap-4">
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="email" className="text-sm font-medium">
-                Email address
-              </label>
-              <Input
-                id="email"
-                name="email"
-                type="email"
-                autoComplete="email"
-                inputMode="email"
-                required
-                maxLength={254}
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                aria-describedby={error ? "form-error" : undefined}
-                aria-invalid={error ? true : undefined}
-              />
-            </div>
+            <Field label="Email address">
+              {(field) => (
+                <Input
+                  {...field}
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  inputMode="email"
+                  required
+                  maxLength={254}
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  aria-describedby={error ? "form-error" : undefined}
+                  aria-invalid={error ? true : undefined}
+                />
+              )}
+            </Field>
             <Feedback error={error} notice={notice} />
-            <Button type="submit" disabled={busy || (cooldown > 0 && error !== null)}>
+            <Button type="submit" size="lg" busy={busy} disabled={cooldown > 0 && error !== null}>
               {busy ? "Sending…" : "Send code"}
             </Button>
           </form>
@@ -163,42 +165,41 @@ export function LoginForm({
             <p className="text-sm">
               We sent a 6-digit code to <strong className="break-all">{email.trim()}</strong>.
             </p>
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="code" className="text-sm font-medium">
-                6-digit code
-              </label>
-              <Input
-                id="code"
-                name="code"
-                ref={codeRef}
-                autoComplete="one-time-code"
-                inputMode="numeric"
-                pattern="[0-9]{6}"
-                maxLength={6}
-                required
-                value={code}
-                onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                aria-describedby={error ? "form-error" : undefined}
-                aria-invalid={error ? true : undefined}
-                className="text-center font-mono text-lg tracking-[0.4em]"
-              />
-            </div>
+            <Field label="6-digit code">
+              {(field) => (
+                <Input
+                  {...field}
+                  name="code"
+                  ref={codeRef}
+                  autoComplete="one-time-code"
+                  inputMode="numeric"
+                  pattern="[0-9]{6}"
+                  maxLength={6}
+                  required
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  aria-describedby={error ? "form-error" : undefined}
+                  aria-invalid={error ? true : undefined}
+                  className="h-14 text-center font-mono text-2xl tracking-[0.5em]"
+                />
+              )}
+            </Field>
             <Feedback error={error} notice={notice} />
-            <Button type="submit" disabled={busy || code.length !== 6}>
+            <Button type="submit" size="lg" busy={busy} disabled={code.length !== 6}>
               {busy ? "Checking…" : "Sign in"}
             </Button>
-            <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-              <button type="button" onClick={changeEmail} className="underline">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-[13px]">
+              <Button type="button" variant="link" onClick={changeEmail}>
                 Use a different email
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
+                variant="link"
                 onClick={() => void sendCode()}
                 disabled={busy || cooldown > 0}
-                className="underline disabled:no-underline disabled:opacity-60"
               >
                 {cooldown > 0 ? `Send a new code in ${cooldown}s` : "Send a new code"}
-              </button>
+              </Button>
             </div>
           </form>
         )}
@@ -211,15 +212,11 @@ function Feedback({ error, notice }: { error: string | null; notice: string | nu
   return (
     <>
       {error ? (
-        <p id="form-error" role="alert" className="text-bad text-sm">
+        <Message tone="error" id="form-error">
           {error}
-        </p>
+        </Message>
       ) : null}
-      {notice ? (
-        <p role="status" className="text-muted-foreground text-sm">
-          {notice}
-        </p>
-      ) : null}
+      {notice ? <Message tone="success">{notice}</Message> : null}
     </>
   );
 }
