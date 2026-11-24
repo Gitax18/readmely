@@ -1,4 +1,5 @@
 import "server-only";
+import { originKeyHeaders } from "./origin-key";
 import {
   gitHubAccessSchema,
   identityListSchema,
@@ -39,7 +40,11 @@ async function getJson(
     const response = await doFetch(`${baseUrl}${path}`, {
       cache: "no-store",
       redirect: "error",
-      headers: { Accept: "application/json", Cookie: `${SESSION_COOKIE}=${sessionToken}` },
+      headers: {
+        ...originKeyHeaders(),
+        Accept: "application/json",
+        Cookie: `${SESSION_COOKIE}=${sessionToken}`,
+      },
       signal: AbortSignal.timeout(options.timeoutMs ?? FETCH_TIMEOUT_MS),
     });
     if (response.status === 401) return { status: 401, json: null };
@@ -93,7 +98,7 @@ export async function fetchProviders(baseUrl: string, options: Options = {}): Pr
     const response = await doFetch(`${baseUrl}/v1/auth/providers`, {
       cache: "no-store",
       redirect: "error",
-      headers: { Accept: "application/json" },
+      headers: { ...originKeyHeaders(), Accept: "application/json" },
       signal: AbortSignal.timeout(options.timeoutMs ?? FETCH_TIMEOUT_MS),
     });
     if (!response.ok) return [];
@@ -154,7 +159,11 @@ export async function fetchProject(
     const response = await doFetch(`${baseUrl}/v1/projects/${encodeURIComponent(id)}`, {
       cache: "no-store",
       redirect: "error",
-      headers: { Accept: "application/json", Cookie: `${SESSION_COOKIE}=${sessionToken}` },
+      headers: {
+        ...originKeyHeaders(),
+        Accept: "application/json",
+        Cookie: `${SESSION_COOKIE}=${sessionToken}`,
+      },
       signal: AbortSignal.timeout(options.timeoutMs ?? FETCH_TIMEOUT_MS),
     });
     if (response.status === 404) return "missing";

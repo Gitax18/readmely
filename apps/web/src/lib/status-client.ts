@@ -1,4 +1,5 @@
 import "server-only";
+import { originKeyHeaders } from "./origin-key";
 import { readLimited } from "./read-limited";
 import { reportSchema, type Report } from "./status-schema";
 
@@ -24,7 +25,7 @@ export async function fetchStatus(
     response = await doFetch(`${baseUrl}/api/v1/status`, {
       cache: "no-store",
       redirect: "error",
-      headers: { Accept: "application/json" },
+      headers: { ...originKeyHeaders(), Accept: "application/json" },
       signal: AbortSignal.timeout(timeoutMs),
     });
   } catch {
