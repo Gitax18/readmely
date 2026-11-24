@@ -20,9 +20,10 @@ export const TEMPLATE_LABELS = {
 } as const;
 
 export const TEMPLATE_HINTS = {
-  standard: "Overview, features, getting started, usage, configuration, structure, licence.",
-  minimal: "Overview, installation, usage, licence.",
-  detailed: "Standard plus architecture, testing and deployment.",
+  standard:
+    "Badges and a quote, then overview, features, tech stack, setup, usage, configuration, file tree, contributing, licence.",
+  minimal: "Badges and a quote, then overview, features, setup, usage, licence.",
+  detailed: "Standard plus an architecture diagram, testing and deployment.",
 } as const;
 
 export const SOURCE_LABELS = {
