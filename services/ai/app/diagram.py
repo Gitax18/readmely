@@ -8,6 +8,7 @@ is made by our own layout and renderer (app/diagram_render.py) and checked befor
 from __future__ import annotations
 
 import json
+import logging
 import re
 import secrets
 from typing import Any, Literal
@@ -23,6 +24,8 @@ from app.readme import _facts_block, _summary_of
 from app.structured import Report, structured_call
 from app.summarise import SYSTEM as BASE_SYSTEM
 from app.summarise import _block, _clean, _gather
+
+log = logging.getLogger(__name__)
 
 DIAGRAM_TOKENS = 1_800
 MIN_NODES, MAX_NODES = 3, 9
@@ -109,13 +112,80 @@ class GraphIn(BaseModel):
     edges: list[EdgeIn] = Field(max_length=30)
 
 
+_FORBIDDEN = re.compile(r"[<>&\"\r\n]+")
+_UNSAFE_ID = re.compile(r"[^a-z0-9]+")
+
+
+def _text(value: Any, limit: int) -> Any:
+    """Make model text fit what the drawing allows: drop markup characters, collapse spaces, cut to length.
+
+    A label that is a little too long, or has an ampersand in it ("Auth & sessions"), is still a good
+    label; refusing the whole graph for it wastes the model call. Non-text is left for validation.
+    """
+    if not isinstance(value, str):
+        return value
+    out = " ".join(_FORBIDDEN.sub(" ", value).split())
+    if len(out) > limit:
+        out = out[:limit].rstrip()
+    return out
+
+
+def _id(value: Any) -> Any:
+    """Lowercase, letters, digits and dashes, starting with a letter, at most 24 characters."""
+    if not isinstance(value, str):
+        return value
+    out = _UNSAFE_ID.sub("-", value.lower()).strip("-")
+    if out and not out[0].isalpha():
+        out = "n-" + out
+    return out[:24].rstrip("-")
+
+
+def _path(value: Any) -> Any:
+    """A cited path as the file list spells it: no leading ./ or /, forward slashes."""
+    if not isinstance(value, str):
+        return value
+    out = value.strip().replace("\\", "/")
+    while out.startswith("./"):
+        out = out[2:]
+    return out.lstrip("/")
+
+
+def repair(raw: Any) -> Any:
+    """Fix the small, harmless slips models make, before the strict validation runs."""
+    if not isinstance(raw, dict):
+        return raw
+    out = dict(raw)
+    out["title"] = _text(out.get("title"), 100)
+    for key, text_fields in (("nodes", (("label", 28), ("sublabel", 40))), ("edges", (("label", 24),))):
+        items = out.get(key)
+        if not isinstance(items, list):
+            continue
+        fixed = []
+        for original in items:
+            if not isinstance(original, dict):
+                fixed.append(original)
+                continue
+            item = dict(original)
+            for field, limit in text_fields:
+                if field in item:
+                    item[field] = _text(item[field], limit)
+            for field in ("id", "from", "to"):
+                if field in item:
+                    item[field] = _id(item[field])
+            if isinstance(item.get("evidence"), list):
+                item["evidence"] = [_path(p) for p in item["evidence"]][:8]
+            fixed.append(item)
+        out[key] = fixed
+    return out
+
+
 def check(raw: dict[str, Any], known_paths: set[str]) -> tuple[str, list[Node], list[Edge]]:
     """Validate the model's graph and keep only what the repository supports.
 
     Nodes need at least one cited path that exists; edges need existing ends, a cited path that
     exists, and are not self-loops or repeats. Raises ValueError when too little is left.
     """
-    g = GraphIn.model_validate(raw)
+    g = GraphIn.model_validate(repair(raw))
     nodes: list[Node] = []
     seen: set[str] = set()
     for n in g.nodes:
@@ -140,12 +210,16 @@ def check(raw: dict[str, Any], known_paths: set[str]) -> tuple[str, list[Node], 
 
 
 def draw(title: str, nodes: list[Node], edges: list[Edge]) -> tuple[str, list[str]]:
-    """Lay out and render; if the lint finds a problem, try once more with more room."""
+    """Lay out and render; if the lint finds a problem, try with more room, then without arrow labels.
+
+    A diagram with its boxes and arrows but no words on the arrows is better than no diagram.
+    """
     problems: list[str] = []
-    for spread in (1.0, 1.5):
-        lay = layout(nodes, edges, spread)
-        svg = render(title, nodes, edges, lay)
-        problems = lint(nodes, edges, lay, svg)
+    bare = [Edge(e.src, e.dst, "", e.kind) for e in edges]
+    for use, spread in ((edges, 1.0), (edges, 1.5), (bare, 1.5)):
+        lay = layout(nodes, use, spread)
+        svg = render(title, nodes, use, lay)
+        problems = lint(nodes, use, lay, svg)
         if not problems:
             return svg, []
     return "", problems
@@ -190,8 +264,10 @@ async def generate_diagram(
     )  # fmt: skip
     title, nodes, edges = graph
     await report("drawing", 85)
-    svg, _problems = draw(title, nodes, edges)
+    svg, problems = draw(title, nodes, edges)
     if not svg:
+        # Node ids are validated identifiers, so these reasons carry no repository or model text.
+        log.warning("diagram could not be drawn", extra={"job_id": job_id, "problems": problems[:6]})
         raise LlmError("diagram_unusable")  # a drawing we cannot make clean is not shown; credits come back
     await report("saving", 95)
     async with db.connection() as conn:

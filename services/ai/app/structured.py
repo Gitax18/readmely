@@ -3,6 +3,7 @@ metering. Used by every job that writes with the model, so they all spend under 
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 from uuid import UUID
@@ -13,6 +14,8 @@ from app import meter
 from app.config import WorkerSettings
 from app.db import Database
 from app.llm import DEFAULT_OUTPUT_TOKENS, LlmClient, LlmError, LlmUsageError
+
+log = logging.getLogger(__name__)
 
 Report = Callable[[str, int], Awaitable[None]]
 
@@ -82,7 +85,13 @@ async def structured_call[T](  # noqa: PLR0913
             status, code = "ok", None
         except LlmUsageError as exc:
             usage, status, code, last_error = exc.usage, "error", exc.code, exc.code
-        except (ValidationError, ValueError):
+        except ValidationError as exc:
+            # Which fields failed and why, never their values: those are the model's text.
+            reasons = [f"{'.'.join(str(p) for p in e['loc'])}: {e['type']}" for e in exc.errors()[:6]]
+            log.warning("model output rejected", extra={"job_id": job_id, "purpose": purpose, "reasons": reasons})
+            status, code, last_error = "error", "llm_invalid_output", "llm_invalid_output"
+        except ValueError as exc:
+            log.warning("model output rejected", extra={"job_id": job_id, "purpose": purpose, "reason": str(exc)[:160]})
             status, code, last_error = "error", "llm_invalid_output", "llm_invalid_output"
         except LlmError as exc:
             await _record(db, _call_of(user_id, job_id, llm, purpose, None, "error", exc.code))
