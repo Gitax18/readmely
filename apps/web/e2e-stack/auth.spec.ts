@@ -113,7 +113,7 @@ test.describe("signing in", () => {
       if (/content.security.policy/i.test(m.text())) violations.push(m.text());
     });
     await signIn(page, email);
-    await expect(page.getByText(email)).toBeVisible();
+    await expect(page.getByRole("main").getByText(email)).toBeVisible();
 
     // Scenarios 11 and 20: Chromium accepts the __Host- cookie over http://127.0.0.1.
     const cookies = await context.cookies();
@@ -128,7 +128,7 @@ test.describe("signing in", () => {
     // The session survives a reload; the signed-in user is not sent to /login.
     await page.reload();
     await expect(page).toHaveURL(/\/account$/);
-    await expect(page.getByText(email)).toBeVisible();
+    await expect(page.getByRole("main").getByText(email)).toBeVisible();
     await page.goto("/login");
     await expect(page).toHaveURL(/\/dashboard$/);
     await page.goto("/account");
