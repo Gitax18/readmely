@@ -1,6 +1,6 @@
 "use client";
 
-import { FolderGit2, Plus } from "lucide-react";
+import { FolderGit2, Lock, Plus } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -44,6 +44,12 @@ function ProjectCard({ project: p }: { project: Project }) {
             <span className="group-hover:text-accent font-semibold break-all transition-colors">
               {p.name}
             </span>
+            {p.is_private ? (
+              <span className="text-faint shrink-0" title="Private repository">
+                <Lock className="size-3.5" aria-hidden />
+                <span className="sr-only">Private repository</span>
+              </span>
+            ) : null}
           </span>
           <Badge tone={badge.tone} dot={working ? "pulse" : true}>
             {badge.label}

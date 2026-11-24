@@ -6,8 +6,8 @@ INSERT INTO projects (user_id, name) VALUES (@user_id, @name) RETURNING *;
 
 -- name: CreateRepositoryProject :one
 -- A project for a GitHub repository. A unique violation on (user, repository) means it is already added.
-INSERT INTO projects (user_id, name, repo_owner, repo_name, repo_description, default_branch, repo_size_kb)
-VALUES (@user_id, @name, @repo_owner, @repo_name, @repo_description, @default_branch, @repo_size_kb)
+INSERT INTO projects (user_id, name, repo_owner, repo_name, repo_description, default_branch, repo_size_kb, is_private)
+VALUES (@user_id, @name, @repo_owner, @repo_name, @repo_description, @default_branch, @repo_size_kb, @is_private)
 RETURNING *;
 
 -- name: CountUserProjects :one

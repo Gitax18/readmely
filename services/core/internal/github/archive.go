@@ -59,6 +59,8 @@ func (c *Client) CommitSHA(ctx context.Context, ref Ref, branch string) (string,
 	}
 	defer func() { _ = res.Body.Close() }()
 	switch {
+	case res.StatusCode == http.StatusUnauthorized && c.asUser:
+		return "", ErrUnauthorized
 	case res.StatusCode == http.StatusNotFound || res.StatusCode == http.StatusUnprocessableEntity:
 		return "", ErrNotFound
 	case res.StatusCode != http.StatusOK:
@@ -85,6 +87,9 @@ func (c *Client) Archive(ctx context.Context, ref Ref, sha string) (io.ReadClose
 	}
 	if res.StatusCode != http.StatusOK {
 		_ = res.Body.Close()
+		if res.StatusCode == http.StatusUnauthorized && c.asUser {
+			return nil, ErrUnauthorized
+		}
 		if res.StatusCode == http.StatusNotFound {
 			return nil, ErrNotFound
 		}

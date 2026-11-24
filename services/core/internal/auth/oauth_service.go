@@ -13,6 +13,7 @@ import (
 
 	"github.com/Gitax18/readmely/services/core/internal/clientip"
 	"github.com/Gitax18/readmely/services/core/internal/db/store"
+	"github.com/Gitax18/readmely/services/core/internal/githubaccess"
 	"github.com/Gitax18/readmely/services/core/internal/mail"
 	"github.com/Gitax18/readmely/services/core/internal/oauth"
 	"github.com/Gitax18/readmely/services/core/internal/ratelimit"
@@ -50,6 +51,8 @@ type OAuthConfig struct {
 	Providers map[string]oauth.Provider
 	Store     *oauth.Store
 	WebOrigin string // the redirect URIs are derived from it
+	// Access keeps the GitHub token that reads private repositories. Nil switches that feature off.
+	Access *githubaccess.Store
 }
 
 // EnableOAuth turns provider sign-in on. Without it, no provider is available.
@@ -146,6 +149,82 @@ func (s *Service) StartConnect(ctx context.Context, p *Principal, provider strin
 	})
 }
 
+// repoProvider is the GitHub provider when private-repository access is switched on.
+func (s *Service) repoProvider() (oauth.RepoAccess, bool) {
+	if s.oauth == nil || s.oauth.Access == nil {
+		return nil, false
+	}
+	prov, ok := s.provider(oauth.GitHub)
+	if !ok {
+		return nil, false
+	}
+	ra, ok := prov.(oauth.RepoAccess)
+	return ra, ok
+}
+
+// GitHubAccessState says what can be offered to this person about private repositories.
+type GitHubAccessState struct {
+	Enabled   bool // the server can ask for and keep the permission
+	Connected bool // GitHub is connected to this user
+	Granted   bool // a token is stored
+}
+
+// GitHubAccess reports the state of private-repository access for the signed-in user.
+func (s *Service) GitHubAccess(ctx context.Context, p *Principal) (GitHubAccessState, error) {
+	if _, ok := s.repoProvider(); !ok {
+		return GitHubAccessState{}, nil
+	}
+	st := GitHubAccessState{Enabled: true}
+	if _, err := s.q.GetUserIdentity(ctx, store.GetUserIdentityParams{UserID: p.User.ID, Provider: oauth.GitHub}); err == nil {
+		st.Connected = true
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return GitHubAccessState{}, fmt.Errorf("github access: %w", err)
+	}
+	if st.Connected {
+		granted, err := s.oauth.Access.Has(ctx, p.User.ID)
+		if err != nil {
+			return GitHubAccessState{}, fmt.Errorf("github access: %w", err)
+		}
+		st.Granted = granted
+	}
+	return st, nil
+}
+
+// StartGitHubAccess begins asking GitHub for permission to read the user's private repositories.
+// It needs the feature on (else ErrNotFound) and GitHub already connected (else ErrConflict): the
+// callback then insists that the same GitHub account answers.
+func (s *Service) StartGitHubAccess(ctx context.Context, p *Principal, ip netip.Addr) (authURL, binding string, err error) {
+	ra, ok := s.repoProvider()
+	if !ok {
+		return "", "", ErrNotFound
+	}
+	if err := s.allow(ctx, ruleOAuthStartIP, ip); err != nil {
+		return "", "", err
+	}
+	if _, err := s.q.GetUserIdentity(ctx, store.GetUserIdentityParams{UserID: p.User.ID, Provider: oauth.GitHub}); errors.Is(err, pgx.ErrNoRows) {
+		return "", "", ErrConflict
+	} else if err != nil {
+		return "", "", fmt.Errorf("start github access: %w", err)
+	}
+	a := oauth.Attempt{Provider: oauth.GitHub, Intent: oauth.IntentRepos, UserID: p.User.ID.String(), SessionID: p.Session.ID.String()}
+	if a.Verifier, err = oauth.NewVerifier(); err != nil {
+		return "", "", err
+	}
+	state, binding, err := s.oauth.Store.Begin(ctx, a)
+	if err != nil {
+		return "", "", err
+	}
+	return ra.RepoAuthorizationURL(state, oauth.Challenge(a.Verifier), s.redirectURI(oauth.GitHub)), binding, nil
+}
+
+// RemoveGitHubAccess deletes the stored token. Removing what is not there is not an error.
+func (s *Service) RemoveGitHubAccess(ctx context.Context, p *Principal) error {
+	if s.oauth == nil || s.oauth.Access == nil {
+		return nil
+	}
+	return s.oauth.Access.Remove(ctx, p.User.ID)
+}
+
 // Callback is what arrives when the provider sends the browser back.
 type Callback struct {
 	Provider      string
@@ -159,6 +238,8 @@ type Callback struct {
 
 // CallbackResult is where the browser goes next: a session and /account, or an error code.
 type CallbackResult struct {
+	// Next is where the browser goes on success; empty means the account page.
+	Next     string
 	ErrCode  string
 	LoggedIn *LoggedIn // set only when a new session was created
 }
@@ -200,7 +281,20 @@ func (s *Service) FinishOAuth(ctx context.Context, c Callback) (CallbackResult, 
 
 	xctx, cancel := context.WithTimeout(ctx, exchangeDeadline)
 	defer cancel()
-	profile, err := prov.Exchange(xctx, c.Code, attempt.Verifier, s.redirectURI(c.Provider))
+	var (
+		profile oauth.Profile
+		token   string // only a repos grant keeps it
+		scope   string
+	)
+	if attempt.Intent == oauth.IntentRepos {
+		ra, ok := prov.(oauth.RepoAccess)
+		if !ok || s.oauth.Access == nil {
+			return refuse(ErrCodeInvalidState)
+		}
+		profile, token, scope, err = ra.ExchangeRepoToken(xctx, c.Code, attempt.Verifier, s.redirectURI(c.Provider))
+	} else {
+		profile, err = prov.Exchange(xctx, c.Code, attempt.Verifier, s.redirectURI(c.Provider))
+	}
 	if err != nil {
 		// The error names the step and status only; nothing the provider sent is in it.
 		s.logger.WarnContext(ctx, "oauth exchange failed", "provider", c.Provider, "error", err)
@@ -220,6 +314,8 @@ func (s *Service) FinishOAuth(ctx context.Context, c Callback) (CallbackResult, 
 		return s.finishLogin(ctx, c, profile.Account, email, name)
 	case oauth.IntentLink:
 		return s.finishLink(ctx, c, attempt, profile.Account, email)
+	case oauth.IntentRepos:
+		return s.finishRepoAccess(ctx, c, attempt, profile.Account, token, scope)
 	}
 	return refuse(ErrCodeInvalidState)
 }
@@ -405,6 +501,52 @@ func (s *Service) finishLink(ctx context.Context, c Callback, a *oauth.Attempt, 
 	return refuse(ErrCodeProviderError)
 }
 
+// finishRepoAccess stores the token the person just granted. It runs in the session that started
+// the attempt, as the user who started it, and only when the GitHub account that answered is the one
+// already connected to that user: a token for someone else's account is never kept.
+func (s *Service) finishRepoAccess(ctx context.Context, c Callback, a *oauth.Attempt, account, token, scope string) (CallbackResult, error) {
+	if c.SessionToken == "" {
+		return refuse(ErrCodeInvalidState)
+	}
+	p, err := s.Authenticate(ctx, c.SessionToken)
+	if errors.Is(err, ErrUnauthenticated) {
+		return refuse(ErrCodeInvalidState)
+	}
+	if err != nil {
+		s.logger.ErrorContext(ctx, "github access failed", "error", err)
+		return refuse(ErrCodeProviderError)
+	}
+	if a.UserID != p.User.ID.String() || a.SessionID != p.Session.ID.String() {
+		return refuse(ErrCodeInvalidState)
+	}
+	ident, err := s.q.GetUserIdentity(ctx, store.GetUserIdentityParams{UserID: p.User.ID, Provider: oauth.GitHub})
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && ident.ProviderUserID != account) {
+		return refuse(ErrCodeProviderConflict)
+	}
+	if err != nil {
+		s.logger.ErrorContext(ctx, "github access failed", "error", err)
+		return refuse(ErrCodeProviderError)
+	}
+	// GitHub lists the scopes it actually granted. Anything without `repo` cannot read private code.
+	if !hasScope(scope, githubaccess.Scope) {
+		return refuse(ErrCodeAccessDenied)
+	}
+	if err := s.oauth.Access.Save(ctx, p.User.ID, token, scope); err != nil {
+		s.logger.ErrorContext(ctx, "github access failed", "error", err)
+		return refuse(ErrCodeProviderError)
+	}
+	return CallbackResult{Next: "/projects/new"}, nil
+}
+
+func hasScope(granted, want string) bool {
+	for _, f := range strings.FieldsFunc(granted, func(r rune) bool { return r == ',' || r == ' ' }) {
+		if f == want {
+			return true
+		}
+	}
+	return false
+}
+
 // ListIdentities returns the user's connected provider accounts.
 func (s *Service) ListIdentities(ctx context.Context, p *Principal) ([]store.OauthIdentity, error) {
 	rows, err := s.q.ListUserIdentities(ctx, p.User.ID)
@@ -423,6 +565,12 @@ func (s *Service) DisconnectIdentity(ctx context.Context, p *Principal, provider
 	}
 	if n == 0 {
 		return ErrNotFound
+	}
+	if provider == oauth.GitHub {
+		// The token belongs to the connection: without GitHub connected it has no business here.
+		if err := s.RemoveGitHubAccess(ctx, p); err != nil {
+			s.logger.ErrorContext(ctx, "remove github access after disconnect", "error", err)
+		}
 	}
 	s.alert(ctx, p.User, providerLabel(provider)+" disconnected from your Readmely account",
 		fmt.Sprintf("%s was disconnected from your Readmely account on %s, from %s.\n\n"+

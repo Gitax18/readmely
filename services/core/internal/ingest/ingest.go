@@ -13,8 +13,10 @@ import (
 
 	"github.com/Gitax18/readmely/services/core/internal/config"
 	"github.com/Gitax18/readmely/services/core/internal/github"
+	"github.com/Gitax18/readmely/services/core/internal/githubaccess"
 	"github.com/Gitax18/readmely/services/core/internal/logging"
 	"github.com/Gitax18/readmely/services/core/internal/projects"
+	"github.com/Gitax18/readmely/services/core/internal/secretbox"
 	"github.com/Gitax18/readmely/services/core/internal/worker"
 )
 
@@ -33,10 +35,20 @@ func Main(ctx context.Context, getenv func(string) string, stdout, stderr io.Wri
 	}
 	defer pool.Close()
 
-	logger.Info("worker started", "env", cfg.Env)
+	pipeline := &Pipeline{Pool: pool, GitHub: github.NewClient(cfg.GitHubAPIToken)}
+	if cfg.GitHubTokenKey != "" {
+		box, err := secretbox.NewFromHex(cfg.GitHubTokenKey)
+		if err != nil {
+			logger.Error("invalid GITHUB_TOKEN_KEY", "error", err)
+			return 2
+		}
+		pipeline.Access = githubaccess.New(pool, box)
+	}
+
+	logger.Info("worker started", "env", cfg.Env, "private_repositories", pipeline.Access != nil)
 	(&worker.Runner{
 		Pool:     pool,
-		Handlers: map[string]worker.Handler{projects.IngestKind: (&Pipeline{Pool: pool, GitHub: github.NewClient(cfg.GitHubAPIToken)}).Handle},
+		Handlers: map[string]worker.Handler{projects.IngestKind: pipeline.Handle},
 		Logger:   logger,
 	}).Run(ctx)
 	logger.Info("worker stopped")

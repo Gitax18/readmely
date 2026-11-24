@@ -44,6 +44,16 @@ type Provider interface {
 	Exchange(ctx context.Context, code, verifier, redirectURI string) (Profile, error)
 }
 
+// RepoAccess is implemented by a provider that can also be asked for permission to read a person's
+// private repositories (GitHub). The token it returns is the one secret in this package: the
+// caller seals it for storage, and it must never be logged.
+type RepoAccess interface {
+	// RepoAuthorizationURL is like AuthorizationURL, with the scope that reads private repositories.
+	RepoAuthorizationURL(state, challenge, redirectURI string) string
+	// ExchangeRepoToken is Exchange that also hands back the access token and the scope granted.
+	ExchangeRepoToken(ctx context.Context, code, verifier, redirectURI string) (p Profile, token, scope string, err error)
+}
+
 // Error is a failed call to a provider. It names the step and the HTTP status, nothing else:
 // bodies can carry codes and tokens, and must not reach a log.
 type Error struct {
@@ -89,25 +99,32 @@ func (c *client) do(req *http.Request, step string) (int, []byte, error) {
 
 // token exchanges the code at the token endpoint and returns the access token.
 func (c *client) token(ctx context.Context, endpoint string, form url.Values) (string, error) {
+	t, _, err := c.tokenScope(ctx, endpoint, form)
+	return t, err
+}
+
+// tokenScope is token, and also returns the scope the provider says it granted.
+func (c *client) tokenScope(ctx context.Context, endpoint string, form url.Values) (token, scope string, err error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(form.Encode()))
 	if err != nil {
-		return "", &Error{Provider: c.name, Step: "token"}
+		return "", "", &Error{Provider: c.name, Step: "token"}
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
 	status, body, err := c.do(req, "token")
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	var out struct {
 		AccessToken string `json:"access_token"`
+		Scope       string `json:"scope"`
 		Error       string `json:"error"`
 	}
 	if status != http.StatusOK || json.Unmarshal(body, &out) != nil || out.Error != "" ||
-		out.AccessToken == "" || len(out.AccessToken) > maxTokenLen {
-		return "", &Error{Provider: c.name, Step: "token", Status: status}
+		out.AccessToken == "" || len(out.AccessToken) > maxTokenLen || len(out.Scope) > 200 {
+		return "", "", &Error{Provider: c.name, Step: "token", Status: status}
 	}
-	return out.AccessToken, nil
+	return out.AccessToken, out.Scope, nil
 }
 
 // getJSON reads one JSON document with the access token.
@@ -252,20 +269,43 @@ func NewGitHub(clientID, clientSecret string, ep *GitHubEndpoints) Provider {
 func (g *github) Name() string { return GitHub }
 
 func (g *github) AuthorizationURL(state, challenge, redirectURI string) string {
+	return g.authURL(state, challenge, redirectURI, "read:user user:email")
+}
+
+func (g *github) RepoAuthorizationURL(state, challenge, redirectURI string) string {
+	return g.authURL(state, challenge, redirectURI, "repo read:user user:email")
+}
+
+func (g *github) authURL(state, challenge, redirectURI, scope string) string {
 	return query(g.ep.Auth, [][2]string{
-		{"client_id", g.id}, {"redirect_uri", redirectURI}, {"scope", "read:user user:email"},
+		{"client_id", g.id}, {"redirect_uri", redirectURI}, {"scope", scope},
 		{"state", state}, {"code_challenge", challenge}, {"code_challenge_method", "S256"},
 	})
 }
 
 func (g *github) Exchange(ctx context.Context, code, verifier, redirectURI string) (Profile, error) {
-	token, err := g.c.token(ctx, g.ep.Token, url.Values{
+	p, _, _, err := g.ExchangeRepoToken(ctx, code, verifier, redirectURI)
+	return p, err
+}
+
+// ExchangeRepoToken reads the profile as Exchange does and also returns the access token and scope.
+// Exchange drops both; only the grant-access flow keeps them.
+func (g *github) ExchangeRepoToken(ctx context.Context, code, verifier, redirectURI string) (Profile, string, string, error) {
+	token, scope, err := g.c.tokenScope(ctx, g.ep.Token, url.Values{
 		"code": {code}, "code_verifier": {verifier}, "redirect_uri": {redirectURI},
 		"client_id": {g.id}, "client_secret": {g.secret},
 	})
 	if err != nil {
-		return Profile{}, err
+		return Profile{}, "", "", err
 	}
+	p, err := g.profile(ctx, token)
+	if err != nil {
+		return Profile{}, "", "", err
+	}
+	return p, token, scope, nil
+}
+
+func (g *github) profile(ctx context.Context, token string) (Profile, error) {
 	headers := map[string]string{"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "readmely"}
 	var user struct {
 		ID   json.Number `json:"id"`

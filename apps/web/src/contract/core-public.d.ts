@@ -224,8 +224,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Look up a public GitHub repository before adding it
-         * @description Takes what a person pastes (https://github.com/owner/repo, with or without the scheme, ".git" or a trailing path) and answers with what GitHub says about it, without creating anything. Errors: invalid_request (not a github.com repository address), repository_not_found (missing or private), repository_too_large (over the size limit) and github_unavailable (GitHub is not answering or is rate limiting).
+         * Look up a GitHub repository before adding it
+         * @description Takes what a person pastes (https://github.com/owner/repo, with or without the scheme, ".git" or a trailing path) and answers with what GitHub says about it, without creating anything. Errors: invalid_request (not a github.com repository address), repository_not_found (missing, or private and not readable with the person's granted GitHub access), repository_too_large (over the size limit) and github_unavailable (GitHub is not answering or is rate limiting).
          */
         post: operations["previewRepository"];
         delete?: never;
@@ -245,8 +245,8 @@ export interface paths {
         get: operations["listProjects"];
         put?: never;
         /**
-         * Add a public GitHub repository as a project
-         * @description Checks the repository the same way as the preview, then creates the project (status draft). At most 10 projects per user (409 project_limit); the same repository twice is 409 already_added. Analysis starts with a separate request.
+         * Add a GitHub repository as a project
+         * @description A repository that is not public is read with the GitHub access the person granted (see /v1/me/github/access); without it that is repository_not_found. Checks the repository the same way as the preview, then creates the project (status draft). At most 10 projects per user (409 project_limit); the same repository twice is 409 already_added. Analysis starts with a separate request.
          */
         post: operations["createProject"];
         delete?: never;
@@ -562,6 +562,67 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/me/github/access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Whether private repositories can be read for this user */
+        get: operations["getGitHubAccess"];
+        put?: never;
+        post?: never;
+        /**
+         * Take back the permission to read private repositories
+         * @description Deletes the stored token. Projects already added keep what was analysed; analysing a private one again needs the access granted again. Removing what is not there is still 204.
+         */
+        delete: operations["removeGitHubAccess"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/github/access/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Begin granting permission to read private repositories
+         * @description A POST with the CSRF token, like connecting a provider. Needs GitHub connected to this user (409 conflict otherwise) and the feature switched on (404 not_found when it is not). Returns GitHub's authorization URL, which asks for the `repo` scope: GitHub offers no read-only scope for private repositories to an OAuth app.
+         */
+        post: operations["startGitHubAccess"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/github/repos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The repositories this user's GitHub access can see
+         * @description Their own, their organisations' and ones they collaborate on, most recently pushed first, at most 300. Archived repositories are left out. 409 conflict when access has not been granted (or GitHub no longer accepts it); 503 github_unavailable when GitHub is not answering.
+         */
+        get: operations["listGitHubRepositories"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -570,6 +631,29 @@ export interface components {
         Provider: "google" | "github";
         AuthProviders: {
             providers: components["schemas"]["Provider"][];
+        };
+        GitHubAccess: {
+            /** @description The server can ask for and keep the permission. */
+            enabled: boolean;
+            /** @description GitHub is connected to this user. */
+            connected: boolean;
+            /** @description A token that reads private repositories is stored for this user. */
+            granted: boolean;
+        };
+        GitHubRepository: {
+            owner: string;
+            name: string;
+            description: string;
+            default_branch: string;
+            size_kb: number;
+            private: boolean;
+            /** @description Already a project of this user. */
+            added: boolean;
+            /** @description Over the size limit, so it cannot be added. */
+            too_large: boolean;
+        };
+        GitHubRepositoryList: {
+            repositories: components["schemas"]["GitHubRepository"][];
         };
         Identity: {
             provider: components["schemas"]["Provider"];
@@ -662,6 +746,8 @@ export interface components {
             description: string;
             default_branch: string;
             size_kb: number;
+            /** @description True when the repository was read with the person's own GitHub access, so it may be private. */
+            is_private: boolean;
             /** @enum {string} */
             status: "draft" | "importing" | "ready" | "failed";
             /** Format: date-time */
@@ -2223,6 +2309,139 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    getGitHubAccess: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The state of the access. */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "enabled": true,
+                     *       "connected": true,
+                     *       "granted": false
+                     *     }
+                     */
+                    "application/json": components["schemas"]["GitHubAccess"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    removeGitHubAccess: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The csrf_token from GET /v1/me, bound to the current session. Required on every state-changing request that has a session. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed. */
+            204: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    startGitHubAccess: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The csrf_token from GET /v1/me, bound to the current session. Required on every state-changing request that has a session. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Where to send the browser. Also sets the attempt cookie. */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    "Set-Cookie": components["headers"]["OAuthCookie"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "authorization_url": "https://github.com/login/oauth/authorize?client_id=example"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["AuthorizationUrl"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["RateLimited"];
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    listGitHubRepositories: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The repositories. */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "repositories": [
+                     *         {
+                     *           "owner": "ada",
+                     *           "name": "engine",
+                     *           "description": "A small analytical engine.",
+                     *           "default_branch": "main",
+                     *           "size_kb": 2480,
+                     *           "private": true,
+                     *           "added": false,
+                     *           "too_large": false
+                     *         }
+                     *       ]
+                     *     }
+                     */
+                    "application/json": components["schemas"]["GitHubRepositoryList"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["UnexpectedError"];
             default: components["responses"]["UnexpectedError"];
         };
     };

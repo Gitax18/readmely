@@ -41,6 +41,14 @@ type File struct {
 	CreatedAt     time.Time
 }
 
+type GithubAccess struct {
+	UserID    uuid.UUID
+	Sealed    []byte
+	Scope     string
+	CreatedAt time.Time
+	ID        uuid.UUID
+}
+
 type GraphEdge struct {
 	ID        uuid.UUID
 	ProjectID uuid.UUID
@@ -131,6 +139,7 @@ type Project struct {
 	DefaultBranch   *string
 	RepoSizeKb      pgtype.Int4
 	CommitSha       *string
+	IsPrivate       bool
 }
 
 type ProjectDiagram struct {

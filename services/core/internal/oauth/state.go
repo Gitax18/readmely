@@ -17,6 +17,8 @@ import (
 const (
 	IntentLogin = "login"
 	IntentLink  = "link"
+	// IntentRepos asks the signed-in person's GitHub for permission to read their private repositories.
+	IntentRepos = "repos"
 )
 
 // AttemptTTL is how long a person has to finish at the provider.
@@ -33,8 +35,8 @@ type Attempt struct {
 	Provider  string `json:"provider"`
 	Intent    string `json:"intent"`
 	Verifier  string `json:"verifier"`
-	UserID    string `json:"user_id,omitempty"`    // link only: who is connecting
-	SessionID string `json:"session_id,omitempty"` // link only: from which session
+	UserID    string `json:"user_id,omitempty"`    // link and repos: who is connecting
+	SessionID string `json:"session_id,omitempty"` // link and repos: from which session
 }
 
 type record struct {

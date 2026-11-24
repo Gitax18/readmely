@@ -107,6 +107,8 @@ services:
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
       # Optional: a read-only token that only raises GitHub's rate limit for repository lookups.
       GITHUB_API_TOKEN: ${GITHUB_API_TOKEN:-}
+      # Optional: seals each person's GitHub token so they can add private repositories.
+      GITHUB_TOKEN_KEY: ${GITHUB_TOKEN_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -140,6 +142,8 @@ services:
     restart: unless-stopped
     environment:
       APP_ENV: development
+      # Opens the owner's GitHub token to read a private repository; the same key as the API's.
+      GITHUB_TOKEN_KEY: ${GITHUB_TOKEN_KEY:-}
       DATABASE_URL: postgres://readmely_app:${APP_DB_PASSWORD:?APP_DB_PASSWORD is not set in .env}@postgres:5432/${POSTGRES_DB:?}?sslmode=disable
     depends_on:
       postgres:
