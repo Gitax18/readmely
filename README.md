@@ -9,10 +9,10 @@
 Paste a GitHub repository. Get a README worth committing, an architecture diagram, and a context pack your AI coding tools can read.
 
 <p>
-  <a href="https://readmely.gitanshu.me"><b>🌐 Live app</b></a> ·
-  <a href="docs/local-development.md"><b>🛠️ Run locally</b></a> ·
-  <a href="docs/deploy/aws.md"><b>☁️ Deploy</b></a> ·
-  <a href="plans/00-architecture.md"><b>🏗️ Architecture</b></a>
+  <a href="https://readmely.gitanshu.me"><b>Live app</b></a> ·
+  <a href="docs/local-development.md"><b>Run locally</b></a> ·
+  <a href="docs/deploy/aws.md"><b>Deploy</b></a> ·
+  <a href="plans/00-architecture.md"><b>Architecture</b></a>
 </p>
 
 <p>
@@ -43,20 +43,20 @@ Paste a GitHub repository. Get a README worth committing, an architecture diagra
 
 ---
 
-## 📖 Contents
+## Contents
 
-- [✨ What it does](#-what-it-does)
-- [🧭 How it works](#-how-it-works)
-- [🏗️ Architecture](#️-architecture)
-- [🧰 Tech stack](#-tech-stack)
-- [🚀 Quick start](#-quick-start)
-- [☁️ Deployment](#️-deployment)
-- [📁 Project structure](#-project-structure)
-- [🔐 Security](#-security)
-- [🗺️ Status and roadmap](#️-status-and-roadmap)
-- [🤝 Contributing](#-contributing)
+- [What it does](#what-it-does)
+- [How it works](#how-it-works)
+- [Architecture](#architecture)
+- [Tech stack](#tech-stack)
+- [Quick start](#quick-start)
+- [Deployment](#deployment)
+- [Project structure](#project-structure)
+- [Security](#security)
+- [Status and roadmap](#status-and-roadmap)
+- [Contributing](#contributing)
 
-## ✨ What it does
+## What it does
 
 Readmely reads a repository **once** and builds a structured picture of it: languages, frameworks,
 entry points, services, environment variables and a plain-English summary. Every output is made
@@ -65,14 +65,14 @@ instead of a million tokens.
 
 | Output | What you get |
 |---|---|
-| 📝 **README** | Standard, minimal or detailed layouts with sections chosen for the project type. Edit beside a live preview, rewrite one section with an instruction, keep a version history, and get a health score that lists what is missing. |
-| 🧩 **Architecture diagram** | An overview of the project's real parts and how they talk, with colour-coded categories. Every part must point to real files. Download it as SVG or PNG, or embed it in the README. |
-| 🤖 **Context pack** | A ready-made `CLAUDE.md`, `AGENTS.md`, Cursor rules or generic `CONTEXT.md`, with a token estimate for each. Your AI tools understand the project without you pasting code. |
-| 🔎 **Analysis** | Languages and line counts, frameworks, entry points, run and test commands, Docker services, env vars and a file tree. Secrets found in the code are never stored or shown. |
+| **README** | Standard, minimal or detailed layouts with sections chosen for the project type. Edit beside a live preview, rewrite one section with an instruction, keep a version history, and get a health score that lists what is missing. |
+| **Architecture diagram** | An overview of the project's real parts and how they talk, with colour-coded categories. Every part must point to real files. Download it as SVG or PNG, or embed it in the README. |
+| **Context pack** | A ready-made `CLAUDE.md`, `AGENTS.md`, Cursor rules or generic `CONTEXT.md`, with a token estimate for each. Your AI tools understand the project without you pasting code. |
+| **Analysis** | Languages and line counts, frameworks, entry points, run and test commands, Docker services, env vars and a file tree. Secrets found in the code are never stored or shown. |
 
 Sign in with an emailed code, Google or GitHub. Every account starts with free credits.
 
-## 🧭 How it works
+## How it works
 
 1. **Paste a repository URL.** The API checks the repository and queues an analysis job.
 2. **Analyse.** The Go ingest worker downloads the repository at one commit. It treats every file
@@ -86,7 +86,7 @@ Sign in with an emailed code, Google or GitHub. Every account starts with free c
    - The **diagram** is a small typed graph that we lay out and render ourselves. The model never
      draws.
 
-## 🏗️ Architecture
+## Architecture
 
 ```mermaid
 flowchart LR
@@ -115,7 +115,7 @@ flowchart LR
 
 The full design is in [plans/00-architecture.md](plans/00-architecture.md).
 
-## 🧰 Tech stack
+## Tech stack
 
 | Part | Tech | Folder |
 |---|---|---|
@@ -127,7 +127,7 @@ The full design is in [plans/00-architecture.md](plans/00-architecture.md).
 | Hosting | Vercel (web), AWS EC2 with Caddy (backend), ECR, S3, SSM | [`infra/prod`](infra/prod), [`infra/aws`](infra/aws) |
 | CI/CD | GitHub Actions: lint, tests, contract and secret checks, Trivy, OIDC deploys | [`.github/workflows`](.github/workflows) |
 
-## 🚀 Quick start
+## Quick start
 
 You need Docker with Compose, Go 1.27+, [uv](https://docs.astral.sh/uv/), Node 24 with
 [pnpm](https://pnpm.io/) 12, and `make`.
@@ -162,7 +162,7 @@ Signing in with Google or GitHub locally, all the settings, and the database rol
 
 </details>
 
-## ☁️ Deployment
+## Deployment
 
 | Part | Where | How |
 |---|---|---|
@@ -174,9 +174,9 @@ port**, reads its secrets from **SSM Parameter Store**, and backs up Postgres to
 night. It costs about **$21 a month**, paid from AWS credits. Budgets and anomaly alerts warn
 long before a real charge.
 
-➡️ Step by step: **[docs/deploy/aws.md](docs/deploy/aws.md)**
+Step by step: **[docs/deploy/aws.md](docs/deploy/aws.md)**
 
-## 📁 Project structure
+## Project structure
 
 ```text
 readmely/
@@ -194,25 +194,25 @@ readmely/
 └── scripts/           Repository tooling
 ```
 
-## 🔐 Security
+## Security
 
 Readmely handles other people's code, so security is designed in, not bolted on.
 
-- 🧱 **Untrusted input stays contained.** Repositories are read in a locked-down worker:
+- **Untrusted input stays contained.** Repositories are read in a locked-down worker:
   read-only filesystem, all capabilities dropped, and size limits.
-- 🔑 **Secrets are removed** before any text reaches a model, and are never stored or shown.
-- 🧾 **Repository text is data, never instructions.** Model output is typed and validated, and
+- **Secrets are removed** before any text reaches a model, and are never stored or shown.
+- **Repository text is data, never instructions.** Model output is typed and validated, and
   structure is assembled in code.
-- 👤 **Every endpoint checks ownership.** Sessions are hardened and CSRF-protected. Sign-in alerts
+- **Every endpoint checks ownership.** Sessions are hardened and CSRF-protected. Sign-in alerts
   arrive by email.
-- 💸 **Credits and a daily cap** bound model spend before any call is made.
-- 🔍 **CI scans** for leaked secrets (gitleaks), vulnerable dependencies, and image CVEs (Trivy).
+- **Credits and a daily cap** bound model spend before any call is made.
+- **CI scans** for leaked secrets (gitleaks), vulnerable dependencies, and image CVEs (Trivy).
   Actions and images are pinned by digest.
 
 Threat model and the per-feature checklist: [plans/security.md](plans/security.md). Never commit
 `.env`.
 
-## 🗺️ Status and roadmap
+## Status and roadmap
 
 Version 1 is being built phase by phase. Each phase is a reviewed pull request.
 
@@ -229,7 +229,7 @@ Version 1 is being built phase by phase. Each phase is a reviewed pull request.
 Later: private repositories through a GitHub App, two-factor authentication, resume and portfolio
 generation. Details are in [plans/v1-roadmap.md](plans/v1-roadmap.md).
 
-## 🤝 Contributing
+## Contributing
 
 - **Branches:** `<type>/<short-name>`, for example `feat/auth-totp` or `fix/credit-race`.
 - **Commits:** `<type>(<scope>): <summary>`, in the imperative, under 72 characters. Types: `feat`,

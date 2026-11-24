@@ -1,7 +1,7 @@
 # Local development
 
 Everything you need to run, test and change Readmely on your own machine. For the short version,
-see the [README](../README.md#-quick-start).
+see the [README](../README.md#quick-start).
 
 ## Prerequisites
 
