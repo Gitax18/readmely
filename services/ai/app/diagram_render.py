@@ -173,9 +173,11 @@ def _order(cols: list[list[str]], chains: dict[int, list[str]]) -> None:
             sweep(c + 1, c)
 
 
-def _place(nodes: list[Node], cols: list[list[str]], spread: float) -> tuple[dict[str, Box], float, float]:
+def _place(
+    nodes: list[Node], cols: list[list[str]], spread: float, min_gap_x: float = 0.0
+) -> tuple[dict[str, Box], float, float]:
     by_id = {n.id: n for n in nodes}
-    gap_y, gap_x = 28 * spread, 96 * spread
+    gap_y, gap_x = 28 * spread, max(96 * spread, min_gap_x)
     col_w = [max((node_width(by_id[i]) for i in col if i in by_id), default=24.0) for col in cols]
     col_h = [sum(NODE_H if i in by_id else SLOT_H for i in col) + gap_y * max(len(col) - 1, 0) for col in cols]
     height = max(col_h)
@@ -217,7 +219,9 @@ def layout(nodes: list[Node], edges: list[Edge], spread: float = 1.0) -> Layout:
         cols[layer[n.id]].append(n.id)
     chains, flipped = _chains(edges, layer, back, cols)
     _order(cols, chains)
-    boxes, width, height = _place(nodes, cols, spread)
+    # An edge label sits in the gap between two columns, so the gap must be wider than the longest one.
+    widest = max((text_w(e.label, EDGE_PX) + 10 + 8 + 16 for e in edges if e.label), default=0.0)
+    boxes, width, height = _place(nodes, cols, spread, widest)
     # Edges between the same two boxes (a call and its reply) would lie on top of each other.
     groups: dict[tuple[str, str], list[int]] = defaultdict(list)
     for i, chain in chains.items():
