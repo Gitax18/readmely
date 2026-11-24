@@ -183,14 +183,18 @@ export AWS_REGION=us-east-1
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 OPS_BUCKET=readmely-ops-$ACCOUNT_ID                  # bucket names are global; the account id makes it unique
 GITHUB_REPO=Gitax18/readmely
+# How GitHub names this repository in its OIDC tokens. Newer repositories use the immutable form,
+# with the owner's and repository's numeric ids: repo:Gitax18@77137963/readmely@1458934574.
+GITHUB_SUB_PREFIX=$(gh api "repos/${GITHUB_REPO}/actions/oidc/customization/sub" --jq .sub_claim_prefix)
 WEB_ORIGIN=https://readmely.gitanshu.me              # the web app's address on Vercel, no trailing slash
 fill() {  # fill in the placeholders of a JSON template in infra/aws
-  sed -e "s|<ACCOUNT_ID>|$ACCOUNT_ID|g" -e "s|<REGION>|$AWS_REGION|g" \
-      -e "s|<OPS_BUCKET>|$OPS_BUCKET|g" -e "s|<GITHUB_REPO>|$GITHUB_REPO|g" "infra/aws/$1"
+  sed -e "s|<ACCOUNT_ID>|${ACCOUNT_ID}|g" -e "s|<REGION>|${AWS_REGION}|g" \
+      -e "s|<OPS_BUCKET>|${OPS_BUCKET}|g" -e "s|<GITHUB_SUB_PREFIX>|${GITHUB_SUB_PREFIX}|g" "infra/aws/$1"
 }
 ```
 
-Run all commands from the repository root.
+Run all commands from the repository root. In zsh (the macOS default), write `${VAR}` rather than
+`$VAR` when a `:` follows: zsh reads `$VAR:a` as a modifier and changes the value.
 
 ## 3. Storage: ECR repositories and the ops bucket
 
@@ -267,10 +271,16 @@ aws iam put-role-policy --role-name readmely-deploy --policy-name deploy \
 DEPLOY_ROLE_ARN=$(aws iam get-role --role-name readmely-deploy --query Role.Arn --output text)
 ```
 
-> The trust policy accepts only jobs that run in the repository's **`production` environment**.
-> If GitHub does not offer environments for your private repository on your plan, trust tags
+> The trust policy accepts only jobs that run in the repository's **`production` environment**,
+> matched on the exact subject GitHub sends (`<GITHUB_SUB_PREFIX>:environment:production`). The
+> immutable form includes numeric ids, so a repository re-created under the same name after a
+> rename or deletion cannot deploy. If a deploy fails with *Not authorized to perform
+> sts:AssumeRoleWithWebIdentity*, compare the trust policy with the subject CloudTrail recorded:
+> `aws cloudtrail lookup-events --lookup-attributes AttributeKey=EventName,AttributeValue=AssumeRoleWithWebIdentity --max-results 1`.
+>
+> If GitHub does not offer environments for a private repository on your plan, trust tags
 > instead. In `deploy-trust.json`, change `StringEquals` on `:sub` to
-> `"StringLike": {"token.actions.githubusercontent.com:sub": "repo:<GITHUB_REPO>:ref:refs/tags/v*"}`,
+> `"StringLike": {"token.actions.githubusercontent.com:sub": "<GITHUB_SUB_PREFIX>:ref:refs/tags/v*"}`,
 > remove `environment: production` from the workflow, and set the variables in step 8 as
 > repository variables.
 
