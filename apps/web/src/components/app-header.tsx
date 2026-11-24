@@ -16,7 +16,7 @@ export function CreditPill({ credits }: { credits: number }) {
     <Link
       href="/usage"
       className={cn(
-        "inline-flex h-9 items-center gap-2 rounded-control border px-3 text-xs font-semibold transition-colors",
+        "inline-flex h-9 items-center gap-2 rounded-control border px-3 text-xs font-semibold whitespace-nowrap transition-colors",
         empty
           ? "border-bad/40 bg-bad/10 text-bad"
           : low
@@ -28,7 +28,14 @@ export function CreditPill({ credits }: { credits: number }) {
         aria-hidden
         className={cn("size-1.5 rounded-full", empty ? "bg-bad" : low ? "bg-warn" : "bg-accent")}
       />
-      {empty ? "Out of credits" : `${credits.toLocaleString("en-US")} credits`}
+      {empty ? (
+        "Out of credits"
+      ) : (
+        <span>
+          {credits.toLocaleString("en-US")}
+          <span className="max-[480px]:sr-only"> credits</span>
+        </span>
+      )}
     </Link>
   );
 }
@@ -47,7 +54,7 @@ export function AppHeader({
 }) {
   return (
     <header className="bg-background/85 border-border sticky top-0 z-40 border-b backdrop-blur-md">
-      <div className="relative mx-auto flex h-16 w-full max-w-[1100px] items-center gap-4 px-4 sm:px-6">
+      <div className="relative mx-auto flex h-16 w-full max-w-[1100px] items-center gap-2 px-4 sm:gap-4 sm:px-6">
         <Wordmark href="/dashboard" />
         <div className="md:ml-4">
           <AppNav active={active} />

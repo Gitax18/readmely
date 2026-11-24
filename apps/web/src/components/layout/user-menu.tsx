@@ -47,7 +47,7 @@ export function UserMenu({ email, csrf }: { email: string; csrf?: string }) {
         <span className="text-muted-foreground hidden max-w-36 truncate text-xs lg:block">
           {email}
         </span>
-        <ChevronDown aria-hidden className="text-faint size-3.5" />
+        <ChevronDown aria-hidden className="text-faint hidden size-3.5 sm:block" />
       </DropdownMenuTrigger>
       <DropdownMenuContent>
         <DropdownMenuLabel>{email}</DropdownMenuLabel>
