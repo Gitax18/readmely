@@ -1,0 +1,153 @@
+name: Deploy
+
+# Builds the backend images, pushes them to Amazon ECR and deploys them to the EC2 instance through
+# SSM Run Command (the instance has no SSH port). See docs/deploy/aws.md.
+#
+# No AWS keys are stored in GitHub: the job signs in with GitHub's OIDC token, and the role only
+# trusts this repository's `production` environment. Settings are environment variables, not
+# secrets, because none of them is secret: AWS_REGION, AWS_DEPLOY_ROLE_ARN, INSTANCE_ID, OPS_BUCKET.
+# Third-party actions are pinned to full commit SHAs (the version is in the comment).
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag or commit to deploy
+        required: true
+        default: main
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build and deploy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    environment: production
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      INSTANCE_ID: ${{ vars.INSTANCE_ID }}
+      OPS_BUCKET: ${{ vars.OPS_BUCKET }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+          persist-credentials: false
+
+      - name: Record the commit
+        id: rev
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2.1.7
+        id: ecr
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build and push api
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: infra/docker/core.Dockerfile
+          build-args: CMD=api
+          platforms: linux/amd64
+          provenance: false
+          push: true
+          tags: ${{ steps.ecr.outputs.registry }}/readmely/api:${{ steps.rev.outputs.sha }}
+          cache-from: type=gha,scope=core
+          cache-to: type=gha,mode=max,scope=core
+
+      - name: Build and push ingest
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: infra/docker/core.Dockerfile
+          build-args: CMD=ingest
+          platforms: linux/amd64
+          provenance: false
+          push: true
+          tags: ${{ steps.ecr.outputs.registry }}/readmely/ingest:${{ steps.rev.outputs.sha }}
+          cache-from: type=gha,scope=core
+
+      - name: Build and push migrate
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: infra/docker/core.Dockerfile
+          build-args: CMD=migrate
+          platforms: linux/amd64
+          provenance: false
+          push: true
+          tags: ${{ steps.ecr.outputs.registry }}/readmely/migrate:${{ steps.rev.outputs.sha }}
+          cache-from: type=gha,scope=core
+
+      - name: Build and push ai
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: infra/docker/ai.Dockerfile
+          platforms: linux/amd64
+          provenance: false
+          push: true
+          tags: ${{ steps.ecr.outputs.registry }}/readmely/ai:${{ steps.rev.outputs.sha }}
+          cache-from: type=gha,scope=ai
+          cache-to: type=gha,mode=max,scope=ai
+
+      - name: Upload the release bundle (infra/prod)
+        env:
+          SHA: ${{ steps.rev.outputs.sha }}
+        run: |
+          tar -czf release.tgz -C infra/prod .
+          aws s3 cp release.tgz "s3://${OPS_BUCKET}/releases/${SHA}.tgz" --only-show-errors
+
+      - name: Deploy on the instance
+        env:
+          SHA: ${{ steps.rev.outputs.sha }}
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          set -euo pipefail
+          params=$(jq -nc --arg bucket "$OPS_BUCKET" --arg sha "$SHA" --arg registry "$REGISTRY" '{
+            commands: [
+              "set -euo pipefail",
+              "rm -rf /opt/readmely/release.new && mkdir -p /opt/readmely/release.new",
+              "aws s3 cp s3://\($bucket)/releases/\($sha).tgz - | tar -xz -C /opt/readmely/release.new",
+              "rm -rf /opt/readmely/release.prev",
+              "if [ -d /opt/readmely/release ]; then mv /opt/readmely/release /opt/readmely/release.prev; fi",
+              "mv /opt/readmely/release.new /opt/readmely/release",
+              "/opt/readmely/release/scripts/deploy.sh \($registry) \($sha)"
+            ],
+            executionTimeout: ["1800"]
+          }')
+          command_id=$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name AWS-RunShellScript \
+            --comment "deploy ${SHA:0:12}" \
+            --parameters "$params" \
+            --query Command.CommandId --output text)
+          echo "SSM command $command_id"
+
+          status=Pending
+          for _ in $(seq 1 120); do
+            sleep 10
+            status=$(aws ssm get-command-invocation --command-id "$command_id" --instance-id "$INSTANCE_ID" \
+              --query Status --output text 2>/dev/null || echo Pending)
+            case "$status" in Success|Failed|Cancelled|TimedOut) break ;; esac
+          done
+
+          aws ssm get-command-invocation --command-id "$command_id" --instance-id "$INSTANCE_ID" \
+            --query StandardOutputContent --output text
+          aws ssm get-command-invocation --command-id "$command_id" --instance-id "$INSTANCE_ID" \
+            --query StandardErrorContent --output text >&2
+          echo "Status: $status"
+          [ "$status" = Success ]
