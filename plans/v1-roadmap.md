@@ -149,7 +149,7 @@ Dependencies are linear except that 6 and 7 could swap; the context pack goes fi
 
 - **Order of work:** settle the screen list, then the design system (tokens, type, theme), then the shared components, then each screen in turn: public pages first, then the signed-in app.
 - **Product:** the landing page (hero, how it works, a real sample, trust, pricing, FAQ), `/status` moved off `/`, `/privacy` and `/terms`, a 404 page, error and loading states, the project page split into tabs with one route each, mobile layouts for every screen, favicon and social card.
-- **Behaviour changes that come with it:** signing in lands on `/dashboard`; `/` shows the landing page for everyone.
+- **Behaviour changes that come with it:** signing in with an emailed code lands on `/dashboard` (provider sign-in still lands on `/account`, which the Go API hard-codes and the connect flow shares); `/` shows the landing page for everyone.
 - **Libraries:** Radix primitives for accessible parts (tabs, accordion, menus, radio groups, tooltips) and Motion for animation; no new backend work.
 
 **Cut:** any change to the API, new features, payments UI.
