@@ -1,6 +1,6 @@
 # Phase 9b · Private GitHub repositories
 
-**Status:** In progress · **Last updated:** 2026-11-24 · Branch `feat/private-repos` (stacked on `feat/ui-redesign`) · Parent plan: [v1-roadmap.md](v1-roadmap.md)
+**Status:** Built, awaiting review · **Last updated:** 2026-11-24 · Branch `feat/private-repos` (stacked on `feat/ui-redesign`) · Parent plan: [v1-roadmap.md](v1-roadmap.md)
 
 A person who connected GitHub can pick one of their **private** repositories on the new-project screen. Until now projects were public repositories only, read with one server-wide token, and no provider token was ever stored.
 
