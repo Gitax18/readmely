@@ -38,6 +38,11 @@ POLL_SECONDS = 1.0
 ERROR_SLEEP_SECONDS = 5.0
 BACKOFF_SECONDS = 30.0
 REQUEUE_EVERY_SECONDS = 30.0
+# Codes that describe the project, not a fault: retrying cannot help, the person is told why and
+# refunded, so they end the job at once and are logged as information, not errors.
+EXPECTED_OUTCOMES = frozenset(
+    {"analysis_missing", "stale_analysis", "readme_missing", "section_missing", "no_database_files"}
+)
 
 
 async def _sleep(stop: asyncio.Event, seconds: float) -> None:
@@ -99,12 +104,7 @@ async def run_job(db: Database, llm: LlmClient, settings: WorkerSettings, job: d
     try:
         await HANDLERS[job["kind"]](db, llm, settings, job, report)
     except LlmError as exc:
-        code, permanent = (
-            exc.code,
-            exc.permanent
-            or exc.code
-            in {"analysis_missing", "stale_analysis", "readme_missing", "section_missing", "no_database_files"},
-        )
+        code, permanent = exc.code, exc.permanent or exc.code in EXPECTED_OUTCOMES
     except Exception:
         logger.exception("job crashed", extra=log)
         code = "internal_error"
@@ -117,7 +117,12 @@ async def run_job(db: Database, llm: LlmClient, settings: WorkerSettings, job: d
             await queue.complete(conn, job_id, worker)
             logger.info("job succeeded", extra=log)
             return
-        logger.error("job failed", extra={**log, "code": code, "permanent": permanent})
+        if code in EXPECTED_OUTCOMES:
+            # The project's state, not a fault: the person is told why and refunded. Logging it as an
+            # error would bury the real failures that monitoring should catch.
+            logger.info("job ended without a result", extra={**log, "code": code})
+        else:
+            logger.error("job failed", extra={**log, "code": code, "permanent": permanent})
         if permanent:
             await queue.fail(conn, job_id, worker, code)
             final = True
