@@ -13,6 +13,7 @@ import type { AccountApi } from "@/lib/browser-api";
 import { createProjectsApi, type ProjectsApi } from "@/lib/projects-api";
 import type { RepositoryPreview } from "@/lib/project-schema";
 import { formatSize, projectFailureText } from "@/lib/project-text";
+import { ANALYSIS_COST, ANALYSIS_TYPICAL } from "@/lib/project-text";
 
 export function NewProjectForm({
   csrf,
@@ -176,7 +177,8 @@ export function NewProjectForm({
                   Create and analyse <ArrowRight aria-hidden />
                 </Button>
                 <span className="text-muted-foreground text-xs">
-                  Analysis holds 10 credits and is usually charged about 1.
+                  Analysis holds {ANALYSIS_COST} credits and is usually charged about{" "}
+                  {ANALYSIS_TYPICAL}.
                 </span>
               </div>
             </div>

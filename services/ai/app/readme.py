@@ -206,7 +206,7 @@ async def generate_readme(
             "FROM readme_versions WHERE project_id = %s",
             (project_id, content, template, job_id, project_id),
         )
-        await meter.settle(conn, job_id, cost)
+        await meter.settle(conn, job_id, job["kind"], cost)
 
 
 async def regenerate_section(
@@ -268,4 +268,4 @@ async def regenerate_section(
             "FROM readme_versions WHERE project_id = %s",
             (project_id, updated, job_id, project_id),
         )
-        await meter.settle(conn, job_id, cost)
+        await meter.settle(conn, job_id, job["kind"], cost)

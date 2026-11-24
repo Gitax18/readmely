@@ -286,8 +286,9 @@ func (p *Pipeline) save(ctx context.Context, ingestJob store.Job, proj store.Pro
 }
 
 // SummaryCost is what writing a project's summary holds, in credits. The AI worker settles it to
-// what the model calls really cost and returns the rest.
-const SummaryCost int64 = 10
+// what the model calls really cost, priced at 1.75 times (app/meter.py), and returns the rest.
+// 18 is 10 x 1.75, rounded up so the hold covers any charge.
+const SummaryCost int64 = 18
 
 // queueSummary holds the credits and queues the summary job, in the analysis's own transaction. A
 // balance too small to pay for it is not an error: the project is analysed, and a finished,

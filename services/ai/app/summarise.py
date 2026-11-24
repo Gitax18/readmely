@@ -210,4 +210,4 @@ async def summarise(
             "summary = EXCLUDED.summary",
             (project_id, commit_sha, llm.model, summary.model_dump_json()),
         )
-        await meter.settle(conn, job_id, cost)
+        await meter.settle(conn, job_id, job["kind"], cost)

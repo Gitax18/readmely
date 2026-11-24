@@ -409,4 +409,4 @@ async def generate_diagram(
             "commit_sha = EXCLUDED.commit_sha, job_id = EXCLUDED.job_id, created_at = now()",
             (project_id, kind, title, svg, len(nodes), commit_sha, job_id),
         )
-        await meter.settle(conn, job_id, cost)
+        await meter.settle(conn, job_id, job["kind"], cost)

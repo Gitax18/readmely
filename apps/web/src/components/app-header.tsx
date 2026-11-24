@@ -5,8 +5,8 @@ import { Wordmark } from "@/components/ui/logo";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { cn } from "@/lib/utils";
 
-/** Under this many credits the pill turns amber; at zero it says so. */
-export const LOW_CREDITS = 20;
+/** Under this many credits the pill turns amber (a diagram holds 38); at zero it says so. */
+export const LOW_CREDITS = 40;
 
 /** The balance, always visible, so the cost of anything is never a surprise. */
 export function CreditPill({ credits }: { credits: number }) {

@@ -23,8 +23,9 @@ import (
 )
 
 const (
-	// Cost is held when a diagram is requested; the worker settles it to what the model calls cost.
-	Cost int64 = 15
+	// Cost is held when a diagram is requested; the worker settles it to what the model calls cost,
+	// priced at 2.5 times (app/meter.py). 38 is 15 x 2.5, rounded up so the hold covers any charge.
+	Cost int64 = 38
 	// Kind is the job kind the AI worker runs.
 	Kind = "generate_diagram"
 

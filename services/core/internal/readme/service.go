@@ -20,11 +20,12 @@ import (
 	"github.com/Gitax18/readmely/services/core/internal/ratelimit"
 )
 
-// What the requests hold, in credits. The AI worker settles a job to what its model calls cost and
-// returns the rest, or refunds all of it when the job fails for good.
+// What the requests hold, in credits. The AI worker settles a job to what its model calls cost,
+// priced at 1.75 times (app/meter.py), and returns the rest, or refunds all of it when the job fails
+// for good. The holds are the earlier 15 and 2 times 1.75, rounded up so they cover any charge.
 const (
-	GenerateCost int64 = 15
-	SectionCost  int64 = 2
+	GenerateCost int64 = 27
+	SectionCost  int64 = 4
 
 	// GenerateKind and SectionKind are the job kinds the AI worker runs.
 	GenerateKind = "generate_readme"
