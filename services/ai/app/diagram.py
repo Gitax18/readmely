@@ -21,7 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app import meter
 from app.config import WorkerSettings
 from app.db import Database
-from app.diagram_render import Edge, Node, layout, lint, render
+from app.diagram_render import CHAR_W, LABEL_PX, MAX_W, PAD_X, SUB_PX, Edge, Node, layout, lint, render
 from app.llm import LlmClient, LlmError
 from app.readme import _facts_block, _summary_of
 from app.structured import Report, structured_call
@@ -59,7 +59,7 @@ migration and model files in the material and work out the tables as they stand 
 (a later ALTER changes an earlier CREATE; a dropped table or column is gone). Pick the 5 to 14 tables
 that matter most; leave out join-only noise, audit and bookkeeping tables such as schema_migrations.
 The label is the table name exactly as written. The sublabel is its key columns, comma separated, at most
-40 characters (for example "id, email, created_at"). An arrow runs from the referenced (parent) table to
+32 characters (for example "id, email, created_at"). An arrow runs from the referenced (parent) table to
 the table that holds the foreign key, and its label is that foreign-key column. Every box and arrow must
 cite one to three file paths from the material as evidence; do not cite a path that is not listed. Do
 not invent tables or relationships the files do not show."""
@@ -211,6 +211,19 @@ def repair(raw: Any) -> Any:
     return out
 
 
+def _fit(text: str, px: int) -> str:
+    """Cut text to the widest it can be inside a box, at a comma or space when there is one nearby."""
+    room = int((MAX_W - 2 * PAD_X) / CHAR_W[px])
+    if len(text) <= room:
+        return text
+    cut = text[:room]
+    for sep in (",", " "):
+        k = cut.rfind(sep)
+        if k >= room // 2:
+            return cut[:k].rstrip(" ,")
+    return cut.rstrip(" ,")
+
+
 def check(
     raw: dict[str, Any], known_paths: set[str], min_nodes: int = MIN_NODES, max_nodes: int = MAX_NODES
 ) -> tuple[str, list[Node], list[Edge]]:
@@ -226,7 +239,7 @@ def check(
         if n.id in seen or not any(p in known_paths for p in n.evidence):
             continue
         seen.add(n.id)
-        nodes.append(Node(n.id, n.label.strip(), n.sublabel.strip(), n.kind))
+        nodes.append(Node(n.id, _fit(n.label.strip(), LABEL_PX), _fit(n.sublabel.strip(), SUB_PX), n.kind))
     nodes = nodes[:max_nodes]
     ids = {n.id for n in nodes}
     edges: list[Edge] = []
