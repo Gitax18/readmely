@@ -1,6 +1,6 @@
 # Phase 9 · UI improvement
 
-**Status:** Built, awaiting review · **Last updated:** 2026-11-24 · Branch `feat/ui-redesign` · Parent plan: [v1-roadmap.md](v1-roadmap.md)
+**Status:** Done · PR #28 · **Last updated:** 2026-11-25 · Branch `feat/ui-redesign` · Parent plan: [v1-roadmap.md](v1-roadmap.md)
 
 Phases 2 to 8 built every feature with plain black-and-white cards. This phase gives the whole product one look: a design system taken from the approved landing-page design, a small set of shared components, and every screen rebuilt on them. No API, database or worker change is part of it.
 

@@ -223,8 +223,9 @@ Version 1 is being built phase by phase. Each phase is a reviewed pull request.
 - [x] Context pack
 - [x] README generator with editor and history
 - [x] Overview and ER diagrams
-- [ ] UI redesign: design system and every screen *(in progress)*
-- [ ] Release: AWS deployment and hardening *(next)*
+- [x] UI redesign: design system and every screen
+- [x] Live on the internet: web app on Vercel, backend on AWS
+- [ ] Release hardening: tests for security-critical code, audit fixes, screenshots *(in progress)*
 
 Later: private repositories through a GitHub App, two-factor authentication, resume and portfolio
 generation. Details are in [plans/v1-roadmap.md](plans/v1-roadmap.md).
