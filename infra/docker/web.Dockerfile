@@ -1,7 +1,7 @@
 # Next.js web image. Build from the repository root:
 #   docker build -f infra/docker/web.Dockerfile -t readmely/web:dev .
 
-FROM node:24.21.0-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS build
+FROM node:24.22.3-alpine@sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9adeea09ea8017f6e85f5 AS build
 # pnpm is pinned to the version in package.json; the release-age and
 # install-script policies in pnpm-workspace.yaml apply here too.
 RUN npm install --global --ignore-scripts pnpm@12.10.1
@@ -15,7 +15,7 @@ COPY apps/web/ ./
 RUN pnpm run build
 
 # Runtime: distroless Node. No shell, no npm, no package manager; non-root (65532).
-FROM gcr.io/distroless/nodejs24-debian13:nonroot@sha256:6abfcb367ebc291572c774c1592a986be2ab26a2486f73093401327495a5962a
+FROM gcr.io/distroless/nodejs24-debian13:nonroot@sha256:39b0407357c9fadf1a9708d22088f02de21f0e1e8a688474eea2d8701e7d5693
 WORKDIR /app
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
