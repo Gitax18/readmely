@@ -1,0 +1,66 @@
+# The only public entry point to the backend. See docs/deploy/aws.md.
+#
+# The web app on Vercel is the API's only client: it sends X-Readmely-Origin-Key with every request
+# (apps/web/src/lib/origin-key.ts). Anything without the key gets a 404, so the API is not usable
+# from anywhere else. /healthz stays open for uptime checks; it reveals nothing.
+#
+# Caddy gets and renews the TLS certificate for API_HOST on its own (Let's Encrypt, ZeroSSL as a
+# fallback); port 80 must be open for the HTTP challenge.
+{
+	admin off
+}
+
+{$API_HOST} {
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+
+	# The web proxy refuses bodies over 128 KiB (README saves); leave a little room.
+	request_body {
+		max_size 256KB
+	}
+
+	# Access logs to stdout (rotated by Docker). The origin key is a credential: never log it.
+	log {
+		output stdout
+		format filter {
+			wrap json
+			request>headers>X-Readmely-Origin-Key delete
+		}
+	}
+
+	@health path /healthz
+	handle @health {
+		reverse_proxy api:8080
+	}
+
+	# Readiness and the status detail (the API's internal listener). Only the web server may ask.
+	@internal {
+		path /_internal/*
+		header X-Readmely-Origin-Key {$ORIGIN_KEY}
+	}
+	handle @internal {
+		uri strip_prefix /_internal
+		reverse_proxy api:8081 {
+			header_up -X-Readmely-Origin-Key
+		}
+	}
+
+	@web header X-Readmely-Origin-Key {$ORIGIN_KEY}
+	handle @web {
+		reverse_proxy api:8080 {
+			header_up -X-Readmely-Origin-Key
+			# Vercel sets X-Forwarded-For to the visitor's address and overwrites any value the
+			# visitor sent. Pass it on unchanged (by default Caddy would replace it with Vercel's
+			# address), so the API rate limits each visitor and not all of Vercel at once.
+			header_up X-Forwarded-For {http.request.header.X-Forwarded-For}
+		}
+	}
+
+	handle {
+		respond 404
+	}
+}

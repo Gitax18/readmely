@@ -1,0 +1,12 @@
+{
+  "Rules": [
+    { "ID": "backups-14-days", "Filter": { "Prefix": "backups/" }, "Status": "Enabled", "Expiration": { "Days": 14 } },
+    { "ID": "releases-30-days", "Filter": { "Prefix": "releases/" }, "Status": "Enabled", "Expiration": { "Days": 30 } },
+    {
+      "ID": "abort-incomplete-uploads",
+      "Filter": { "Prefix": "" },
+      "Status": "Enabled",
+      "AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 1 }
+    }
+  ]
+}

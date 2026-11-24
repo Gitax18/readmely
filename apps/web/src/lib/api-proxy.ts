@@ -1,4 +1,5 @@
 import "server-only";
+import { originKeyHeaders } from "./origin-key";
 import { isProviderAuthorizationUrl, isSiteRelativePath } from "./providers";
 import { readLimited } from "./read-limited";
 
@@ -116,7 +117,7 @@ export async function proxyToApi(
   const path = pathSegments.join("/");
   if (!ALLOWED_PATHS.some((re) => re.test(path))) return problem(404, "not_found");
 
-  const headers = new Headers();
+  const headers = new Headers(originKeyHeaders());
   for (const name of FORWARD_REQUEST_HEADERS) {
     const value = request.headers.get(name);
     if (value !== null) headers.set(name, value);

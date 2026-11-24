@@ -79,3 +79,17 @@ updates:
       # A Redis minor is a server upgrade with its own release notes.
       - dependency-name: "redis"
         update-types: ["version-update:semver-minor"]
+
+  # The production stack (Caddy, Postgres, Redis); see docs/deploy/aws.md.
+  - package-ecosystem: docker-compose
+    directory: /infra/prod
+    schedule: { interval: weekly }
+    cooldown: { default-days: 7 }
+    commit-message: { prefix: "build(infra)" }
+    groups:
+      prod-compose: { patterns: ["*"] }
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "redis"
+        update-types: ["version-update:semver-minor"]

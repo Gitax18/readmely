@@ -1,0 +1,8 @@
+[Unit]
+Description=Back up the Readmely database to S3
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/readmely/release/scripts/backup.sh

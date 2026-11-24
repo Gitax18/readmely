@@ -14,7 +14,7 @@ This is the top-level plan. It records the agreed decisions, the service boundar
 | D4 | **Own auth service** in Go with **2FA**, plus login with **Google** and **GitHub** | Agreed; details open (see §9) |
 | D5 | **MVP:** GitHub import, ingestion, context pack, README, overview diagram. Resume, portfolio, and payments are v2 | Agreed |
 | D6 | Build **feature by feature**: backend and its frontend together | Agreed |
-| D7 | Hosting on **DigitalOcean or AWS** (undecided). Everything ships as Docker images; Kubernetes is added only if needed | Agreed |
+| D7 | Hosting: web app on **Vercel**, backend on **AWS** (one EC2 instance, Docker Compose, Caddy in front; see [docs/deploy/aws.md](../docs/deploy/aws.md)). Everything ships as Docker images; Kubernetes is added only if needed | Agreed |
 | D8 | LLM access through one **OpenAI-compatible client**; providers at launch are **OpenAI and xAI** | Agreed |
 | D9 | Git: feature branches and typed commits (see [README.md](README.md)) | Agreed |
 | D10 | **Code graph in Postgres** (`graph_nodes`, `graph_edges`), behind a Go `GraphStore` interface so it can move to a graph database later. No dedicated graph database in the MVP; revisit after release | Agreed |
@@ -83,7 +83,7 @@ testdata/repos/        fixture repositories, including malicious ones
 ## 7. Deployment
 
 - **Local:** one `docker compose up` starts Postgres, Redis, RustFS, and all services.
-- **Production (first):** the same images on a single DigitalOcean droplet or AWS instance, behind a reverse proxy with TLS. Managed Postgres if the budget allows.
+- **Production (first):** the web app on Vercel; the backend images on a single AWS EC2 instance behind Caddy (TLS, and a shared origin key so only the web server can reach the API). Postgres runs on the instance with nightly dumps to S3; managed Postgres if the budget allows. Runbook: [docs/deploy/aws.md](../docs/deploy/aws.md).
 - **Later:** Kubernetes manifests when one host is no longer enough.
 - **Sandboxing:** the ingest worker handles untrusted repositories, so it runs in a locked-down container (no outbound network except git fetch, read-only root, resource limits). The exact mechanism is decided in the ingestion plan once hosting is fixed.
 
@@ -120,4 +120,4 @@ The credit ledger is in Phase 5, before payments, because usage has to be capped
 ## 10. Open questions
 
 1. **Auth method:** email and password with TOTP 2FA, or passwordless email codes with TOTP? Settled in the Phase 2 auth discussion.
-2. **Hosting:** DigitalOcean or AWS. Needed before the ingestion sandbox is designed (Phase 4).
+2. ~~**Hosting:** DigitalOcean or AWS.~~ Settled: AWS for the backend, Vercel for the web app (D7).

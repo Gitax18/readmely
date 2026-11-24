@@ -1,0 +1,7 @@
+{
+  "BudgetName": "readmely-monthly-usage",
+  "BudgetLimit": { "Amount": "25", "Unit": "USD" },
+  "TimeUnit": "MONTHLY",
+  "BudgetType": "COST",
+  "CostTypes": { "IncludeCredit": false, "IncludeRefund": false }
+}
