@@ -24,7 +24,7 @@ func (q *Queries) DeleteGitHubAccess(ctx context.Context, userID uuid.UUID) (int
 }
 
 const getGitHubAccess = `-- name: GetGitHubAccess :one
-SELECT user_id, sealed, scope, created_at FROM github_access WHERE user_id = $1
+SELECT user_id, sealed, scope, created_at, id FROM github_access WHERE user_id = $1
 `
 
 func (q *Queries) GetGitHubAccess(ctx context.Context, userID uuid.UUID) (GithubAccess, error) {
@@ -35,6 +35,7 @@ func (q *Queries) GetGitHubAccess(ctx context.Context, userID uuid.UUID) (Github
 		&i.Sealed,
 		&i.Scope,
 		&i.CreatedAt,
+		&i.ID,
 	)
 	return i, err
 }

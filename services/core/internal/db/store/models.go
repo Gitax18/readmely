@@ -46,6 +46,7 @@ type GithubAccess struct {
 	Sealed    []byte
 	Scope     string
 	CreatedAt time.Time
+	ID        uuid.UUID
 }
 
 type GraphEdge struct {
