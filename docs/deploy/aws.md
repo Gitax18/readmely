@@ -452,7 +452,7 @@ aws sns subscribe --topic-arn "$OPS_TOPIC" --protocol email --notification-endpo
 aws cloudwatch put-metric-alarm --alarm-name readmely-system-check \
   --namespace AWS/EC2 --metric-name StatusCheckFailed_System --dimensions Name=InstanceId,Value="$INSTANCE_ID" \
   --statistic Maximum --period 60 --evaluation-periods 2 --threshold 0 --comparison-operator GreaterThanThreshold \
-  --alarm-actions "arn:aws:automate:$AWS_REGION:ec2:recover" "$OPS_TOPIC"
+  --alarm-actions "arn:aws:automate:${AWS_REGION}:ec2:recover" "$OPS_TOPIC"
 
 # The instance itself is stuck (out of memory, kernel trouble): email.
 aws cloudwatch put-metric-alarm --alarm-name readmely-instance-check \
