@@ -1,0 +1,7 @@
+{
+  "BudgetName": "readmely-zero-spend",
+  "BudgetLimit": { "Amount": "0.01", "Unit": "USD" },
+  "TimeUnit": "MONTHLY",
+  "BudgetType": "COST",
+  "CostTypes": { "IncludeCredit": true, "IncludeRefund": true }
+}

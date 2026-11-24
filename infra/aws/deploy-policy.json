@@ -1,0 +1,45 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    { "Sid": "EcrLogin", "Effect": "Allow", "Action": "ecr:GetAuthorizationToken", "Resource": "*" },
+    {
+      "Sid": "EcrPush",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:BatchCheckLayerAvailability",
+        "ecr:BatchGetImage",
+        "ecr:CompleteLayerUpload",
+        "ecr:GetDownloadUrlForLayer",
+        "ecr:InitiateLayerUpload",
+        "ecr:PutImage",
+        "ecr:UploadLayerPart"
+      ],
+      "Resource": "arn:aws:ecr:<REGION>:<ACCOUNT_ID>:repository/readmely/*"
+    },
+    {
+      "Sid": "UploadReleaseBundle",
+      "Effect": "Allow",
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::<OPS_BUCKET>/releases/*"
+    },
+    {
+      "Sid": "RunOnTheReadmelyInstanceOnly",
+      "Effect": "Allow",
+      "Action": "ssm:SendCommand",
+      "Resource": "arn:aws:ec2:<REGION>:<ACCOUNT_ID>:instance/*",
+      "Condition": { "StringEquals": { "ssm:resourceTag/app": "readmely" } }
+    },
+    {
+      "Sid": "WithTheShellDocumentOnly",
+      "Effect": "Allow",
+      "Action": "ssm:SendCommand",
+      "Resource": "arn:aws:ssm:<REGION>::document/AWS-RunShellScript"
+    },
+    {
+      "Sid": "ReadTheResult",
+      "Effect": "Allow",
+      "Action": ["ssm:GetCommandInvocation", "ssm:ListCommandInvocations"],
+      "Resource": "*"
+    }
+  ]
+}
