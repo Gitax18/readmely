@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { UnavailableScreen } from "@/components/layout/unavailable";
 import {
   fetchCredits,
+  fetchGitHubAccess,
   fetchIdentities,
   fetchProviders,
   fetchSession,
@@ -35,11 +36,12 @@ export default async function AccountPage({
     return <UnavailableScreen title="Account unavailable" />;
   }
 
-  const [sessions, identities, providers, credits] = await Promise.all([
+  const [sessions, identities, providers, credits, githubAccess] = await Promise.all([
     fetchSessions(env.apiPublicUrl, token),
     fetchIdentities(env.apiPublicUrl, token),
     fetchProviders(env.apiPublicUrl),
     fetchCredits(env.apiPublicUrl, token),
+    fetchGitHubAccess(env.apiPublicUrl, token),
   ]);
   return (
     <AppShell
@@ -54,6 +56,7 @@ export default async function AccountPage({
         initialSessions={sessions ?? []}
         initialIdentities={identities ?? []}
         providers={providers}
+        initialGitHubAccess={githubAccess}
         notice={loginErrorMessage(error)}
       />
     </AppShell>

@@ -22,6 +22,7 @@ export const projectSchema = z.object({
   description: z.string().max(500),
   default_branch: z.string().max(255),
   size_kb: z.number().int().min(0),
+  is_private: z.boolean(),
   status: z.enum(["draft", "importing", "ready", "failed"]),
   created_at: z.string().min(1),
   updated_at: z.string().min(1),
@@ -40,6 +41,23 @@ export const repositoryPreviewSchema = z.object({
   size_kb: z.number().int().min(0),
 });
 
+/** A repository the person's granted GitHub access can see (contracts/core-public.yaml). */
+export const gitHubRepositorySchema = z.object({
+  owner: z.string().min(1).max(39),
+  name: z.string().min(1).max(100),
+  description: z.string().max(500),
+  default_branch: z.string().max(255),
+  size_kb: z.number().int().min(0),
+  private: z.boolean(),
+  added: z.boolean(),
+  too_large: z.boolean(),
+});
+
+export const gitHubRepositoryListSchema = z.object({
+  repositories: z.array(gitHubRepositorySchema).max(300),
+});
+
+export type GitHubRepository = z.infer<typeof gitHubRepositorySchema>;
 export type ProjectJob = z.infer<typeof projectJobSchema>;
 export type Project = z.infer<typeof projectSchema>;
 export type RepositoryPreview = z.infer<typeof repositoryPreviewSchema>;

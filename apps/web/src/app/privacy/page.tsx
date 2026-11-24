@@ -38,6 +38,15 @@ const SECTIONS: LegalSection[] = [
           structure, languages, commands and services.
         </p>
         <p>
+          <strong>Private repositories.</strong> If you choose to allow it, Readmely stores an
+          access token from GitHub, encrypted, so it can list and read your private repositories.
+          GitHub only offers a read-and-write permission for this; Readmely only reads. A private
+          repository you add is handled exactly like a public one: its readable text is stored and
+          sent to the AI model for the summary, README and diagram, and everything is deleted with
+          the project. You can remove the access token from the account page at any time;
+          disconnecting GitHub or deleting your account removes it too.
+        </p>
+        <p>
           <strong>What is generated.</strong> The summary, every version of the README, and the
           diagram.
         </p>

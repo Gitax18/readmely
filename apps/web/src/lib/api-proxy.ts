@@ -42,6 +42,10 @@ const ALLOWED_PATHS = [
   /^v1\/me\/identities$/,
   /^v1\/me\/identities\/(google|github)$/,
   /^v1\/me\/identities\/(google|github)\/start$/,
+  // Private GitHub repositories: the access state, granting it, and the list it unlocks.
+  /^v1\/me\/github\/access$/,
+  /^v1\/me\/github\/access\/start$/,
+  /^v1\/me\/github\/repos$/,
 ];
 
 // Only these two answer with a redirect, and only the callback takes a query.

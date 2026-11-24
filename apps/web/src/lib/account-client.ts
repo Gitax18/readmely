@@ -1,9 +1,11 @@
 import "server-only";
 import {
+  gitHubAccessSchema,
   identityListSchema,
   meSchema,
   providersSchema,
   sessionListSchema,
+  type GitHubAccess,
   type Identity,
   type Me,
   type Session,
@@ -114,6 +116,18 @@ export async function fetchIdentities(
   if (res === null || res.status === 401) return null;
   const parsed = identityListSchema.safeParse(res.json);
   return parsed.success ? parsed.data.identities : null;
+}
+
+/** Whether private GitHub repositories can be read for this user, or null when that cannot be told. */
+export async function fetchGitHubAccess(
+  baseUrl: string,
+  sessionToken: string,
+  options: Options = {},
+): Promise<GitHubAccess | null> {
+  const res = await getJson(baseUrl, "/v1/me/github/access", sessionToken, options);
+  if (res === null || res.status === 401) return null;
+  const parsed = gitHubAccessSchema.safeParse(res.json);
+  return parsed.success ? parsed.data : null;
 }
 
 /** The signed-in user's projects, or null when they cannot be loaded. */

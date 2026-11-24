@@ -5,6 +5,7 @@ import {
   ExternalLink,
   FileText,
   LayoutGrid,
+  Lock,
   Network,
   Settings,
   Sparkles,
@@ -46,9 +47,16 @@ export function ProjectHeader() {
             </a>
           ) : null}
         </div>
-        <Badge tone={badge.tone} dot={isWorking(project) ? "pulse" : true} className="mt-1.5">
-          {badge.label}
-        </Badge>
+        <div className="mt-1.5 flex items-center gap-2">
+          {project.is_private ? (
+            <Badge tone="neutral">
+              <Lock className="size-3" aria-hidden /> Private
+            </Badge>
+          ) : null}
+          <Badge tone={badge.tone} dot={isWorking(project) ? "pulse" : true}>
+            {badge.label}
+          </Badge>
+        </div>
       </div>
       <NavTabs
         label="Project"

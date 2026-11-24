@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ConfirmPanel } from "@/components/ui/confirm-panel";
 import { Input } from "@/components/ui/input";
 import { Message } from "@/components/ui/message";
-import type { Identity, Me, Session, User } from "@/lib/account-schema";
+import type { GitHubAccess, Identity, Me, Session, User } from "@/lib/account-schema";
 import { createAccountApi, type AccountApi, type Failure } from "@/lib/browser-api";
 import { PROVIDER_LABELS, PROVIDERS, type Provider } from "@/lib/providers";
 
@@ -48,6 +48,7 @@ export function AccountView({
   initialSessions,
   initialIdentities = [],
   providers = [],
+  initialGitHubAccess = null,
   notice = null,
   api,
   onSignedOut,
@@ -59,6 +60,8 @@ export function AccountView({
   initialIdentities?: Identity[];
   /** Providers the API has credentials for: only these offer "Connect". */
   providers?: Provider[];
+  /** Whether private GitHub repositories can be read; null or absent hides that card. */
+  initialGitHubAccess?: GitHubAccess | null;
   /** Why a connect attempt failed, from /account?error=, in plain words. */
   notice?: string | null;
   api?: AccountApi;
@@ -76,6 +79,9 @@ export function AccountView({
   const [identities, setIdentities] = useState<Identity[]>(initialIdentities);
   const [confirming, setConfirming] = useState<Provider | null>(null);
   const [identityError, setIdentityError] = useState<string | null>(null);
+  const [githubAccess, setGitHubAccess] = useState<GitHubAccess | null>(initialGitHubAccess);
+  const [removingAccess, setRemovingAccess] = useState(false);
+  const [accessError, setAccessError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [deleteStep, setDeleteStep] = useState<"idle" | "confirm" | "code">("idle");
   const [deleteCode, setDeleteCode] = useState("");
@@ -202,6 +208,31 @@ export function AccountView({
     (onNavigate ?? ((url: string) => window.location.assign(url)))(result.url);
   }
 
+  async function allowPrivate() {
+    if (busy) return;
+    setBusy(true);
+    setAccessError(null);
+    const result = await client.startGitHubAccess(me.csrf_token);
+    if (!result.ok) {
+      setBusy(false);
+      handleFailure(result, setAccessError);
+      return;
+    }
+    // Leaves the page for GitHub; busy stays on so nothing else is clicked on the way out.
+    (onNavigate ?? ((url: string) => window.location.assign(url)))(result.url);
+  }
+
+  async function removePrivate() {
+    if (busy) return;
+    setBusy(true);
+    setAccessError(null);
+    const result = await client.removeGitHubAccess(me.csrf_token);
+    setBusy(false);
+    setRemovingAccess(false);
+    if (!result.ok) return handleFailure(result, setAccessError);
+    setGitHubAccess((a) => (a ? { ...a, granted: false } : a));
+  }
+
   async function disconnect(provider: Provider) {
     if (busy) return;
     setBusy(true);
@@ -216,6 +247,9 @@ export function AccountView({
     const refreshed = await client.listIdentities();
     setBusy(false);
     setConfirming(null);
+    // Disconnecting GitHub also takes back the permission to read private repositories.
+    if (provider === "github")
+      setGitHubAccess((a) => (a ? { ...a, connected: false, granted: false } : a));
     if (refreshed.ok) setIdentities(refreshed.identities);
     else handleFailure(refreshed, setIdentityError);
   }
@@ -368,6 +402,68 @@ export function AccountView({
                 {identityError}
               </Message>
             ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {githubAccess?.enabled && githubAccess.connected ? (
+        <Card>
+          <CardHeader>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <CardTitle>Private repositories</CardTitle>
+              <Badge tone={githubAccess.granted ? "ok" : "neutral"}>
+                {githubAccess.granted ? "Allowed" : "Not allowed"}
+              </Badge>
+            </div>
+            <CardDescription>
+              Let Readmely read your private GitHub repositories so you can add them as projects.
+              GitHub offers no read-only choice for this, so the permission it shows is read and
+              write. Readmely only ever reads. The access token is stored encrypted, and you can
+              take it back here at any time.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            {githubAccess.granted ? (
+              removingAccess ? (
+                <ConfirmPanel
+                  label="Confirm removing private repository access"
+                  actions={
+                    <>
+                      <Button variant="danger" onClick={() => void removePrivate()} disabled={busy}>
+                        Yes, remove access
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        onClick={() => setRemovingAccess(false)}
+                        disabled={busy}
+                      >
+                        Keep it
+                      </Button>
+                    </>
+                  }
+                >
+                  Remove access? Projects you already added keep what was analysed, but analysing a
+                  private one again needs you to allow access again.
+                </ConfirmPanel>
+              ) : (
+                <div>
+                  <Button
+                    variant="secondary"
+                    onClick={() => setRemovingAccess(true)}
+                    disabled={busy}
+                  >
+                    Remove access
+                  </Button>
+                </div>
+              )
+            ) : (
+              <div>
+                <Button variant="secondary" onClick={() => void allowPrivate()} disabled={busy}>
+                  Allow access to private repositories
+                </Button>
+              </div>
+            )}
+            {accessError ? <Message tone="error">{accessError}</Message> : null}
           </CardContent>
         </Card>
       ) : null}

@@ -7,7 +7,7 @@ export function projectFailureText(f: Failure): string {
     case "invalid_request":
       return "That does not look like a GitHub repository address. Use https://github.com/owner/repo.";
     case "repository_not_found":
-      return "We could not find a public repository there. Check the address; private repositories are not supported yet.";
+      return "We could not find that repository. Check the address. For a private repository, allow Readmely to read it first.";
     case "repository_too_large":
       return "That repository is too large for Readmely (over 200 MB).";
     case "github_unavailable":
@@ -68,6 +68,8 @@ export function jobFailureText(code: string | null): string {
       return "GitHub did not answer in time.";
     case "archive_unreadable":
       return "We could not read the repository's files.";
+    case "github_access_required":
+      return "Readmely can no longer read this private repository. Allow access to your private repositories again, then analyse.";
     default:
       return "The analysis hit a problem on our side.";
   }

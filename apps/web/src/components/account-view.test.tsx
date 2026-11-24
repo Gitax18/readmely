@@ -30,6 +30,9 @@ function fakeApi(overrides: Partial<AccountApi> = {}): AccountApi {
     listIdentities: vi.fn(async () => ({ ok: true as const, identities: [] })),
     startConnect: vi.fn(),
     disconnect: vi.fn(async () => ({ ok: true as const })),
+    getGitHubAccess: vi.fn(),
+    startGitHubAccess: vi.fn(),
+    removeGitHubAccess: vi.fn(),
     ...overrides,
   };
 }

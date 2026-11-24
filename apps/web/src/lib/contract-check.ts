@@ -3,6 +3,7 @@ import type { components as publicComponents } from "@/contract/core-public";
 import type {
   AuthorizationUrl,
   AuthProviders,
+  GitHubAccess,
   Identity,
   Me,
   Session,
@@ -13,7 +14,7 @@ import type { ContextPack, ContextPackPreset } from "./context-pack-schema";
 import type { Diagram, DiagramState } from "./diagram-schema";
 import type { Readme, ReadmeScore, ReadmeState, ReadmeVersions } from "./readme-schema";
 import type { CreditBalance, CreditEntry } from "./credit-schema";
-import type { Project, ProjectJob, RepositoryPreview } from "./project-schema";
+import type { GitHubRepository, Project, ProjectJob, RepositoryPreview } from "./project-schema";
 import type { Report } from "./status-schema";
 
 /**
@@ -113,4 +114,13 @@ export const diagramMatchesContract: SameShape<Diagram, publicComponents["schema
 export const diagramStateMatchesContract: SameShape<
   DiagramState,
   publicComponents["schemas"]["DiagramState"]
+> = true;
+
+export const gitHubAccessMatchesContract: SameShape<
+  GitHubAccess,
+  publicComponents["schemas"]["GitHubAccess"]
+> = true;
+export const gitHubRepositoryMatchesContract: SameShape<
+  GitHubRepository,
+  publicComponents["schemas"]["GitHubRepository"]
 > = true;

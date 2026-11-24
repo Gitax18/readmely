@@ -1,10 +1,12 @@
 import { z } from "zod";
 import {
   authorizationUrlSchema,
+  gitHubAccessSchema,
   identityListSchema,
   meSchema,
   sessionListSchema,
   userSchema,
+  type GitHubAccess,
   type Identity,
   type Me,
   type Session,
@@ -135,6 +137,11 @@ export interface AccountApi {
   /** Where to send the browser to connect a provider; only ever a provider's own authorization URL. */
   startConnect(csrf: string, provider: Provider): Promise<Result<{ url: string }>>;
   disconnect(csrf: string, provider: Provider): Promise<Result<object>>;
+  /** Whether private GitHub repositories can be read for this user. */
+  getGitHubAccess(): Promise<Result<{ access: GitHubAccess }>>;
+  /** Where to send the browser to grant GitHub access to private repositories. */
+  startGitHubAccess(csrf: string): Promise<Result<{ url: string }>>;
+  removeGitHubAccess(csrf: string): Promise<Result<object>>;
 }
 
 export function createAccountApi(
@@ -208,6 +215,24 @@ export function createAccountApi(
     },
     async disconnect(csrf, provider) {
       const res = await request(fetchImpl, "DELETE", `/me/identities/${provider}`, { csrf });
+      return res?.status === 204 ? { ok: true } : failure(res);
+    },
+    async getGitHubAccess() {
+      const res = await request(fetchImpl, "GET", "/me/github/access");
+      if (res?.status !== 200) return failure(res);
+      const access = await parsed(res, gitHubAccessSchema);
+      return access ? { ok: true, access } : { ok: false, kind: "unavailable" };
+    },
+    async startGitHubAccess(csrf) {
+      const res = await request(fetchImpl, "POST", "/me/github/access/start", { csrf });
+      if (res?.status !== 200) return failure(res);
+      const body = await parsed(res, authorizationUrlSchema);
+      return body && isProviderAuthorizationUrl(body.authorization_url)
+        ? { ok: true, url: body.authorization_url }
+        : { ok: false, kind: "unavailable" };
+    },
+    async removeGitHubAccess(csrf) {
+      const res = await request(fetchImpl, "DELETE", "/me/github/access", { csrf });
       return res?.status === 204 ? { ok: true } : failure(res);
     },
   };
