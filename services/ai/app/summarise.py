@@ -221,13 +221,48 @@ def build_prompt(material: dict[str, Any]) -> str:
     return "\n\n".join(parts)
 
 
+def _cut(text: Any, limit: int) -> Any:
+    """Shorten text to the limit at a word boundary; anything not text is left for validation."""
+    if not isinstance(text, str) or len(text) <= limit:
+        return text
+    cut = text[: limit - 1]
+    space = cut.rfind(" ")
+    return (cut[:space] if space > limit // 2 else cut).rstrip(" ,;:") + "…"
+
+
+def repair(raw: Any, known_paths: set[str]) -> Any:
+    """Fix the harmless overruns models make before the strict validation runs.
+
+    Components that name a path the project does not have are dropped first, so cutting the list to
+    its limit keeps real ones; then lists and text are cut to their limits. Refusing a whole summary
+    because it listed nine components instead of eight wastes the call.
+    """
+    if not isinstance(raw, dict):
+        return raw
+    out = dict(raw)
+    out["headline"] = _cut(out.get("headline"), 160)
+    out["overview"] = _cut(out.get("overview"), 1_000)
+    steps = out.get("how_it_works")
+    if isinstance(steps, list):
+        out["how_it_works"] = [_cut(x, 250) for x in steps if not isinstance(x, str) or x.strip()][:6]
+    components = out.get("components")
+    if isinstance(components, list):
+        kept = []
+        for item in components:
+            if isinstance(item, dict) and isinstance(item.get("path"), str):
+                path = item["path"].strip()
+                if not (path.rstrip("/") in known_paths or _is_dir(path, known_paths)):
+                    continue
+                kept.append({**item, "path": path, "role": _cut(item.get("role"), 200)})
+            else:
+                kept.append(item)  # malformed: left for validation to refuse
+        out["components"] = kept[:8]
+    return out
+
+
 def check(raw: dict[str, Any], known_paths: set[str]) -> Summary:
-    """Validate the model's answer and drop components that name a file the project does not have."""
-    summary = Summary.model_validate(raw)
-    summary.components[:] = [
-        c for c in summary.components if c.path.rstrip("/") in known_paths or _is_dir(c.path, known_paths)
-    ]
-    return summary
+    """Validate the model's answer, keeping only components that name a file or directory the project has."""
+    return Summary.model_validate(repair(raw, known_paths))
 
 
 def _is_dir(path: str, known: set[str]) -> bool:
