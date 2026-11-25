@@ -29,6 +29,9 @@ const (
 	maxShutdownTimeout = 60 * time.Second
 	minTokenLength     = 32
 	maxTrustedProxies  = 16
+	// Requests a client address may make each minute (internal/guard). 0 turns the guard off.
+	defaultGuardPerMinute = 300
+	maxGuardPerMinute     = 100_000
 )
 
 // Mailers. Only development may use the log and file mailers: they put codes on disk or in
@@ -62,6 +65,7 @@ type Config struct {
 	AuthCodeKey    string         // HMAC key for login codes and CSRF tokens; never logged
 	WebOrigin      string         // the only origin allowed to make state-changing requests
 	TrustedProxies []netip.Prefix // peers whose X-Forwarded-For is believed (the web server)
+	GuardPerMinute int64          // requests per client address per minute; 0 turns the guard off
 	Mailer         string         // MailerLog, MailerFile or MailerSMTP
 	MailDir        string         // where MailerFile writes
 	SMTPHost       string         // MailerSMTP only
@@ -170,6 +174,16 @@ func (c *Config) loadAuth(getenv func(string) string, errs *[]error) {
 			*errs = append(*errs, fieldError("TRUSTED_PROXIES", err))
 		}
 		c.TrustedProxies = prefixes
+	}
+
+	c.GuardPerMinute = defaultGuardPerMinute
+	if raw := value(getenv, "GUARD_PER_MINUTE", ""); raw != "" {
+		n, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || n < 0 || n > maxGuardPerMinute {
+			*errs = append(*errs, fieldError("GUARD_PER_MINUTE", fmt.Errorf("must be 0 (off) to %d", maxGuardPerMinute)))
+		} else {
+			c.GuardPerMinute = n
+		}
 	}
 
 	fallbackMailer := MailerLog

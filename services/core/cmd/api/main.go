@@ -24,6 +24,7 @@ import (
 	"github.com/Gitax18/readmely/services/core/internal/diagram"
 	"github.com/Gitax18/readmely/services/core/internal/github"
 	"github.com/Gitax18/readmely/services/core/internal/githubaccess"
+	"github.com/Gitax18/readmely/services/core/internal/guard"
 	"github.com/Gitax18/readmely/services/core/internal/health"
 	"github.com/Gitax18/readmely/services/core/internal/logging"
 	"github.com/Gitax18/readmely/services/core/internal/mail"
@@ -122,7 +123,12 @@ func run(ctx context.Context, args []string, getenv func(string) string, stdout,
 	}
 	authService.EnableOAuth(auth.OAuthConfig{Providers: providers, Store: oauth.NewStore(rdb, "rm:"), WebOrigin: cfg.WebOrigin, Access: access})
 	logger.Info("provider sign-in", "providers", authService.Providers())
-	authHandler := auth.NewHandler(authService, clientip.New(cfg.TrustedProxies), cfg.WebOrigin, logger)
+	ips := clientip.New(cfg.TrustedProxies)
+	authHandler := auth.NewHandler(authService, ips, cfg.WebOrigin, logger)
+	requestGuard := guard.New(rdb, ips, logger, guard.Defaults(cfg.GuardPerMinute), "rm:guard:")
+	if cfg.GuardPerMinute == 0 {
+		logger.Warn("request guard is off", "reason", "GUARD_PER_MINUTE=0")
+	}
 	githubClient := github.NewClient(cfg.GitHubAPIToken)
 	projectService := projects.NewService(pool, ratelimit.New(rdb, "rm:rl:"), githubClient, logger)
 	if access != nil {
@@ -155,7 +161,7 @@ func run(ctx context.Context, args []string, getenv func(string) string, stdout,
 	go authService.RunCleanup(runCtx, authCleanupEvery)
 	errs := make(chan error, 2)
 	go func() {
-		errs <- server.Run(runCtx, server.New(server.NewPublicRouter(logger, checks, authHandler.Mount)), publicLn, cfg.ShutdownTimeout)
+		errs <- server.Run(runCtx, server.New(server.NewPublicRouter(logger, checks, requestGuard.Middleware, authHandler.Mount)), publicLn, cfg.ShutdownTimeout)
 	}()
 	go func() {
 		errs <- server.Run(runCtx, server.New(server.NewInternalRouter(logger, checks, statusHandler.Get)), internalLn, cfg.ShutdownTimeout)

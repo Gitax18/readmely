@@ -15,6 +15,7 @@ import { creditBalanceSchema, creditHistorySchema, type CreditEntry } from "./cr
 import { projectListSchema, projectSchema, type Project } from "./project-schema";
 import type { Provider } from "./providers";
 import { readLimited } from "./read-limited";
+import { visitorHeaders } from "./visitor";
 
 export const FETCH_TIMEOUT_MS = 3000;
 export const MAX_BODY_BYTES = 64 * 1024;
@@ -42,6 +43,7 @@ async function getJson(
       redirect: "error",
       headers: {
         ...originKeyHeaders(),
+        ...(await visitorHeaders()),
         Accept: "application/json",
         Cookie: `${SESSION_COOKIE}=${sessionToken}`,
       },
@@ -98,7 +100,7 @@ export async function fetchProviders(baseUrl: string, options: Options = {}): Pr
     const response = await doFetch(`${baseUrl}/v1/auth/providers`, {
       cache: "no-store",
       redirect: "error",
-      headers: { ...originKeyHeaders(), Accept: "application/json" },
+      headers: { ...originKeyHeaders(), ...(await visitorHeaders()), Accept: "application/json" },
       signal: AbortSignal.timeout(options.timeoutMs ?? FETCH_TIMEOUT_MS),
     });
     if (!response.ok) return [];
@@ -161,6 +163,7 @@ export async function fetchProject(
       redirect: "error",
       headers: {
         ...originKeyHeaders(),
+        ...(await visitorHeaders()),
         Accept: "application/json",
         Cookie: `${SESSION_COOKIE}=${sessionToken}`,
       },

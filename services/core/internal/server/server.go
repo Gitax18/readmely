@@ -23,8 +23,14 @@ const maxBodyBytes = 1 << 20 // 1 MiB
 // readiness reveals which dependency is down and costs a database round trip
 // per call, so it lives on the internal router (audit item A1). Each mount adds a feature's
 // routes (the account endpoints under /v1).
-func NewPublicRouter(logger *slog.Logger, h *health.Handler, mounts ...func(chi.Router)) http.Handler {
+//
+// guard, when set, runs before every route: a per-address limit and temporary blocks
+// (internal/guard). It sits inside the router, so it can tell an unknown path from a route's 404.
+func NewPublicRouter(logger *slog.Logger, h *health.Handler, guard func(http.Handler) http.Handler, mounts ...func(chi.Router)) http.Handler {
 	r := newBaseRouter(logger)
+	if guard != nil {
+		r.Use(guard)
+	}
 	r.Get("/healthz", h.Healthz)
 	for _, mount := range mounts {
 		mount(r)

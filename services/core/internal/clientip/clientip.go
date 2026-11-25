@@ -37,6 +37,11 @@ func (r *Resolver) isTrusted(a netip.Addr) bool {
 	return false
 }
 
+// IsProxy reports whether a is one of the trusted proxies. When Addr returns such an address, the
+// request came from our own web server with no visitor address attached (its own server-side
+// calls), not from a visitor.
+func (r *Resolver) IsProxy(a netip.Addr) bool { return a.IsValid() && r.isTrusted(a) }
+
 // Addr returns the client address for req. It never fails: without a usable peer address it
 // returns the zero Addr, which callers treat as one shared "unknown" client.
 func (r *Resolver) Addr(req *http.Request) netip.Addr {

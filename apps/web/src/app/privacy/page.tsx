@@ -32,6 +32,12 @@ const SECTIONS: LegalSection[] = [
           them and lets you end any of them.
         </p>
         <p>
+          <strong>Abuse protection.</strong> So no one address can flood the service, we count the
+          requests from each IP address a minute at a time. Only a one-way hash of the address is
+          stored for this, and it is gone within a day. If an address keeps being refused, it is
+          blocked for between 15 minutes and a day, and that address is written to our server log.
+        </p>
+        <p>
           <strong>Your projects.</strong> For each repository: its address, name, description,
           default branch and size, and what the analysis found. The analysis includes the{" "}
           <strong>readable text of the files it read</strong> (up to about 20,000 files), the file

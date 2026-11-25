@@ -368,7 +368,7 @@ var planned = map[string][]string{}
 // publicRouter is the public listener as main wires it. The account routes only need to be
 // registered here: nothing in these tests reaches a handler that touches a database.
 func publicRouter(checks *health.Handler) http.Handler {
-	return server.NewPublicRouter(logger(), checks, accountRoutes)
+	return server.NewPublicRouter(logger(), checks, nil, accountRoutes)
 }
 
 // accountRoutes registers the /v1 account endpoints on a router.
