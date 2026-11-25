@@ -52,6 +52,11 @@ Deploys:              GitHub Actions ─OIDC─► push to ECR ─► SSM Run Co
 - **Real visitor addresses.** Vercel sets `X-Forwarded-For` to the visitor's address. Caddy passes
   it on, and the API believes it only from Caddy's fixed address (`TRUSTED_PROXIES`), so rate
   limits apply per visitor.
+- **Per-visitor limit and blocks.** Each visitor may make 300 API requests a minute. Repeated
+  refusals (429, 403, 405, unknown paths) block the address for 15 minutes, then an hour, then a
+  day, and the API logs `address blocked` once per block. To turn it off, set the SSM parameter
+  `/readmely/prod/GUARD_PER_MINUTE` to `0` and redeploy. See
+  [plans/cloud-security.md](../../plans/cloud-security.md).
 
 The files involved:
 

@@ -248,7 +248,7 @@ func TestRunReturnsServeErrors(t *testing.T) {
 }
 
 func TestPublicRouterHasNoReadiness(t *testing.T) {
-	r := NewPublicRouter(discardLogger(), health.New(discardLogger(), time.Second))
+	r := NewPublicRouter(discardLogger(), health.New(discardLogger(), time.Second), nil)
 	for path, want := range map[string]int{"/healthz": http.StatusOK, "/readyz": http.StatusNotFound} {
 		rec := httptest.NewRecorder()
 		r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, http.NoBody))
@@ -266,7 +266,7 @@ func TestStatusIsInternalOnly(t *testing.T) {
 		router http.Handler
 		want   int
 	}{
-		"public":   {NewPublicRouter(logger, h), http.StatusNotFound},
+		"public":   {NewPublicRouter(logger, h, nil), http.StatusNotFound},
 		"internal": {NewInternalRouter(logger, h, stubStatus), http.StatusOK},
 	} {
 		rec := httptest.NewRecorder()

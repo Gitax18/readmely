@@ -198,7 +198,7 @@ func newEnv(t *testing.T, o envOpts) *env {
 		svc.EnableOAuth(auth.OAuthConfig{Providers: fake.providers(), Store: oauth.NewStore(rdb, prefix), WebOrigin: webOrigin})
 	}
 	handler := auth.NewHandler(svc, clientip.New(o.trusted), webOrigin, logger)
-	router := server.NewPublicRouter(logger, health.New(logger, time.Second), handler.Mount)
+	router := server.NewPublicRouter(logger, health.New(logger, time.Second), nil, handler.Mount)
 
 	doc, err := openapi3.NewLoader().LoadFromFile("../../../../contracts/core-public.yaml")
 	if err != nil {

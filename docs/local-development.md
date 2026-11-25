@@ -112,6 +112,7 @@ See `.env.example` and `infra/docker-compose.yml` for the full list.
 | `WEB_ORIGIN` | The one origin allowed to change state. |
 | `MAILER` | `log` or `file` in development. Production requires `smtp`. |
 | `TRUSTED_PROXIES` | Addresses whose `X-Forwarded-For` the API believes. Set it to the web server's network when the web server sits behind a load balancer. |
+| `GUARD_PER_MINUTE` | Requests one visitor may make each minute before 429s; repeated refusals then block the address for 15 minutes to a day. `0` turns it off, which is the local default, because every local request comes from one address. Production uses 300. |
 | `API_PUBLIC_URL` | Web server only: where it reaches the API's public listener. |
 | `WEB_BEHIND_PROXY` | Web server only: `true` only when a trusted proxy in front sets `X-Forwarded-For`. Otherwise the header is dropped and every visitor shares one rate-limit address. |
 | `API_ORIGIN_KEY` | Web server only, production only: the key Caddy requires in front of the API. See [deploy/aws.md](deploy/aws.md). |

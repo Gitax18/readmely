@@ -116,6 +116,9 @@ services:
       INTERNAL_ADDR: "0.0.0.0:8081"
       # Only Caddy's fixed address: X-Forwarded-For is believed from Caddy and nobody else.
       TRUSTED_PROXIES: 172.30.0.10/32
+      # Requests per visitor per minute before 429s and, after repeated refusals, a temporary block
+      # (internal/guard). Set /readmely/prod/GUARD_PER_MINUTE to 0 in SSM and redeploy to turn it off.
+      GUARD_PER_MINUTE: ${GUARD_PER_MINUTE:-300}
       AI_SERVICE_URL: http://ai:8000
       AI_SERVICE_TOKEN: ${AI_SERVICE_TOKEN:?AI_SERVICE_TOKEN is not set}
       DATABASE_URL: postgres://readmely_app:${APP_DB_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable

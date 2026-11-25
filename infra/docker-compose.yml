@@ -93,6 +93,10 @@ services:
       # in .env to send real email through a provider such as Brevo (see .env.example).
       AUTH_CODE_KEY: ${AUTH_CODE_KEY:?AUTH_CODE_KEY is not set in .env (openssl rand -hex 32)}
       WEB_ORIGIN: http://127.0.0.1:${WEB_PORT:-3000}
+      # The per-visitor request guard is off here: locally every request arrives from one address
+      # (the web container), so a per-address limit would be one limit for every test at once.
+      # Production leaves it unset, which means 300 requests a minute per visitor.
+      GUARD_PER_MINUTE: ${GUARD_PER_MINUTE:-0}
       MAILER: ${MAILER:-log}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-}

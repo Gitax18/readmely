@@ -4,6 +4,9 @@ info:
   version: 0.1.0
   description: >-
     What the internet-facing port of the Go API serves. Readiness and status are NOT here: they are on the internal listener.
+    Every endpoint but /healthz may answer 429 rate_limited, with Retry-After, when one client address sends more than
+    its share of requests (300 a minute by default), or has been blocked for a while after repeated refusals (429s,
+    403s, 405s and requests for paths that do not exist). Blocks last 15 minutes, then an hour, then a day.
 servers:
   - url: http://127.0.0.1:8080
 paths:
