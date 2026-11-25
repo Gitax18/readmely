@@ -8,7 +8,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Message } from "@/components/ui/message";
 import { Progress } from "@/components/ui/progress";
-import { formatSize, jobFailureText, stepLabel } from "@/lib/project-text";
+import {
+  ANALYSIS_COST,
+  ANALYSIS_TYPICAL,
+  formatSize,
+  jobFailureText,
+  stepLabel,
+} from "@/lib/project-text";
 
 /** What Readmely learned about the repository, and the live progress while it learns. */
 export function OverviewTab() {
@@ -70,8 +76,8 @@ export function OverviewTab() {
             </Button>
           }
         >
-          Readmely reads the repository, then shows what it found here. Analysis holds 10 credits
-          and is usually charged about 1.
+          Readmely reads the repository, then shows what it found here. Analysis holds{" "}
+          {ANALYSIS_COST} credits and is usually charged about {ANALYSIS_TYPICAL}.
         </EmptyState>
       ) : null}
 

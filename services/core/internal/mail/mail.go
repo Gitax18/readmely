@@ -1,4 +1,4 @@
-// Package mail sends the few emails the product needs (sign-in codes, for now).
+// Package mail sends the few emails the product needs: sign-in codes, a welcome, and notices.
 //
 // Sending never happens on the request path: handlers put a message on a bounded Queue and
 // answer at once, so a slow or failing provider cannot slow sign-in or reveal, through timing,
@@ -23,11 +23,12 @@ import (
 	"time"
 )
 
-// Message is one plain-text email.
+// Message is one email: plain text always, and HTML when it has a designed version (see Brand).
 type Message struct {
 	To      string `json:"to"`
 	Subject string `json:"subject"`
 	Text    string `json:"text"`
+	HTML    string `json:"html,omitempty"`
 }
 
 // Mailer delivers one message.

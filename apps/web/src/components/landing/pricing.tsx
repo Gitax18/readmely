@@ -2,6 +2,9 @@ import { ArrowRight, Code2, FileText, Network, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
 import { Reveal } from "@/components/ui/motion";
+import { DIAGRAM_COST } from "@/lib/diagram-text";
+import { ANALYSIS_COST, ANALYSIS_TYPICAL } from "@/lib/project-text";
+import { GENERATE_COST, SECTION_COST } from "@/lib/readme-text";
 import { cn } from "@/lib/utils";
 import { Kicker } from "./section-intro";
 
@@ -9,25 +12,25 @@ const COSTS = [
   {
     icon: <Sparkles aria-hidden />,
     label: "Analyse a project",
-    amount: "10 held",
-    note: "Usually settles to about 1 credit",
+    amount: `${ANALYSIS_COST} held`,
+    note: `Usually settles to about ${ANALYSIS_TYPICAL} credits`,
   },
   {
     icon: <FileText aria-hidden />,
     label: "Write a README",
-    amount: "15 held",
+    amount: `${GENERATE_COST} held`,
     note: "You pay what it actually cost",
   },
   {
     icon: <FileText aria-hidden />,
     label: "Rewrite one section",
-    amount: "2 held",
+    amount: `${SECTION_COST} held`,
     note: "You pay what it actually cost",
   },
   {
     icon: <Network aria-hidden />,
     label: "Draw a diagram",
-    amount: "15 held",
+    amount: `${DIAGRAM_COST} held`,
     note: "You pay what it actually cost",
   },
   {
@@ -46,7 +49,7 @@ export function Pricing({ signedIn }: { signedIn: boolean }) {
         <div className="flex flex-col items-start gap-4">
           <Kicker>Simple to start</Kicker>
           <h2 className="text-[clamp(30px,4vw,40px)] leading-[1.12] font-semibold tracking-[-0.045em]">
-            100 free credits. About two full projects.
+            100 free credits to try everything.
           </h2>
           <p className="text-muted-foreground max-w-md text-[13px]">
             Every new account starts with 100 credits. Readmely holds the most a job could cost,

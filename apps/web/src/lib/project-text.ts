@@ -1,6 +1,10 @@
 import type { Failure } from "./browser-api";
 import type { Project } from "./project-schema";
 
+/** Credits analysis holds (services/core/internal/ingest), and what it usually settles to. */
+export const ANALYSIS_COST = 18;
+export const ANALYSIS_TYPICAL = 2;
+
 /** What the person sees when a projects request fails. Never provider or server text. */
 export function projectFailureText(f: Failure): string {
   switch (f.kind) {
@@ -154,7 +158,7 @@ export function summaryStepLabel(step: string | null): string {
 export function summaryFailureText(code: string | null): string {
   switch (code) {
     case "insufficient_credits":
-      return "There were not enough credits to write the summary. Writing it holds 10 credits; see Usage.";
+      return `There were not enough credits to write the summary. Writing it holds ${ANALYSIS_COST} credits; see Usage.`;
     case "spend_cap_reached":
       return "Readmely has reached its limit for AI work today. Analyse again tomorrow. Nothing was charged.";
     case "llm_not_configured":

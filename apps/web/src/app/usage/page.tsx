@@ -13,6 +13,7 @@ import { DIAGRAM_COST } from "@/lib/diagram-text";
 import { requireUser } from "@/lib/require-user";
 import { GENERATE_COST, SECTION_COST } from "@/lib/readme-text";
 import { Coins } from "lucide-react";
+import { ANALYSIS_COST, ANALYSIS_TYPICAL } from "@/lib/project-text";
 
 export const metadata: Metadata = { title: "Usage · Readmely" };
 export const dynamic = "force-dynamic";
@@ -21,7 +22,7 @@ export const dynamic = "force-dynamic";
 const COSTS: { action: string; cost: string; note: string }[] = [
   {
     action: "Analyse a repository",
-    cost: "10 held, about 1 charged",
+    cost: `${ANALYSIS_COST} held, about ${ANALYSIS_TYPICAL} charged`,
     note: "Reads the code and writes the summary",
   },
   { action: "Write a README", cost: `Up to ${GENERATE_COST}`, note: "Includes a health check" },

@@ -26,17 +26,19 @@ Readmely reads a public GitHub repository and produces three things from what it
 | **Credits** | 100 free credits at sign-up; a balance in the top bar; a usage page with history; clear messages when credits run out |
 | **Site** | Landing page with a real sample, privacy and terms pages, light and dark themes, phone-friendly layouts, accessible forms |
 
-### Credit costs (proposed, adjustable)
+### Credit costs
 
-| Action | Credits |
-|---|---|
-| Analyse a project (includes summaries) | 10 |
-| Context pack | 5 |
-| README (full generation) | 15 |
-| Regenerate one README section | 2 |
-| Overview diagram | 15 |
+Repriced on 2026-11-25: every service costs 1.75 times its model cost and a diagram 2.5 times; the grant stays at 100. Each job holds its price up front and is charged what its model calls cost at that rate, at least one credit before the multiplier; the rest of the hold comes back.
 
-A project with all three outputs costs 45, so the free grant covers two. Failed jobs are refunded automatically. Re-reading or editing never costs credits.
+| Action | Held up front | Usually charged |
+|---|---|---|
+| Analyse a project (includes the summary) | 18 | about 2 |
+| Context pack | free | free (no model call) |
+| README (full generation) | 27 | 2 to 4 |
+| Regenerate one README section | 4 | 2 |
+| Architecture or database diagram | 38 | about 3 |
+
+Holding everything for one project at once would take 83 credits, but jobs run one at a time and return what they don't use, so a project with all its outputs is usually charged about 11. Failed jobs are refunded automatically. Re-reading or editing never costs credits.
 
 ### Not in version 1
 

@@ -139,6 +139,9 @@ func TestFirstProviderSignInCreatesTheAccount(t *testing.T) {
 			if n := e.quiet("ada@example.com"); n != 0 {
 				t.Errorf("a brand new account was sent %d alert emails", n)
 			}
+			if n := e.mail.welcomed("ada@example.com"); n != 1 {
+				t.Errorf("a brand new account was sent %d welcome emails, want 1", n)
+			}
 		})
 	}
 }
@@ -178,6 +181,9 @@ func TestReturningUserIsTheSameUser(t *testing.T) {
 	}
 	if n := e.quiet("ada@example.com"); n != 0 {
 		t.Errorf("a known device was sent %d emails", n)
+	}
+	if n := e.mail.welcomed("ada@example.com"); n != 1 {
+		t.Errorf("a returning user was welcomed again (%d welcome emails in all)", n)
 	}
 }
 

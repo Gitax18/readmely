@@ -351,7 +351,7 @@ export interface paths {
         put?: never;
         /**
          * Draw a diagram of one kind from the analysis
-         * @description The database kind reads the repository's SQL, migration and model files; a repository with none yields a failed job (no_database_files) and a refund. Holds 15 credits and queues the job; it is charged what the model calls cost and the rest is returned, or refunded in full if it fails. 409 not_analysed before a first analysis, 409 diagram_running while one is being drawn, 402 insufficient_credits.
+         * @description The database kind reads the repository's SQL, migration and model files; a repository with none yields a failed job (no_database_files) and a refund. Holds 38 credits and queues the job; it is charged what the model calls cost and the rest is returned, or refunded in full if it fails. 409 not_analysed before a first analysis, 409 diagram_running while one is being drawn, 402 insufficient_credits.
          */
         post: operations["generateDiagram"];
         delete?: never;
@@ -379,7 +379,7 @@ export interface paths {
         put: operations["saveReadme"];
         /**
          * Write a README from the analysis
-         * @description Holds 15 credits and queues the job; it is charged what the model calls cost and the rest is returned, or refunded in full if it fails. 409 not_analysed before a first analysis, 409 readme_running while one is being written, 402 insufficient_credits.
+         * @description Holds 27 credits and queues the job; it is charged what the model calls cost and the rest is returned, or refunded in full if it fails. 409 not_analysed before a first analysis, 409 readme_running while one is being written, 402 insufficient_credits.
          */
         post: operations["generateReadme"];
         delete?: never;
@@ -399,7 +399,7 @@ export interface paths {
         put?: never;
         /**
          * Rewrite one section of the README
-         * @description Holds 2 credits and queues a job that rewrites the section under the given heading, following the optional instruction, and saves the result as a new version. 404 when the heading is not in the current README.
+         * @description Holds 4 credits and queues a job that rewrites the section under the given heading, following the optional instruction, and saves the result as a new version. 404 when the heading is not in the current README.
          */
         post: operations["regenerateReadmeSection"];
         delete?: never;

@@ -21,7 +21,10 @@ from app.config import WorkerSettings
 
 BASE_URL = "https://api.openai.com/v1"
 MAX_RESPONSE_BYTES = 1 << 20
-MAX_OUTPUT_TOKENS = 4_000  # the most any call may ask for
+MAX_OUTPUT_TOKENS = 8_000  # the most any call may ask for
+# The reply arrives in one piece once the model has finished, so the wait grows with the length asked
+# for: the configured timeout, plus this many seconds for every thousand output tokens.
+SECONDS_PER_KTOK = 20.0
 DEFAULT_OUTPUT_TOKENS = 2_000
 
 # Errors a retry cannot fix, and errors it might.
@@ -72,6 +75,11 @@ class LlmClient:
         """An upper estimate before the call: a token is at least one character in the worst case."""
         return self.cost_micro_usd(prompt_chars, max_output_tokens)
 
+    def timeout_for(self, max_output_tokens: int) -> float:
+        """Seconds to wait for a reply of up to this many tokens."""
+        tokens = min(max_output_tokens, MAX_OUTPUT_TOKENS)
+        return self._settings.llm_timeout + SECONDS_PER_KTOK * tokens / 1000
+
     async def close(self) -> None:
         await self._http.aclose()
 
@@ -99,7 +107,11 @@ class LlmClient:
         started = time.monotonic()
         try:
             async with self._http.stream(
-                "POST", "/chat/completions", json=body, headers={"Authorization": f"Bearer {self._key}"}
+                "POST",
+                "/chat/completions",
+                json=body,
+                headers={"Authorization": f"Bearer {self._key}"},
+                timeout=self.timeout_for(max_output_tokens),
             ) as res:
                 status = res.status_code
                 raw = bytearray()

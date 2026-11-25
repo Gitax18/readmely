@@ -20,9 +20,10 @@ export const TEMPLATE_LABELS = {
 } as const;
 
 export const TEMPLATE_HINTS = {
-  standard: "Overview, features, getting started, usage, configuration, structure, licence.",
-  minimal: "Overview, installation, usage, licence.",
-  detailed: "Standard plus architecture, testing and deployment.",
+  standard:
+    "Badges and a quote, then overview, features, tech stack, setup, usage, configuration, file tree, contributing, licence.",
+  minimal: "Badges and a quote, then overview, features, setup, usage, licence.",
+  detailed: "Standard plus an architecture diagram, testing and deployment.",
 } as const;
 
 export const SOURCE_LABELS = {
@@ -32,5 +33,6 @@ export const SOURCE_LABELS = {
   restored: "Restored",
 } as const;
 
-export const GENERATE_COST = 15;
-export const SECTION_COST = 2;
+/** Credits held, at most charged (see services/core/internal/readme and services/ai/app/meter.py). */
+export const GENERATE_COST = 27;
+export const SECTION_COST = 4;

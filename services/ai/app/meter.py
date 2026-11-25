@@ -12,12 +12,26 @@ from uuid import UUID
 
 from psycopg import AsyncConnection
 
-# One credit is half a US cent. Held credits are settled to what the calls really cost, at least one.
+# One credit is half a US cent. Held credits are settled to what the calls really cost (at least one
+# credit), times the price of the kind of work, rounded up.
 MICRO_USD_PER_CREDIT = 5_000
 
+# The price of each kind of job, as a fraction so the arithmetic stays exact: every service costs 1.75
+# times its model cost, and drawing a diagram 2.5 times. The holds in services/core are these prices
+# applied to the earlier holds and rounded up, so a hold always covers the largest possible charge.
+PRICE: dict[str, tuple[int, int]] = {
+    "summarise": (7, 4),
+    "generate_readme": (7, 4),
+    "readme_section": (7, 4),
+    "generate_diagram": (5, 2),
+}
 
-def credits_for(cost_micro_usd: int) -> int:
-    return max(1, -(-cost_micro_usd // MICRO_USD_PER_CREDIT))
+
+def credits_for(cost_micro_usd: int, kind: str) -> int:
+    """Credits charged for a job of this kind whose model calls cost this much. Unknown kinds fail."""
+    numerator, denominator = PRICE[kind]
+    base = max(1, -(-cost_micro_usd // MICRO_USD_PER_CREDIT))
+    return -(-base * numerator // denominator)
 
 
 async def spent_today_micro_usd(conn: AsyncConnection[Any]) -> int:
@@ -69,9 +83,12 @@ async def record_call(conn: AsyncConnection[Any], c: Call) -> None:
     )
 
 
-async def settle(conn: AsyncConnection[Any], job_id: UUID, cost_micro_usd: int) -> int:
-    """Charge what the job cost and return the rest of its hold. Returns the credits charged."""
-    charge = credits_for(cost_micro_usd)
+async def settle(conn: AsyncConnection[Any], job_id: UUID, kind: str, cost_micro_usd: int) -> int:
+    """Charge what the job cost, at its kind's price, and return the rest of its hold.
+
+    The database caps the charge at the hold. Returns the credits charged.
+    """
+    charge = credits_for(cost_micro_usd, kind)
     await conn.execute("SELECT credit_settle(%s, %s)", (job_id, charge))
     return charge
 

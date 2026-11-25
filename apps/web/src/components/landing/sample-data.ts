@@ -1,3 +1,7 @@
+import { DIAGRAM_COST } from "@/lib/diagram-text";
+import { ANALYSIS_COST, ANALYSIS_TYPICAL } from "@/lib/project-text";
+import { GENERATE_COST, SECTION_COST } from "@/lib/readme-text";
+
 /**
  * The sample on the landing page. It is an example for an invented repository, not output for a
  * real one, and the page says so. The shapes match what the product really produces: a README
@@ -138,7 +142,7 @@ export const FAQS = [
   },
   {
     q: "What does a credit buy?",
-    a: "One credit is about half a US cent. Analysing a project holds 10 credits and usually settles near 1. A README holds up to 15, rewriting one section up to 2, and a diagram up to 15. You pay what the work actually cost and the rest comes back. The context pack is free.",
+    a: `Analysing a project holds ${ANALYSIS_COST} credits and usually settles near ${ANALYSIS_TYPICAL}. A README holds up to ${GENERATE_COST}, rewriting one section up to ${SECTION_COST}, and a diagram up to ${DIAGRAM_COST}. You pay for the work it actually took and the rest comes back. The context pack is free.`,
   },
   {
     q: "Can the generated text be wrong?",

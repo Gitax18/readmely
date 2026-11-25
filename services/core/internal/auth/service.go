@@ -62,6 +62,7 @@ type Service struct {
 	q       *store.Queries
 	limiter *ratelimit.Limiter
 	mail    *mail.Queue
+	brand   mail.Brand // builds the emails; without a web origin they carry no logo or links
 	keys    Keys
 	logger  *slog.Logger
 	oauth   *OAuthConfig // nil until EnableOAuth: no provider sign-in
@@ -75,6 +76,9 @@ type Service struct {
 func NewService(pool *pgxpool.Pool, limiter *ratelimit.Limiter, queue *mail.Queue, keys Keys, logger *slog.Logger) *Service {
 	return &Service{pool: pool, q: store.New(pool), limiter: limiter, mail: queue, keys: keys, logger: logger}
 }
+
+// SetWebOrigin gives the emails the web app's address, for the logo and the links in them.
+func (s *Service) SetWebOrigin(origin string) { s.brand = mail.NewBrand(origin) }
 
 // Keys returns the key set, for the HTTP layer's CSRF checks.
 func (s *Service) Keys() Keys { return s.keys }
@@ -134,12 +138,7 @@ func (s *Service) StartLogin(ctx context.Context, rawEmail string, ip netip.Addr
 	}
 
 	// Never awaited, and a full queue changes nothing the caller can see.
-	s.mail.Enqueue(mail.Message{
-		To:      email,
-		Subject: "Your Readmely sign-in code",
-		Text: fmt.Sprintf("Your Readmely sign-in code is %s\n\nIt works once and expires in %d minutes. "+
-			"If you did not ask for it, you can ignore this email.\n", code, int(CodeTTL/time.Minute)),
-	})
+	s.mail.Enqueue(s.brand.SignInCode(email, code, int(CodeTTL/time.Minute)))
 	return nil
 }
 
@@ -184,7 +183,7 @@ func (s *Service) VerifyLogin(ctx context.Context, rawEmail, code string, ip net
 	}
 
 	var out *LoggedIn
-	newDevice := false
+	newDevice, created := false, false
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
 		_, lookup := q.GetUserByEmail(ctx, email)
@@ -192,6 +191,7 @@ func (s *Service) VerifyLogin(ctx context.Context, rawEmail, code string, ip net
 			return lookup
 		}
 		existed := lookup == nil
+		created = !existed
 		user, err := q.UpsertVerifiedUser(ctx, email)
 		if err != nil {
 			return err
@@ -213,7 +213,10 @@ func (s *Service) VerifyLogin(ctx context.Context, rawEmail, code string, ip net
 	if err != nil {
 		return nil, fmt.Errorf("verify login: %w", err)
 	}
-	if newDevice {
+	switch {
+	case created:
+		s.welcome(out.User)
+	case newDevice:
 		s.alertNewDevice(ctx, out.User, "an emailed code", userAgent)
 	}
 	return out, nil

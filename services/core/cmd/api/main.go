@@ -102,6 +102,7 @@ func run(ctx context.Context, args []string, getenv func(string) string, stdout,
 	}
 	mailQueue := mail.NewQueue(mailer, logger, mailSenders, mailQueueSize, mailSendTimeout)
 	authService := auth.NewService(pool, ratelimit.New(rdb, "rm:rl:"), mailQueue, auth.NewKeys(cfg.AuthCodeKey), logger)
+	authService.SetWebOrigin(cfg.WebOrigin)
 	providers := map[string]oauth.Provider{}
 	if cfg.GoogleClientID != "" {
 		providers[oauth.Google] = oauth.NewGoogle(cfg.GoogleClientID, cfg.GoogleClientSecret, nil)

@@ -9,7 +9,6 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/Gitax18/readmely/services/core/internal/db/store"
-	"github.com/Gitax18/readmely/services/core/internal/mail"
 	"github.com/Gitax18/readmely/services/core/internal/ratelimit"
 )
 
@@ -53,14 +52,7 @@ func (s *Service) StartDeletion(ctx context.Context, p *Principal) error {
 	}); err != nil {
 		return fmt.Errorf("start deletion: %w", err)
 	}
-	s.mail.Enqueue(mail.Message{
-		To:      email,
-		Subject: "Confirm deleting your Readmely account",
-		Text: fmt.Sprintf("Your code to delete your Readmely account is %s\n\nIt works once and expires in %d minutes. "+
-			"Deleting the account removes your projects and everything generated for them, and cannot be undone. "+
-			"If you did not ask for this, do not share the code: someone may be using your session, so sign in again and sign out of any session you do not recognise under Account.\n",
-			code, int(CodeTTL/time.Minute)),
-	})
+	s.mail.Enqueue(s.brand.DeletionCode(email, code, int(CodeTTL/time.Minute)))
 	return nil
 }
 
@@ -99,10 +91,7 @@ func (s *Service) ConfirmDeletion(ctx context.Context, p *Principal, code string
 		return ErrUnauthenticated // already gone
 	}
 	s.logger.InfoContext(ctx, "account deleted", "user_id", p.User.ID)
-	s.mail.Enqueue(mail.Message{
-		To:      email,
-		Subject: "Your Readmely account was deleted",
-		Text:    fmt.Sprintf("Your Readmely account and everything in it were deleted on %s. Nothing more is needed from you.\n\nIf you did not do this, sign in again to start a new account and contact us.\n", alertTime()),
-	})
+	s.mail.Enqueue(s.brand.Notice(email, "Your Readmely account was deleted", "Account deleted", "Your account was deleted",
+		fmt.Sprintf("Your Readmely account and everything in it were deleted on %s. Nothing more is needed from you.\n\nIf you did not do this, sign in again to start a new account and contact us.\n", alertTime())))
 	return nil
 }

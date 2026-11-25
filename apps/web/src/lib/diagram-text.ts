@@ -12,7 +12,8 @@ export function svgSize(svg: string): { width: number; height: number } | null {
   return m ? { width: Number(m[1]), height: Number(m[2]) } : null;
 }
 
-export const DIAGRAM_COST = 15;
+/** Credits held for a diagram, at most charged (see services/core/internal/diagram). */
+export const DIAGRAM_COST = 38;
 
 /** The two diagrams a project can have, one of each. */
 export type DiagramKind = "architecture" | "database";

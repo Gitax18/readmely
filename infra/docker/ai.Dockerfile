@@ -22,11 +22,11 @@ FROM python:3.13.17-slim-trixie@sha256:d98cc29d3266e535dd9da1099688d9cb3ca475381
 # bundles its own copies of libraries (certifi, urllib3, msgpack) that scanners flag
 # and that nothing here uses.
 #
-# Debian published security fixes (apt, zlib1g) that the newest base image does not have
+# Debian published security fixes (apt, zlib1g, libzstd1) that the newest base image does not have
 # yet, so those packages alone are upgraded. Remove this once a base image includes them;
 # CI's Trivy scan will keep passing either way.
 RUN apt-get update \
- && apt-get install --yes --no-install-recommends --only-upgrade apt libapt-pkg7.0 zlib1g \
+ && apt-get install --yes --no-install-recommends --only-upgrade apt libapt-pkg7.0 zlib1g libzstd1 \
  && rm -rf /var/lib/apt/lists/* \
  && python -m pip uninstall --yes pip \
  && groupadd --system --gid 10001 app \
