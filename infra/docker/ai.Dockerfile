@@ -1,7 +1,7 @@
 # Python AI service image. Build from the repository root:
 #   docker build -f infra/docker/ai.Dockerfile -t readmely/ai:dev .
 
-FROM ghcr.io/astral-sh/uv:0.13.9@sha256:d3b601f0c7b118bc1753febf7c41cc80981df678445e0254284eecf84db79a7d AS uv
+FROM ghcr.io/astral-sh/uv:0.13.10@sha256:a3ea1357342c1a4bf9a0c53a3deb1b55379aefa037338d8113d5771efa01774f AS uv
 
 FROM python:3.13.17-slim-trixie@sha256:d98cc29d3266e535dd9da1099688d9cb3ca4753813571e071763d17725460962 AS build
 COPY --from=uv /uv /usr/local/bin/uv
