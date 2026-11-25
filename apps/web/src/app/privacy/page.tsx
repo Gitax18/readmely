@@ -96,7 +96,8 @@ const SECTIONS: LegalSection[] = [
         </p>
         <p>
           <strong>An email relay.</strong> Your address and the message go through an SMTP relay so
-          that sign-in codes and alerts reach you.
+          that sign-in codes, security alerts and a one-time welcome email reach you. Emails show a
+          logo loaded from this site; nothing in them tracks whether you opened them.
         </p>
         <p>
           <strong>GitHub.</strong> Readmely calls GitHub&apos;s public API and downloads the public
