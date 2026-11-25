@@ -1,0 +1,11 @@
+# Exceptions to CI's image scan for the web image only. Each one says why it does not apply and
+# expires: after that date the scan fails again, so an exception cannot quietly outlive its reason.
+vulnerabilities:
+  - id: CVE-2026-124851
+    expired_at: 2026-12-16
+    statement: >-
+      libzstd1 in the distroless Node.js base image. Debian has fixed it (1.5.7+dfsg-1+deb13u1), but
+      no distroless build includes the fix yet, and the image has no package manager to upgrade it.
+      Nothing in the image loads the library: the node binary links only libc, libstdc++, libgcc_s,
+      libm, libdl and libpthread, and bundles its own zstd. Remove this when Dependabot bumps the
+      distroless digest to a build with the fix.
