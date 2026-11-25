@@ -30,8 +30,8 @@ from app.summarise import _block, _clean, _gather
 
 log = logging.getLogger(__name__)
 
-DIAGRAM_TOKENS = 1_800
-MIN_NODES, MAX_NODES = 3, 9
+DIAGRAM_TOKENS = 3_000
+MIN_NODES, MAX_NODES = 3, 12
 MIN_TABLES, MAX_TABLES = 2, 14
 DB_BUDGET_CHARS, DB_FILE_CHARS = 28_000, 7_000
 KINDS = ("client", "gateway", "service", "worker", "datastore", "cache", "queue", "external")
@@ -41,12 +41,19 @@ SYSTEM = (
     BASE_SYSTEM
     + """
 
-You are drawing the architecture of the project as a graph of 5 to 9 boxes. Choose the parts a new
-reader must understand to see how the system works, and leave out helpers, utilities and tests. Every
-box and every arrow must cite one to three file paths from the material as evidence; do not cite a path
-that is not listed. Use only the kinds in the schema. Labels are at most 3 words, sublabels at most 5
-words, in sentence case, using the project's own names. An arrow means one part calls or sends data to
-another; label it with what passes (a few words). Do not invent components that the files do not show."""
+You are drawing the architecture of the project as a graph of 6 to 12 boxes, detailed enough that a
+new reader sees how a request or a job moves through the whole system. Include who uses it (a browser,
+a CLI, another service), the entry points, each service and background worker, every data store, cache
+and queue, and the outside services it calls (such as GitHub, an AI provider, email or payments). Leave
+out helpers, utilities and tests. Every box and every arrow must cite one to three file paths from the
+material as evidence; do not cite a path that is not listed. Use only the kinds in the schema.
+
+Labels are at most 3 words and sublabels (the technology, like "Go, chi" or "Postgres 16") at most 5
+words, in sentence case, using the project's own names. The detail line says what the part does, at
+most 6 words, like "Queues and runs analysis jobs". An arrow means one part calls or sends data to
+another; give every arrow a label of 1 to 3 words for what passes ("REST calls", "jobs", "SQL", "SVG"),
+and use async for queues and background jobs, data for reads and writes of stored data, and sync for
+requests that wait for an answer. Do not invent components that the files do not show."""
 )
 
 DB_SYSTEM = (
@@ -59,7 +66,8 @@ migration and model files in the material and work out the tables as they stand 
 (a later ALTER changes an earlier CREATE; a dropped table or column is gone). Pick the 5 to 14 tables
 that matter most; leave out join-only noise, audit and bookkeeping tables such as schema_migrations.
 The label is the table name exactly as written. The sublabel is its key columns, comma separated, at most
-32 characters (for example "id, email, created_at"). An arrow runs from the referenced (parent) table to
+32 characters (for example "id, email, created_at"). The detail line says what one row is, at most 5
+words (for example "One signed-in device"). An arrow runs from the referenced (parent) table to
 the table that holds the foreign key, and its label is that foreign-key column. Every box and arrow must
 cite one to three file paths from the material as evidence; do not cite a path that is not listed. Do
 not invent tables or relationships the files do not show."""
@@ -76,11 +84,12 @@ SCHEMA: dict[str, Any] = {
             "items": {
                 "type": "object",
                 "additionalProperties": False,
-                "required": ["id", "label", "sublabel", "kind", "evidence"],
+                "required": ["id", "label", "sublabel", "detail", "kind", "evidence"],
                 "properties": {
                     "id": {"type": "string", "description": "Lowercase letters, digits and dashes, at most 24."},
                     "label": {"type": "string"},
                     "sublabel": {"type": "string", "description": "The technology, or empty."},
+                    "detail": {"type": "string", "description": "What it does, at most 6 words, or empty."},
                     "kind": {"type": "string", "enum": list(KINDS)},
                     "evidence": {"type": "array", "items": {"type": "string"}},
                 },
@@ -124,6 +133,7 @@ class NodeIn(BaseModel):
     id: str = Field(pattern=_ID)
     label: str = Field(min_length=1, max_length=28, pattern=_TEXT)
     sublabel: str = Field(max_length=40, pattern=_TEXT)
+    detail: str = Field(default="", max_length=40, pattern=_TEXT)
     kind: Literal["client", "gateway", "service", "worker", "datastore", "cache", "queue", "external"]
     evidence: list[str] = Field(max_length=8)
 
@@ -188,7 +198,7 @@ def repair(raw: Any) -> Any:
         return raw
     out = dict(raw)
     out["title"] = _text(out.get("title"), 100)
-    for key, text_fields in (("nodes", (("label", 28), ("sublabel", 40))), ("edges", (("label", 24),))):
+    for key, text_fields in (("nodes", (("label", 28), ("sublabel", 40), ("detail", 40))), ("edges", (("label", 24),))):
         items = out.get(key)
         if not isinstance(items, list):
             continue
@@ -224,22 +234,72 @@ def _fit(text: str, px: int) -> str:
     return cut.rstrip(" ,")
 
 
+_INFRA = ("datastore", "cache", "queue", "external")
+# Words in setting names that say nothing about which service a project uses.
+_GENERIC = frozenset([
+    "api", "app", "url", "uri", "key", "keys", "token", "tokens", "secret", "secrets", "password", "pass", "user",
+    "name", "port", "host", "path", "env", "file", "client", "id", "ids", "from", "mode", "node", "next",
+    "runtime", "level", "log", "debug", "timeout", "cap", "usd", "model", "fast", "input", "output", "mtok", "per",
+    "daily", "origin", "public", "private", "internal", "service", "services", "data", "base", "db", "dir", "test",
+    "fake",
+])  # fmt: skip
+
+
+def grounded_names(facts: dict[str, Any]) -> set[str]:
+    """Names of outside services and stores the analysis itself found: in frameworks, compose services
+    and setting names (OPENAI_API_KEY names openai). A box for one of them needs no cited file."""
+    words: set[str] = set()
+    for value in [*(facts.get("frameworks") or []), *(facts.get("services") or []), *(facts.get("env_vars") or [])]:
+        for word in re.split(r"[^a-z0-9]+", str(value).lower()):
+            if len(word) >= 4 and word not in _GENERIC:
+                words.add(word)
+    if words & {"postgresql", "postgres", "pgx", "psycopg"}:
+        words |= {"postgres", "postgresql"}
+    return words
+
+
+def _supported(path: str, known_paths: set[str], known_dirs: set[str]) -> bool:
+    """A cited path is evidence when it is a file in the project or one of its directories."""
+    return path in known_paths or path.rstrip("/") in known_dirs
+
+
 def check(
-    raw: dict[str, Any], known_paths: set[str], min_nodes: int = MIN_NODES, max_nodes: int = MAX_NODES
+    raw: dict[str, Any],
+    known_paths: set[str],
+    min_nodes: int = MIN_NODES,
+    max_nodes: int = MAX_NODES,
+    grounded: set[str] | None = None,
 ) -> tuple[str, list[Node], list[Edge]]:
     """Validate the model's graph and keep only what the repository supports.
 
-    Nodes need at least one cited path that exists; edges need existing ends, a cited path that
-    exists, and are not self-loops or repeats. Raises ValueError when too little is left.
+    Nodes need a cited file or directory that exists, or, for a data store, cache, queue or outside
+    service, a name the analysis found (see grounded_names). Edges need kept ends and are not
+    self-loops or repeats; an edge also needs its own evidence unless one end is such a grounded
+    service, whose link to the code is the setting or client that names it. Raises ValueError when
+    too little is left.
     """
     g = GraphIn.model_validate(repair(raw))
+    known_dirs = {p.rsplit("/", 1)[0] for p in known_paths if "/" in p}
+    known_dirs |= {d.rsplit("/", i)[0] for d in list(known_dirs) for i in range(1, d.count("/") + 1)}
     nodes: list[Node] = []
     seen: set[str] = set()
+    named: set[str] = set()  # nodes kept on a grounded name rather than a file
     for n in g.nodes:
-        if n.id in seen or not any(p in known_paths for p in n.evidence):
+        if n.id in seen:
             continue
+        cited = any(_supported(p, known_paths, known_dirs) for p in n.evidence)
+        words = set(re.split(r"[^a-z0-9]+", f"{n.id} {n.label} {n.sublabel}".lower()))
+        if not cited and not (n.kind in _INFRA and grounded and words & grounded):
+            continue
+        if not cited:
+            named.add(n.id)
         seen.add(n.id)
-        nodes.append(Node(n.id, _fit(n.label.strip(), LABEL_PX), _fit(n.sublabel.strip(), SUB_PX), n.kind))
+        nodes.append(
+            Node(
+                n.id, _fit(n.label.strip(), LABEL_PX), _fit(n.sublabel.strip(), SUB_PX), n.kind,
+                _fit(n.detail.strip().rstrip("."), SUB_PX),
+            )
+        )  # fmt: skip
     nodes = nodes[:max_nodes]
     ids = {n.id for n in nodes}
     edges: list[Edge] = []
@@ -247,7 +307,7 @@ def check(
     for e in g.edges:
         if e.src not in ids or e.dst not in ids or e.src == e.dst or (e.src, e.dst) in pairs:
             continue
-        if not any(p in known_paths for p in e.evidence):
+        if not any(_supported(p, known_paths, known_dirs) for p in e.evidence) and not {e.src, e.dst} & named:
             continue
         pairs.add((e.src, e.dst))
         edges.append(Edge(e.src, e.dst, e.label.strip(), e.kind))
@@ -257,16 +317,18 @@ def check(
 
 
 def draw(title: str, nodes: list[Node], edges: list[Edge]) -> tuple[str, list[str]]:
-    """Lay out and render; if the lint finds a problem, try with more room, then without arrow labels.
+    """Lay out and render; if the lint finds a problem, try with more room, then without the boxes'
+    detail lines, then without arrow labels.
 
-    A diagram with its boxes and arrows but no words on the arrows is better than no diagram.
+    A diagram with its boxes and arrows but fewer words is better than no diagram.
     """
     problems: list[str] = []
     bare = [Edge(e.src, e.dst, "", e.kind) for e in edges]
-    for use, spread in ((edges, 1.0), (edges, 1.5), (bare, 1.5)):
-        lay = layout(nodes, use, spread)
-        svg = render(title, nodes, use, lay)
-        problems = lint(nodes, use, lay, svg)
+    plain = [Node(n.id, n.label, n.sublabel, n.kind) for n in nodes]
+    for show, use, spread in ((nodes, edges, 1.0), (nodes, edges, 1.5), (plain, edges, 1.5), (plain, bare, 1.5)):
+        lay = layout(show, use, spread)
+        svg = render(title, show, use, lay)
+        problems = lint(show, use, lay, svg)
         if not problems:
             return svg, []
     return "", problems
@@ -385,12 +447,13 @@ async def generate_diagram(
             parts.append(_block(boundary, f"excerpt {path[:200].replace(chr(34), '')}", _clean(text, 2_500)))
 
     minimum, maximum = (MIN_TABLES, MAX_TABLES) if database else (MIN_NODES, MAX_NODES)
+    grounded = None if database else grounded_names(material["facts"])
     graph, cost = await structured_call(
         db, llm, settings, job,
         purpose="diagram", system=DB_SYSTEM if database else SYSTEM, prompt="\n\n".join(parts),
         schema_name="database_graph" if database else "architecture_graph",
         schema=DB_SCHEMA if database else SCHEMA,
-        validate=lambda raw: check(raw, known_paths, minimum, maximum), report=report,
+        validate=lambda raw: check(raw, known_paths, minimum, maximum, grounded), report=report,
         max_output_tokens=DIAGRAM_TOKENS + (600 if database else 0),
     )  # fmt: skip
     title, nodes, edges = graph

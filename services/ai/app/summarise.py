@@ -9,6 +9,7 @@ file path it names exists in the project). The model has no tools and writes not
 from __future__ import annotations
 
 import json
+import re
 import secrets
 from typing import Any
 from uuid import UUID
@@ -80,6 +81,55 @@ class Summary(BaseModel):
     components: list[Component] = Field(max_length=8)
 
 
+# Files that say most about how a project is built and run.
+_KEY_FILE = re.compile(
+    r"(^|/)(docker-compose[^/]*\.ya?ml|compose\.ya?ml|Dockerfile[^/]*|[^/]+\.Dockerfile|Makefile|package\.json"
+    r"|go\.mod|pyproject\.toml|requirements[^/]*\.txt|Cargo\.toml|Gemfile|pom\.xml|build\.gradle[^/]*"
+    r"|(main|app|server|index|worker|cli)\.[a-z]+|[^/]*\.sql|schema\.prisma|settings\.py|config\.[a-z]+"
+    r"|\.env\.example|[^/]*\.ya?ml)$",
+    re.IGNORECASE,
+)
+# Files that say least: tests, fixtures and generated output.
+_NOISE = re.compile(
+    r"(^|/)(tests?|__tests__|testdata|fixtures|e2e[^/]*|__snapshots__|gen|generated|dist|build)/"
+    r"|[._]test\.[a-z]+$|\.spec\.[a-z]+$|(^|/)test_[^/]+\.py$|\.d\.ts$",
+    re.IGNORECASE,
+)
+
+
+def representative_paths(paths: list[str], first: list[str], limit: int) -> list[str]:
+    """A cross-section of the repository for a prompt, rather than the first paths in sorted order.
+
+    Entry points come first. Then one file from every directory, shallow directories before deep
+    ones and key files (manifests, compose files, entry points, SQL) before others, then a second
+    file from every directory, and so on. Tests and generated files are picked last. Sorted, so the
+    list still reads like a tree.
+    """
+    known = set(paths)
+    chosen = dict.fromkeys(p for p in first if p in known)
+    for noise in (False, True):  # everything else first; tests and generated files only fill what is left
+        by_dir: dict[str, list[str]] = {}
+        for p in paths:
+            if (_NOISE.search(p) is not None) == noise:
+                by_dir.setdefault(p.rsplit("/", 1)[0] if "/" in p else "", []).append(p)
+        for files in by_dir.values():
+            files.sort(key=lambda p: (not _KEY_FILE.search(p), p))
+        dirs = sorted(by_dir, key=lambda d: (d.count("/") + (d != ""), d))
+        depth = 0
+        while len(chosen) < limit:
+            added = False
+            for d in dirs:
+                if depth < len(by_dir[d]):
+                    chosen.setdefault(by_dir[d][depth])
+                    added = True
+                    if len(chosen) >= limit:
+                        break
+            if not added:
+                break
+            depth += 1
+    return sorted(chosen)[:limit]
+
+
 def _clean(text: str, limit: int) -> str:
     """Shorten, and remove anything that looks like our own boundary or tags."""
     return text[:limit].replace("repository_data", "repository-data")
@@ -133,7 +183,7 @@ async def _gather(db: Database, project_id: UUID) -> tuple[dict[str, Any], str, 
         "description": head["repo_description"] or "",
         "facts": head["facts"],
         "readme": str(readme_row["content"])[:README_CHARS] if readme_row else "",
-        "paths": paths[:MAX_PATHS_LISTED],
+        "paths": representative_paths(paths, head["facts"].get("entry_points", []), MAX_PATHS_LISTED),
         "excerpts": excerpts,
     }
     return material, str(head["commit_sha"]), set(paths)

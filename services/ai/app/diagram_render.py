@@ -17,6 +17,7 @@ FONT = "Inter, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
 LABEL_PX, SUB_PX, EDGE_PX, TITLE_PX = 14, 11, 11, 18
 CHAR_W = {LABEL_PX: 7.8, SUB_PX: 6.3, EDGE_PX: 6.3, TITLE_PX: 9.6}  # generous average advance, px
 NODE_H, PAD_X, MARGIN, TITLE_H, LEGEND_H = 56, 14, 32, 48, 36
+NODE_H_DETAIL = 74  # a box with a third line saying what the part does
 MIN_W, MAX_W = 120, 240
 SLOT_H = 14  # the room a long edge takes in a layer it passes through
 MAX_SVG_BYTES = 150_000
@@ -37,6 +38,7 @@ KIND_NAME = {
     "datastore": "Data store", "cache": "Cache", "queue": "Queue", "external": "External",
 }  # fmt: skip
 EDGE_DASH = {"sync": "", "async": "6 4", "data": "2 4"}
+EDGE_NAME = {"sync": "Request", "async": "Message or job", "data": "Data"}
 
 
 @dataclass
@@ -45,6 +47,7 @@ class Node:
     label: str
     sublabel: str
     kind: str
+    detail: str = ""  # what the part does, a few words; drawn as a third line
 
 
 @dataclass
@@ -86,7 +89,13 @@ def text_w(text: str, px: int) -> float:
 
 
 def node_width(n: Node) -> float:
-    return min(MAX_W, max(MIN_W, text_w(n.label, LABEL_PX) + 2 * PAD_X, text_w(n.sublabel, SUB_PX) + 2 * PAD_X))
+    widest = max(text_w(n.label, LABEL_PX), text_w(n.sublabel, SUB_PX), text_w(n.detail, SUB_PX))
+    return min(MAX_W, max(MIN_W, widest + 2 * PAD_X))
+
+
+def node_height(nodes: list[Node]) -> float:
+    """Every box in a drawing is the same height: taller when any of them has a third line."""
+    return NODE_H_DETAIL if any(n.detail for n in nodes) else NODE_H
 
 
 def _layers(nodes: list[Node], edges: list[Edge]) -> tuple[dict[str, int], set[int]]:
@@ -177,9 +186,10 @@ def _place(
     nodes: list[Node], cols: list[list[str]], spread: float, min_gap_x: float = 0.0
 ) -> tuple[dict[str, Box], float, float]:
     by_id = {n.id: n for n in nodes}
+    node_h = node_height(nodes)
     gap_y, gap_x = 28 * spread, max(96 * spread, min_gap_x)
     col_w = [max((node_width(by_id[i]) for i in col if i in by_id), default=24.0) for col in cols]
-    col_h = [sum(NODE_H if i in by_id else SLOT_H for i in col) + gap_y * max(len(col) - 1, 0) for col in cols]
+    col_h = [sum(node_h if i in by_id else SLOT_H for i in col) + gap_y * max(len(col) - 1, 0) for col in cols]
     height = max(col_h)
     boxes: dict[str, Box] = {}
     x = float(MARGIN)
@@ -188,8 +198,8 @@ def _place(
         for nid in col:
             if nid in by_id:
                 w = node_width(by_id[nid])
-                boxes[nid] = Box(x + (col_w[c] - w) / 2, y, w, NODE_H)
-                y += NODE_H + gap_y
+                boxes[nid] = Box(x + (col_w[c] - w) / 2, y, w, node_h)
+                y += node_h + gap_y
             else:
                 boxes[nid] = Box(x + col_w[c] / 2, y, 0, SLOT_H)
                 y += SLOT_H + gap_y
@@ -274,7 +284,8 @@ def lint(nodes: list[Node], edges: list[Edge], lay: Layout, svg: str) -> list[st
     real = [(n, lay.boxes[n.id]) for n in nodes]
     for i, (a, ba) in enumerate(real):
         problems += [f"boxes overlap: {a.id}, {b.id}" for b, bb in real[i + 1 :] if _hit(ba, bb)]
-        if text_w(a.label, LABEL_PX) > ba.w - 2 * PAD_X + 1 or text_w(a.sublabel, SUB_PX) > ba.w - 2 * PAD_X + 1:
+        room = ba.w - 2 * PAD_X + 1
+        if text_w(a.label, LABEL_PX) > room or max(text_w(a.sublabel, SUB_PX), text_w(a.detail, SUB_PX)) > room:
             problems.append(f"text overflows: {a.id}")
     problems += _label_problems(edges, lay, real)
     if lay.width > 2400 or lay.height > 1800:
@@ -323,14 +334,19 @@ def render(title: str, nodes: list[Node], edges: list[Edge], lay: Layout) -> str
         out.append(
             f'<rect x="{b.x:.1f}" y="{b.y:.1f}" width="{b.w:.1f}" height="{b.h:.1f}" rx="8" fill="{fill}" stroke="{stroke}" stroke-width="1.5"/>'
         )
+        # The lines are centred together in the box: the label, then the technology, then what it does.
+        lines = [(n.label, LABEL_PX, ' font-weight="600"', 1.0)]
         if n.sublabel:
+            lines.append((n.sublabel, SUB_PX, "", 0.75))
+        if n.detail:
+            lines.append((n.detail, SUB_PX, ' font-style="italic"', 0.6))
+        step = 17
+        top = b.cy - step * (len(lines) - 1) / 2 + 5
+        for k, (text, px, extra, opacity) in enumerate(lines):
             out.append(
-                f'<text x="{b.cx:.1f}" y="{b.y + 24:.1f}" font-size="{LABEL_PX}" font-weight="600" text-anchor="middle" fill="{ink}">{escape(n.label)}</text>'
-                f'<text x="{b.cx:.1f}" y="{b.y + 42:.1f}" font-size="{SUB_PX}" text-anchor="middle" fill="{ink}" fill-opacity="0.75">{escape(n.sublabel)}</text>'
-            )
-        else:
-            out.append(
-                f'<text x="{b.cx:.1f}" y="{b.cy + 5:.1f}" font-size="{LABEL_PX}" font-weight="600" text-anchor="middle" fill="{ink}">{escape(n.label)}</text>'
+                f'<text x="{b.cx:.1f}" y="{top + k * step:.1f}" font-size="{px}"{extra} text-anchor="middle" fill="{ink}"'
+                + (f' fill-opacity="{opacity}"' if opacity < 1 else "")
+                + f">{escape(text)}</text>"
             )
     # Legend: only the kinds that appear.
     x = float(MARGIN)
@@ -342,5 +358,18 @@ def render(title: str, nodes: list[Node], edges: list[Edge], lay: Layout) -> str
             f'<text x="{x + 20:.1f}" y="{y + 3:.1f}" font-size="{EDGE_PX}" fill="#3f3f46">{escape(KIND_NAME[kind])}</text>'
         )
         x += 20 + text_w(KIND_NAME[kind], EDGE_PX) + 18
+    # And the line styles, when more than one is used.
+    styles = list(dict.fromkeys(e.kind for e in edges))
+    if len(styles) > 1:
+        x += 10
+        for kind in styles:
+            dash = EDGE_DASH.get(kind, "")
+            out.append(
+                f'<line x1="{x:.1f}" y1="{y - 1:.1f}" x2="{x + 26:.1f}" y2="{y - 1:.1f}" stroke="#52525b" stroke-width="1.5"'
+                + (f' stroke-dasharray="{dash}"' if dash else "")
+                + "/>"
+                f'<text x="{x + 32:.1f}" y="{y + 3:.1f}" font-size="{EDGE_PX}" fill="#3f3f46">{escape(EDGE_NAME.get(kind, kind))}</text>'
+            )
+            x += 32 + text_w(EDGE_NAME.get(kind, kind), EDGE_PX) + 18
     out.append("</svg>")
     return "".join(out)
