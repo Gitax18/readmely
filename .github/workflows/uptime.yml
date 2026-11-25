@@ -1,0 +1,47 @@
+# Checks every half hour that the live site answers, and that the API answers through it.
+# A failed run is the alert: GitHub emails whoever last changed this schedule. Free on a public
+# repository. GitHub pauses schedules after 60 days without a commit; re-enable it in the Actions tab.
+name: uptime
+
+on:
+  schedule:
+    - cron: "7,37 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: uptime
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      SITE: ${{ vars.UPTIME_SITE || 'https://readmely.gitanshu.me' }}
+    steps:
+      - name: The web app answers
+        run: |
+          for attempt in 1 2 3; do
+            if curl --silent --show-error --fail --max-time 20 "${SITE}/healthz" | grep -q '"status":"ok"'; then
+              exit 0
+            fi
+            echo "attempt ${attempt}: the web app did not answer"
+            sleep 20
+          done
+          exit 1
+
+      # Without a session the API refuses /v1/me with 401. Getting exactly that through the web
+      # app's bridge proves the whole path: Vercel, the origin key, Caddy and the API.
+      - name: The API answers through the web app
+        run: |
+          for attempt in 1 2 3; do
+            code=$(curl --silent --output body.json --write-out '%{http_code}' --max-time 20 "${SITE}/api/v1/me") || code=000
+            if [ "${code}" = 401 ] && grep -q '"unauthenticated"' body.json; then
+              exit 0
+            fi
+            echo "attempt ${attempt}: HTTP ${code}"
+            sleep 20
+          done
+          exit 1
